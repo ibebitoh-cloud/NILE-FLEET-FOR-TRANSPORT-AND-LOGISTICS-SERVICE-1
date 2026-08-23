@@ -1,0 +1,322 @@
+
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  CUSTOMER = 'CUSTOMER',
+  VIEWER = 'VIEWER',
+  GATE_OPERATOR = 'GATE_OPERATOR'
+}
+
+export enum GensetStatus {
+  IN_STOCK = 'IN_STOCK',
+  CLIPPED_ON = 'CLIPPED_ON',
+  MAINTENANCE = 'MAINTENANCE'
+}
+
+export enum ReservationStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED'
+}
+
+export enum Location {
+  DAM = 'DAM',
+  ALEX = 'ALEX',
+  GOUDA = 'GOUDA',
+  SOKHNA = 'SOKHNA',
+  SCCT = 'SCCT',
+  PSD = 'PSD',
+  MAL = 'MAL'
+}
+
+export interface SystemNotification {
+  id: string;
+  type: 'CRITICAL' | 'INFO' | 'SUCCESS' | 'WARNING';
+  message: string;
+  messageAr: string;
+  timestamp: string;
+  active: boolean;
+  forceBanner: boolean;
+  targetUserId?: string; 
+  targetOrgName?: string; 
+}
+
+export interface SupportContact {
+  id: string;
+  name: string;
+  nameAr: string;
+  role: string;
+  roleAr: string;
+  avatar: string;
+  status: 'ONLINE' | 'BUSY' | 'OFFLINE';
+  whatsapp: string;
+}
+
+export interface FAQItem {
+  id: string;
+  question: string;
+  questionAr: string;
+  answer: string;
+  answerAr: string;
+}
+
+export interface PortInfo {
+  id: string;
+  location: Location;
+  address: string;
+  addressAr: string;
+  contactName: string;
+  contactPhone: string;
+}
+
+export interface InvoiceSettings {
+  primaryColor: string;
+  accentColor: string;
+  headerAlignment: 'left' | 'center' | 'right';
+  fontStyle: 'sans' | 'serif' | 'mono';
+  layoutStyle: 'TRADITIONAL' | 'MINIMAL' | 'INDUSTRIAL' | 'MODERN' | 'FUTURISTIC' | 'ELEGANT' | 'COMPACT';
+  showLogo: boolean;
+  showStamp: boolean;
+  showSignature: boolean;
+  showCompanyInfo: boolean;
+  showBankDetails: boolean;
+  showInvoiceId: boolean;
+  showIssueDate: boolean;
+  showCustomerDetails: boolean;
+  showBookingRef: boolean;
+  showContainer: boolean;
+  showGenset: boolean;
+  showRouteInfo: boolean;
+  showUnitRate: boolean;
+  showVatColumn: boolean;
+  showShipperName: boolean;
+  showTruckerName: boolean;
+  showSubtotalRow: boolean;
+  showVatRow: boolean;
+  showGrandTotal: boolean;
+  footerText: string;
+  currency: string;
+  customItemName: string;
+  documentTitle: string;
+  vatPercentage: number;
+  companyHeaderAddress: string;
+  companyVatNumber: string;
+  companyContactEmail: string;
+  companyContactPhone: string;
+  bankName: string;
+  bankIban: string;
+  bankSwift: string;
+  customHeaderNote: string;
+  logoUrl?: string;
+  stampUrl?: string;
+}
+
+export interface Payment {
+  id: string;
+  customerId: string;
+  customerName: string;
+  amount: number;
+  date: string;
+  reference: string;
+  type: 'CASH' | 'BANK' | 'ADVANCE';
+}
+
+export interface UserPermissions {
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canExport?: boolean;
+  canViewFinancials?: boolean;
+  canManagePrices?: boolean;
+  canManageUsers?: boolean;
+  canApproveBookings?: boolean;
+  canKillAccess?: boolean;
+  canBypassGeofence?: boolean;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  password?: string;
+  wipePassword?: string;
+  companyName?: string;
+  companyNameAr?: string;
+  avatarUrl?: string;
+  theme?: string;
+  phoneNumber?: string;
+  jobTitle?: string;
+  department?: string;
+  joinedDate?: string;
+  bio?: string;
+  signatureUrl?: string;
+  assignedPorts?: Location[];
+  taxpayerId?: string;
+  addressLine?: string;
+  governorate?: string;
+  postalCode?: string;
+  isEtaVerified?: boolean;
+  pastOutstandingAmount: number;
+  invoiceSettings?: InvoiceSettings;
+  isServiceAccount?: boolean;
+  apiKeys?: string[];
+  revoked?: boolean;
+  lastRotationDate?: string;
+  passwordHistory?: string[];
+  mfaEnabled?: boolean;
+  allowedScreens?: string[];
+  permissions?: UserPermissions;
+}
+
+export interface CustomerPrice {
+  id: string;
+  customerId: string;
+  customerName: string;
+  portIn: Location;
+  portOut: Location;
+  price: number;
+  includeVat?: boolean;
+}
+
+export interface Genset {
+  id: string;
+  unitNumber: string;
+  location: Location;
+  status: GensetStatus;
+}
+
+export interface Reservation {
+  id: string;
+  customerId: string;
+  customerName: string;
+  bookingNumber: string;
+  gensetsNeeded: number;
+  portIn: Location;
+  portOut: Location;
+  reservationDate: string;
+  dateReceived?: string;
+  status: ReservationStatus;
+  shipper?: string;
+  trucker?: string;
+  beneficiaryName?: string;
+  shipperAddress?: string;
+}
+
+export interface Operation {
+  id: string;
+  internalSerial: string;
+  reservationId?: string;
+  customerName: string;
+  dateReceived: string;
+  operationDate: string;
+  clipOnDate: string;
+  clipOffDate: string;
+  clipOnPort: Location;
+  clipOffPort: Location;
+  trucker: string;
+  bookingNumber: string;
+  beneficiaryName: string;
+  containerNumber: string;
+  gensetNumber: string;
+  driverName?: string;
+  driverPhone?: string;
+  gaz?: string;
+  shipperAddress: string;
+  status: 'IN PROGRESS' | 'UNDER OPERATE' | 'DONE' | 'HOLD' | 'CANCEL';
+  rate: string;
+  vat: string;
+  notes?: string;
+  manualInvoiceNumber?: string;
+  reviewedByManager?: boolean;
+  invoiced?: boolean;
+}
+
+export interface Invoice {
+  id: string;
+  customerId: string;
+  customerName: string;
+  bookingNumber: string;
+  amount: number;
+  date: string;
+  dueDate?: string;
+  status: 'PAID' | 'UNPAID';
+  containerNumbers: string[];
+  portIn: string;
+  portOut: string;
+  operationIds: string[];
+  etaStatus?: 'DRAFT' | 'SUBMITTED' | 'VALID' | 'INVALID';
+  etaInternalId?: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  timestamp: string;
+  user: string;
+  action: string;
+  details: string;
+}
+
+export interface Procurement {
+  id: string;
+  personName: string;
+  itemDescription: string;
+  amount: number;
+  date: string;
+  status: 'PENDING' | 'COMPLETED';
+}
+
+export interface GasTransaction {
+  id: string;
+  date: string;
+  type: 'TOPUP' | 'CONSUMPTION';
+  amount: number;
+  reference: string;
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  position: string;
+  baseSalary: number;
+  startDate: string;
+}
+
+export interface PayrollTransaction {
+  id: string;
+  employeeId: string;
+  type: 'SALARY_BASE' | 'ADVANCE' | 'BONUS';
+  amount: number;
+  date: string;
+  month: string;
+  notes?: string;
+}
+
+export interface FoodExpense {
+  id: string;
+  amount: number;
+  fromDate: string;
+  toDate: string;
+  workerCount: number;
+  workerNames: string;
+  notes?: string;
+}
+
+export interface TransportExpense {
+  id: string;
+  amount: number;
+  fromPort: Location;
+  toPort: Location;
+  date: string;
+  workerNames: string;
+  notes?: string;
+}
+
+export interface PortRent {
+  id: string;
+  port: Location;
+  amount: number;
+  date: string;
+  period: string; // e.g. "January 2026"
+  notes?: string;
+}

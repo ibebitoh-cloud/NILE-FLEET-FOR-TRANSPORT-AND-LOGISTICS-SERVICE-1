@@ -1,0 +1,530 @@
+
+import React, { useState, useMemo, useContext, useEffect } from 'react';
+import { db } from '../services/mockDb';
+import { LanguageContext, ThemeContext } from '../App';
+import { translations, translateEntity } from '../translations';
+import { Invoice, User, UserRole, Operation, InvoiceSettings, Payment } from '../types';
+import InvoiceView from '../components/InvoiceView';
+
+const NileFleetLogo = ({ color = "#001F3F" }: { color?: string }) => (
+  <svg width="40" height="40" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-sm transition-colors duration-500">
+    <path d="M20 80L50 20L80 80H20Z" fill={color} />
+    <path d="M35 80L50 50L65 80H35Z" fill="#C2A378" />
+    <rect x="45" y="85" width="10" height="5" fill={color} />
+  </svg>
+);
+
+export const ProLedger: React.FC<{
+  partner: User;
+  onClose: () => void;
+  branding?: InvoiceSettings;
+}> = ({ partner, onClose, branding }) => {
+  const { lang } = useContext(LanguageContext);
+  const isDark = useContext(ThemeContext).theme === 'black';
+  const t = translations[lang];
+  const isAr = lang === 'ar';
+  
+  const ops = db.getOperations().filter(o => o.customerName === (partner.companyName || partner.name));
+  const unbilledOps = ops.filter(o => !o.invoiced);
+  const unbilledTotal = unbilledOps.reduce((s, o) => s + (parseFloat(o.rate.replace(/,/g,'')) || 0) + (parseFloat(o.vat.replace(/,/g,'')) || 0), 0);
+  const invoices = db.getInvoices().filter(i => i.customerName === (partner.companyName || partner.name));
+  const unpaidInvoices = invoices.filter(i => i.status === 'UNPAID');
+  const unpaidInvoicesTotal = unpaidInvoices.reduce((s, i) => s + i.amount, 0);
+  const payments = db.getPayments().filter(p => p.customerId === partner.id);
+  
+  const netDue = (partner.pastOutstandingAmount || 0) + unpaidInvoicesTotal + unbilledTotal;
+
+  const settings = branding || {
+    primaryColor: '#001F3F',
+    currency: 'EGP',
+    logoUrl: '',
+    stampUrl: ''
+  };
+
+  return (
+    <div className={`fixed inset-0 bg-slate-900/95 backdrop-blur-xl z-[700] flex items-center justify-center p-0 lg:p-12 overflow-hidden ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
+       <style>{`
+         @media print {
+           @page { margin: 0; size: A4; }
+           body { visibility: hidden; background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+           #root { overflow: visible !important; height: auto !important; }
+           .ledger-printable-area { 
+             visibility: visible !important; 
+             position: absolute !important; 
+             left: 0 !important; 
+             top: 0 !important; 
+             width: 210mm !important; 
+             height: auto !important; 
+             margin: 0 !important;
+             padding: 1.5cm !important;
+             background: white !important;
+             z-index: 9999 !important;
+           }
+           .no-print { display: none !important; }
+           .ledger-printable-area * { color: black !important; visibility: visible !important; }
+           .total-highlight { background-color: #001F3F !important; -webkit-print-color-adjust: exact; }
+           .total-highlight * { color: #C2A378 !important; }
+         }
+       `}</style>
+       <div className="bg-white rounded-[3.5rem] shadow-2xl max-w-6xl w-full h-full overflow-hidden flex flex-col border-[10px] border-slate-900 animate-in zoom-in-95">
+          <div className="p-8 bg-slate-900 text-white flex justify-between items-center no-print shrink-0">
+             <div className="text-start">
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter text-[#C2A378]">{isAr ? 'كشف الحساب الاحترافي' : 'Professional Ledger'}</h3>
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.3em] mt-1">{isAr ? 'كشف حساب رسمي' : 'Official Statement of Account'}</p>
+             </div>
+             <div className="flex gap-4">
+                <button onClick={() => window.print()} className="bg-blue-600 px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-blue-700 transition-all">{isAr ? 'تصدير PDF / طباعة الكشف' : 'Export PDF / Print Statement'}</button>
+                <button onClick={onClose} className="bg-rose-600 px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-rose-700 transition-all">{isAr ? 'خروج' : 'Exit'}</button>
+             </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto bg-slate-100 p-8 custom-scrollbar text-start">
+             <div className="max-w-5xl mx-auto bg-white p-12 lg:p-16 shadow-2xl min-h-[11in] text-slate-900 relative flex flex-col ledger-printable-area">
+                <div className="flex justify-between items-start border-b-4 border-slate-900 pb-10 mb-10">
+                   <div>
+                      {settings.logoUrl ? (
+                        <img src={settings.logoUrl} className="h-24 object-contain mb-6" alt="logo" />
+                      ) : (
+                        <div className="flex items-center gap-4 mb-6">
+                           <NileFleetLogo color="#001F3F" />
+                           <h1 className="text-3xl font-black italic uppercase tracking-tighter">NILE <span className="text-blue-600">FLEET</span></h1>
+                        </div>
+                      )}
+                      <h2 className="text-5xl font-black uppercase tracking-tighter text-slate-900">{isAr ? 'كشف حساب مجمع' : 'STATEMENT OF ACCOUNT'}</h2>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.4em] mt-2">{isAr ? 'الدورة المالية' : 'Fiscal Cycle'}: {new Date().getFullYear()}</p>
+                   </div>
+                   <div className={`${isAr ? 'text-left' : 'text-right'}`}>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{isAr ? 'الشريك التجاري' : 'Commercial Partner'}:</p>
+                      <h4 className="text-2xl font-black uppercase italic text-blue-600">{translateEntity(partner.companyName || partner.name, lang)}</h4>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mt-4">{isAr ? 'تاريخ الاستخراج' : 'Generation'}: {new Date().toLocaleString()}</p>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-6 mb-12">
+                   <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{isAr ? 'مديونية سابقة' : 'Historical Debt'}</p>
+                      <p className="text-2xl lg:text-3xl font-black text-slate-900">{settings.currency} {partner.pastOutstandingAmount.toLocaleString()}</p>
+                   </div>
+                   <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{isAr ? 'لم يُفوتر بعد' : 'Unbilled Ops'}</p>
+                      <p className="text-2xl lg:text-3xl font-black text-blue-600">{settings.currency} {unbilledTotal.toLocaleString()}</p>
+                   </div>
+                   <div className="bg-[#001F3F] p-8 rounded-[2rem] shadow-xl total-highlight">
+                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-2">{isAr ? 'صافي المستحق' : 'Net Due'}</p>
+                      <p className="text-2xl lg:text-3xl font-black text-[#C2A378] italic">{settings.currency} {netDue.toLocaleString()}</p>
+                   </div>
+                </div>
+
+                <div className="space-y-10 flex-1">
+                   <div className="space-y-4">
+                      <h4 className="text-sm font-black uppercase tracking-widest text-slate-400">{isAr ? 'بيان المعاملات' : 'Transaction Manifest'}</h4>
+                      <table className="w-full text-left border-collapse">
+                         <thead className="bg-slate-900 text-white text-[9px] font-black uppercase">
+                            <tr>
+                               <th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{t.date}</th>
+                               <th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'المرجع' : 'Reference'}</th>
+                               <th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'تفاصيل الخدمة' : 'Service Particulars'}</th>
+                               <th className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'مدين (+)' : 'Debit (+)'}</th>
+                               <th className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'دائن (-)' : 'Credit (-)'}</th>
+                            </tr>
+                         </thead>
+                         <tbody className="divide-y divide-slate-100 text-[11px] font-bold">
+                            <tr className="bg-rose-50/10 italic">
+                               <td className="p-4 text-slate-400">---</td>
+                               <td className="p-4 font-mono">OPN-001</td>
+                               <td className="p-4 uppercase">{isAr ? 'رصيد مرحل مديونية تاريخية' : 'Historical Debt Forward'}</td>
+                               <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-rose-600`}>{partner.pastOutstandingAmount.toLocaleString()}</td>
+                               <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-slate-300`}>---</td>
+                            </tr>
+                            {unpaidInvoices.map(inv => (
+                               <tr key={inv.id}>
+                                  <td className="p-4 text-slate-400">{inv.date}</td>
+                                  <td className="p-4 font-mono">#{inv.id.split('-').pop()}</td>
+                                  <td className="p-4 uppercase">{isAr ? 'فاتورة عمليات:' : 'Container Ops:'} {inv.bookingNumber}</td>
+                                  <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-slate-900`}>{inv.amount.toLocaleString()}</td>
+                                  <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-slate-300`}>---</td>
+                               </tr>
+                            ))}
+                            {unbilledOps.map(op => (
+                               <tr key={op.id} className="text-blue-600/70">
+                                  <td className="p-4 text-slate-400">{op.operationDate}</td>
+                                  <td className="p-4 font-mono">LIVE</td>
+                                  <td className="p-4 uppercase italic">{isAr ? 'عملية منجزة لم تُفوتر:' : 'Live Unbilled:'} {op.bookingNumber}</td>
+                                  <td className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{( (parseFloat(op.rate.replace(/,/g,'')) || 0) + (parseFloat(op.vat.replace(/,/g,'')) || 0) ).toLocaleString()}</td>
+                                  <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-slate-300`}>---</td>
+                               </tr>
+                            ))}
+                            {payments.map(pay => (
+                               <tr key={pay.id} className="bg-emerald-50/30">
+                                  <td className="p-4 text-slate-400">{pay.date}</td>
+                                  <td className="p-4 font-mono text-emerald-600">PAY-{pay.id.split('-').pop()}</td>
+                                  <td className="p-4 uppercase italic">{isAr ? 'تحصيل نقدية - ' : 'Payment Received - '} {pay.reference}</td>
+                                  <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-slate-300`}>---</td>
+                                  <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-emerald-600`}>{pay.amount.toLocaleString()}</td>
+                               </tr>
+                            ))}
+                         </tbody>
+                         <tfoot>
+                            <tr className="bg-slate-900 text-white font-black text-xs uppercase italic total-highlight">
+                               <td colSpan={3} className={`p-6 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'إجمالي الرصيد المستحق النهائي' : 'Closing Reconciled Total'}</td>
+                               <td colSpan={2} className={`p-6 ${isAr ? 'text-left' : 'text-right'} text-2xl text-[#C2A378]`}>{settings.currency} {netDue.toLocaleString()}</td>
+                            </tr>
+                         </tfoot>
+                      </table>
+                   </div>
+                </div>
+
+                <div className="mt-16 flex justify-between items-end">
+                   <div>
+                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.4em] mb-4 italic">{isAr ? 'كشف حساب موثق رقمياً • قيادة أسطول النيل' : 'Digitally Verified Ledger • Nile Fleet Command'}</p>
+                      <div className="w-64 h-px bg-slate-100"></div>
+                   </div>
+                   <div className="relative">
+                      {settings.stampUrl && (
+                        <div className="absolute bottom-0 right-0 -mr-12 -mb-12 w-48 h-48 opacity-90 -rotate-12 pointer-events-none">
+                           <img src={settings.stampUrl} className="w-full h-full object-contain mix-blend-multiply contrast-125 shadow-lg" alt="Stamp" />
+                        </div>
+                      )}
+                      <div className="text-center relative z-10">
+                        <div className="w-48 h-12 border-b-2 border-slate-900 mb-2"></div>
+                        <p className="text-[8px] font-black uppercase text-slate-400 tracking-widest italic">{isAr ? 'المراقب المالي المعتمد' : 'Authorized Accounts Controller'}</p>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="mt-12 flex flex-col items-center gap-2 opacity-20 text-slate-900 no-print text-center">
+                   <div className="w-12 h-px bg-slate-300"></div>
+                   <p className="text-[8px] font-black uppercase tracking-[0.5em]">POWERED BY BEBITO</p>
+                   <p className="text-[7px] font-bold text-slate-500 uppercase mt-1 italic leading-none">Mohamed A-Alawy | +20 114 647 5759</p>
+                </div>
+             </div>
+          </div>
+       </div>
+    </div>
+  );
+};
+
+const Financials: React.FC = () => {
+  const { lang } = useContext(LanguageContext);
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'black';
+  const t = translations[lang];
+  const isAr = lang === 'ar';
+  
+  const [invoices, setInvoices] = useState(db.getInvoices());
+  const [operations, setOperations] = useState(db.getOperations());
+  const [users, setUsers] = useState(db.getUsers());
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedInvIds, setSelectedInvIds] = useState<Set<string>>(new Set());
+  const [showProLedger, setShowProLedger] = useState(false);
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [autoSettleSelection, setAutoSettleSelection] = useState(true);
+
+  const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
+  const isReadOnly = currentUser.role === UserRole.VIEWER;
+
+  const refreshData = () => {
+    setInvoices([...db.getInvoices()]);
+    setOperations([...db.getOperations()]);
+    setUsers([...db.getUsers()]);
+    if (selectedUser) {
+      const updatedUser = db.getUsers().find(u => u.id === selectedUser.id);
+      if (updatedUser) setSelectedUser(updatedUser);
+    }
+  };
+
+  const customers = useMemo(() => users.filter(u => u.role === UserRole.CUSTOMER), [users]);
+
+  const accountBreakdown = useMemo(() => {
+    if (!selectedUser) return { totalExposure: 0, unbilledTotal: 0, unpaidInvoicesTotal: 0 };
+    const unbilledTotal = operations.filter(o => o.customerName === (selectedUser.companyName || selectedUser.name) && !o.invoiced)
+      .reduce((s, o) => s + (parseFloat(o.rate.replace(/,/g,'')) || 0) + (parseFloat(o.vat.replace(/,/g,'')) || 0), 0);
+    const userInvoices = invoices.filter(i => i.customerName === (selectedUser.companyName || selectedUser.name));
+    const unpaidInvoicesTotal = userInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + i.amount, 0);
+    const totalExposure = (selectedUser.pastOutstandingAmount || 0) + unpaidInvoicesTotal + unbilledTotal;
+    return { totalExposure, unbilledTotal, unpaidInvoicesTotal, userInvoices };
+  }, [selectedUser, operations, invoices]);
+
+  const handleReceivePayment = () => {
+    if (!selectedUser || !paymentAmount) return;
+    db.addPayment({
+      id: `PAY-${Date.now()}`,
+      customerId: selectedUser.id,
+      customerName: selectedUser.companyName || selectedUser.name,
+      amount: parseFloat(paymentAmount),
+      date: new Date().toISOString().split('T')[0],
+      reference: paymentRef || 'Bulk Deposit',
+      type: 'CASH'
+    }, autoSettleSelection ? Array.from(selectedInvIds) : []);
+    setPaymentAmount(''); setPaymentRef(''); setSelectedInvIds(new Set());
+    setShowPaymentModal(false); refreshData();
+  };
+
+  return (
+    <div className={`max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 text-start pb-32 ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
+      
+      {/* Top Reconciled Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 no-print">
+        {[
+          { label: t.unpaidMoney, value: customers.reduce((acc, c) => {
+            const uI = db.getInvoices().filter(i => i.customerName === (c.companyName || c.name) && i.status === 'UNPAID').reduce((s,i)=>s+i.amount, 0);
+            const uO = db.getOperations().filter(o => o.customerName === (c.companyName || c.name) && !o.invoiced).reduce((s,o)=>s+(parseFloat(o.rate) || 0)+(parseFloat(o.vat) || 0), 0);
+            return acc + (c.pastOutstandingAmount || 0) + uI + uO;
+          }, 0), color: 'text-rose-600', icon: '🏦', bg: 'bg-rose-50/30' },
+          { label: t.liveUnbilled, value: operations.filter(o=>o.status==='DONE'&&!o.invoiced).reduce((s,o)=>s+(parseFloat(o.rate) || 0), 0), color: 'text-blue-600', icon: '🚛', bg: 'bg-blue-50/30' },
+          { label: t.historicalLoad, value: customers.reduce((a,b)=>a+(b.pastOutstandingAmount||0),0), color: 'text-[#C2A378]', icon: '📜', bg: 'bg-amber-50/30' },
+          { label: 'Settled Month-to-Date', value: db.getPayments().filter(p => p.date.startsWith(new Date().toISOString().slice(0, 7))).reduce((s,p)=>s+p.amount,0), color: 'text-emerald-600', icon: '💰', bg: 'bg-emerald-50/30' },
+        ].map((stat, i) => (
+          <div key={i} className={`p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between transition-all hover:scale-105 ${stat.bg} ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+             <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{stat.label}</p>
+                <p className={`text-2xl font-black italic tracking-tighter ${stat.color}`}>
+                   {isAr ? 'ج.م' : 'EGP'} {stat.value.toLocaleString()}
+                </p>
+             </div>
+             <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-sm">{stat.icon}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col xl:flex-row gap-8 no-print min-h-[700px]">
+        
+        {/* CUSTOMER SELECTION SIDEBAR */}
+        <div className="xl:w-[380px] space-y-6 shrink-0">
+          <div className={`p-8 rounded-[3.5rem] border shadow-2xl h-full flex flex-col ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-100'}`}>
+             <div className="flex items-center gap-3 mb-10">
+                <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center text-xl shadow-lg shadow-blue-500/20">💳</div>
+                <h3 className="text-xl font-black uppercase italic tracking-tighter">{t.partnerPortfolios}</h3>
+             </div>
+             
+             <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-2">
+                {customers.map(cust => {
+                  const uI = db.getInvoices().filter(i => i.customerName === (cust.companyName || cust.name) && i.status === 'UNPAID').reduce((s,i)=>s+i.amount, 0);
+                  const uO = db.getOperations().filter(o => o.customerName === (cust.companyName || cust.name) && !o.invoiced).reduce((s,o)=>s+(parseFloat(o.rate) || 0)+(parseFloat(o.vat) || 0), 0);
+                  const total = (cust.pastOutstandingAmount || 0) + uI + uO;
+                  const isSelected = selectedUser?.id === cust.id;
+                  
+                  return (
+                    <button 
+                      key={cust.id} 
+                      onClick={() => setSelectedUser(cust)} 
+                      className={`w-full text-start p-6 rounded-[2.2rem] border-2 transition-all relative overflow-hidden group ${isSelected ? 'bg-slate-900 border-blue-600 text-white shadow-2xl scale-[1.02]' : 'bg-slate-50 dark:bg-slate-800/40 border-transparent hover:border-slate-200'}`}
+                    >
+                       <div className="flex justify-between items-start relative z-10">
+                          <div>
+                            <p className={`font-black uppercase text-xs tracking-tight ${isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-200'}`}>{translateEntity(cust.companyName || cust.name, lang)}</p>
+                            <p className={`text-[9px] font-bold mt-1 uppercase tracking-widest ${isSelected ? 'text-blue-400' : 'text-slate-400'}`}>Net Debt Position</p>
+                          </div>
+                          {total > 150000 && <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[8px] font-black animate-pulse">LOCKED</span>}
+                       </div>
+                       <p className={`text-xl font-black mt-4 relative z-10 ${isSelected ? 'text-[#C2A378]' : 'text-blue-600'}`}>
+                          {isAr ? 'ج.م' : 'EGP'} {total.toLocaleString()}
+                       </p>
+                       {isSelected && <div className="absolute right-[-20px] top-[-20px] w-24 h-24 bg-blue-600/10 rounded-full blur-2xl"></div>}
+                    </button>
+                  );
+                })}
+             </div>
+          </div>
+        </div>
+
+        {/* MAIN LEDGER AREA */}
+        <div className="flex-1 space-y-8 min-w-0">
+          {selectedUser ? (
+            <div className="space-y-8 animate-in slide-in-from-right-4 duration-500">
+               {/* Account Profile Card */}
+               <div className={`p-10 rounded-[3.5rem] border shadow-2xl flex flex-col md:flex-row gap-10 items-center justify-between relative overflow-hidden ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-100'}`}>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-[#C2A378] to-emerald-600 opacity-50"></div>
+                  <div className="flex items-center gap-8 text-start relative z-10">
+                    <div className="w-24 h-24 bg-blue-50 dark:bg-slate-800 rounded-[2rem] flex items-center justify-center text-5xl shadow-inner uppercase font-black text-blue-600 border border-blue-100">
+                      {(selectedUser.companyName || selectedUser.name)[0]}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-3">
+                         <h3 className="text-4xl font-black uppercase italic tracking-tighter text-slate-900 dark:text-white leading-none">{translateEntity(selectedUser.companyName || selectedUser.name, lang)}</h3>
+                         <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-[9px] font-black uppercase">Verified Node</span>
+                      </div>
+                      <div className="flex gap-6 mt-4">
+                        <button onClick={() => setShowProLedger(true)} className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline decoration-2 underline-offset-8 flex items-center gap-2 group">
+                           <span className="group-hover:scale-125 transition-transform">📄</span> {isAr ? 'توليد كشف حساب رسمي' : 'GENERATE OFFICIAL STATEMENT'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 relative z-10">
+                     <div className="text-center bg-slate-50 dark:bg-slate-800 px-8 py-5 rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-inner">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{t.liveUnbilled}</p>
+                        <p className="text-2xl font-black text-blue-600">EGP {accountBreakdown.unbilledTotal.toLocaleString()}</p>
+                     </div>
+                     <div className="text-center bg-[#001F3F] px-8 py-5 rounded-[2rem] shadow-xl">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Grand Total Due</p>
+                        <p className="text-2xl font-black text-[#C2A378] italic">EGP {accountBreakdown.totalExposure.toLocaleString()}</p>
+                     </div>
+                  </div>
+
+                  {!isReadOnly && (
+                    <button onClick={() => setShowPaymentModal(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-12 py-6 rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] shadow-xl transition-all active:scale-95 z-10">
+                      {t.receivePayment}
+                    </button>
+                  )}
+               </div>
+
+               {/* Transaction manifest table */}
+               <div className={`rounded-[3.5rem] border shadow-2xl overflow-hidden ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-100'}`}>
+                  <div className="p-8 border-b border-slate-50 dark:border-white/5 flex justify-between items-center bg-slate-50/50">
+                     <h3 className="text-xs font-black uppercase italic tracking-[0.3em] text-slate-400">{t.historicalIndebtedness}</h3>
+                     <span className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-3 py-1 rounded-full">{accountBreakdown.userInvoices.length} Documents Active</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                     <table className="w-full text-start border-collapse">
+                        <thead className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em]">
+                           <tr>
+                              <th className="px-6 py-6 w-10 text-center">
+                                <input type="checkbox" className="rounded-lg bg-transparent border-slate-500" checked={selectedInvIds.size === accountBreakdown.userInvoices.filter(i => i.status === 'UNPAID').length && accountBreakdown.userInvoices.filter(i => i.status === 'UNPAID').length > 0} onChange={() => {
+                                  const unp = accountBreakdown.userInvoices.filter(i => i.status === 'UNPAID');
+                                  if (selectedInvIds.size === unp.length) setSelectedInvIds(new Set());
+                                  else setSelectedInvIds(new Set(unp.map(i=>i.id)));
+                                }} />
+                              </th>
+                              <th className="px-8 py-6">{t.date}</th>
+                              <th className="px-8 py-6">Transaction Ref</th>
+                              <th className="px-8 py-6 text-right">Debit Flow (+)</th>
+                              <th className="px-8 py-6 text-center">{t.status}</th>
+                              <th className="px-8 py-6 text-right">Document Protocol</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 dark:divide-white/5 text-[11px] font-bold">
+                           {selectedUser.pastOutstandingAmount > 0 && (
+                             <tr className="bg-rose-50/10 italic">
+                                <td className="px-6 py-6 text-center text-rose-500 font-black">⚡</td>
+                                <td className="px-8 py-6 text-slate-400">System Genesis</td>
+                                <td className="px-8 py-6 text-rose-600 font-black uppercase tracking-widest underline decoration-2 underline-offset-8">Historical Debt Forward</td>
+                                <td className="px-8 py-6 text-right font-black text-rose-600">EGP {selectedUser.pastOutstandingAmount.toLocaleString()}</td>
+                                <td className="px-8 py-6 text-center"><span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border border-rose-200">OPEN BALANCE</span></td>
+                                <td className="px-8 py-6 text-right opacity-30 italic">Pre-Deployment Legacy</td>
+                             </tr>
+                           )}
+                           {accountBreakdown.userInvoices.map(inv => (
+                             <tr key={inv.id} className={`hover:bg-blue-50/30 transition-all group ${selectedInvIds.has(inv.id) ? 'bg-blue-50 shadow-inner' : ''}`}>
+                                <td className="px-6 py-6 text-center">
+                                   {inv.status === 'UNPAID' && <input type="checkbox" checked={selectedInvIds.has(inv.id)} onChange={() => {
+                                      const newSet = new Set(selectedInvIds);
+                                      if (newSet.has(inv.id)) newSet.delete(inv.id);
+                                      else newSet.add(inv.id);
+                                      setSelectedInvIds(newSet);
+                                   }} className="rounded-lg" />}
+                                </td>
+                                <td className="px-8 py-6 text-slate-400 font-mono">{inv.date}</td>
+                                <td className="px-8 py-6">
+                                   <div className="flex flex-col">
+                                      <span className="font-black text-blue-900 dark:text-blue-400 uppercase tracking-tighter text-sm">#{inv.id.split('-').pop()}</span>
+                                      <span className="text-[8px] font-black text-slate-400 uppercase mt-0.5 tracking-widest">BK: {inv.bookingNumber}</span>
+                                   </div>
+                                </td>
+                                <td className="px-8 py-6 text-right font-black text-slate-900 dark:text-white text-base">EGP {inv.amount.toLocaleString()}</td>
+                                <td className="px-8 py-6 text-center">
+                                   <span className={`px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border shadow-sm ${inv.status === 'PAID' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                                      {translateEntity(inv.status, lang)}
+                                   </span>
+                                </td>
+                                <td className="px-8 py-6 text-right">
+                                   <button onClick={() => setViewingInvoice(inv)} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#001F3F] hover:text-white transition-all border border-slate-200 dark:border-white/10">View Doc</button>
+                                </td>
+                             </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                  </div>
+               </div>
+            </div>
+          ) : (
+            <div className="h-full bg-white dark:bg-slate-900 rounded-[4rem] border-4 border-dashed border-slate-100 dark:border-white/5 flex flex-col items-center justify-center text-center p-20">
+               <div className="w-32 h-32 bg-slate-50 dark:bg-slate-800 rounded-[3rem] flex items-center justify-center text-7xl mb-10 shadow-inner animate-bounce duration-[3s]">🏦</div>
+               <h3 className="text-4xl font-black uppercase italic tracking-tighter text-slate-800 dark:text-white">{t.commercialWallet}</h3>
+               <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-6 max-w-md mx-auto leading-relaxed">Select a commercial partner to perform a fiscal audit, manage outstanding debits, or authorize credit settlements.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* RECEIVE PAYMENT MODAL */}
+      {showPaymentModal && selectedUser && (
+        <div className="fixed inset-0 bg-[#001F3F]/95 backdrop-blur-xl z-[500] flex items-center justify-center p-6">
+           <div className={`bg-white rounded-[4rem] shadow-2xl max-w-2xl w-full overflow-hidden border-[12px] border-slate-900 animate-in zoom-in-95 ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
+              <div className="p-10 bg-slate-900 text-white flex justify-between items-center text-start relative overflow-hidden">
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-[#C2A378]/20 rounded-full blur-2xl -mr-16 -mt-16"></div>
+                 <div className="relative z-10">
+                    <h3 className="text-2xl font-black uppercase italic tracking-widest text-[#C2A378]">Credit Protocol</h3>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.4em] mt-1">Funds Ingress Authorization</p>
+                 </div>
+                 <button onClick={() => setShowPaymentModal(false)} className="text-white hover:text-rose-500 font-bold text-2xl relative z-10 transition-colors">✕</button>
+              </div>
+              <div className="p-12 space-y-10 max-h-[80vh] overflow-y-auto custom-scrollbar text-start">
+                 <div className="bg-slate-50 p-8 rounded-[3rem] border border-slate-100 text-center space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Authorized Payer</p>
+                    <p className="text-2xl font-black text-blue-900 uppercase italic tracking-tighter">{translateEntity(selectedUser.companyName || selectedUser.name, lang)}</p>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="space-y-8">
+                       <div>
+                          <label className="text-[10px] font-black uppercase text-slate-400 block mb-3 px-1 tracking-widest">Ingress Amount (EGP)</label>
+                          <input type="number" className="w-full p-8 bg-white border-4 border-blue-50 rounded-[2.5rem] font-black text-4xl text-center text-emerald-600 outline-none focus:border-emerald-500 shadow-inner transition-all" placeholder="0.00" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} />
+                       </div>
+                       <div>
+                          <label className="text-[10px] font-black uppercase text-slate-400 block mb-3 px-1 tracking-widest">Protocol Metadata / Ref</label>
+                          <input className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-blue-400" placeholder="e.g. Bank Transfer ID, Check Ref" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} />
+                       </div>
+                    </div>
+                    <div className="space-y-6">
+                       <div className="flex justify-between items-center px-1">
+                          <label className="text-[10px] font-black uppercase text-slate-400 block tracking-widest">Settle Against Node</label>
+                          <label className="flex items-center gap-2 cursor-pointer bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 transition-all hover:bg-blue-100">
+                             <input type="checkbox" checked={autoSettleSelection} onChange={e => setAutoSettleSelection(e.target.checked)} className="rounded-md border-blue-400 text-blue-600" />
+                             <span className="text-[9px] font-black text-blue-700 uppercase tracking-tighter">Apply Auto</span>
+                          </label>
+                       </div>
+                       <div className={`p-4 rounded-[2.5rem] border-4 h-64 overflow-y-auto custom-scrollbar space-y-3 transition-all ${autoSettleSelection ? 'bg-white border-blue-50 shadow-inner' : 'bg-slate-100 border-transparent opacity-30 grayscale pointer-events-none'}`}>
+                          {accountBreakdown.userInvoices.filter(i => i.status === 'UNPAID').map(inv => (
+                             <div 
+                                key={inv.id} 
+                                onClick={() => {
+                                  const newSet = new Set(selectedInvIds);
+                                  if (newSet.has(inv.id)) newSet.delete(inv.id);
+                                  else newSet.add(inv.id);
+                                  setSelectedInvIds(newSet);
+                                }} 
+                                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex justify-between items-center ${selectedInvIds.has(inv.id) ? 'bg-slate-900 border-blue-600 text-white shadow-lg' : 'bg-slate-50 border-transparent text-slate-900'}`}
+                             >
+                                <div className="text-start">
+                                   <p className="text-[8px] font-black uppercase tracking-widest opacity-60">#{inv.id.split('-').pop()}</p>
+                                   <p className="text-[11px] font-black italic">{inv.bookingNumber}</p>
+                                </div>
+                                <p className={`font-black text-xs ${selectedInvIds.has(inv.id) ? 'text-[#C2A378]' : 'text-blue-600'}`}>EGP {inv.amount.toLocaleString()}</p>
+                             </div>
+                          ))}
+                          {accountBreakdown.userInvoices.filter(i => i.status === 'UNPAID').length === 0 && (
+                            <div className="h-full flex items-center justify-center py-10 opacity-30 italic font-black uppercase text-[10px] text-center">No outstanding ledger nodes</div>
+                          )}
+                       </div>
+                    </div>
+                 </div>
+                 <button onClick={handleReceivePayment} className="w-full bg-slate-900 hover:bg-black text-white py-8 rounded-[2.5rem] font-black uppercase text-sm tracking-[0.5em] shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-6 border-b-4 border-blue-600">
+                    <span className="text-2xl">🏦</span> {isAr ? 'اعتماد العملية المالية' : 'AUTHORIZE SETTLEMENT'}
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {showProLedger && selectedUser && <ProLedger partner={selectedUser} onClose={() => setShowProLedger(false)} branding={currentUser.invoiceSettings} />}
+      {viewingInvoice && <InvoiceView invoice={viewingInvoice} onClose={() => setViewingInvoice(null)} settings={currentUser.invoiceSettings} />}
+    </div>
+  );
+};
+
+export default Financials;

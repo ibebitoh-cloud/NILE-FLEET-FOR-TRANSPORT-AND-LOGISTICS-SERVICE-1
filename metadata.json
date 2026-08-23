@@ -1,0 +1,10 @@
+{
+  "name": "Nile Fleet Command",
+  "description": "Premium Clip-On Genset Management Terminal",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "y7": [],
+  "Yp": []
+}
