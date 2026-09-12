@@ -31,6 +31,8 @@ const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   status: 110,
   operationDate: 100,
   clipOnDate: 100,
+  commodity: 120,
+  clipperName: 125,
   notes: 140,
   invoice: 130
 };
@@ -850,6 +852,8 @@ const MasterView: React.FC = () => {
           bookingNumber: s.bookingNumber!,
           containerNumber: s.containerNumber || '',
           gensetNumber: s.gensetNumber || '',
+          commodity: s.commodity || '',
+          clipperName: s.clipperName || '',
           operationDate: s.operationDate || todayDate,
           dateReceived: s.operationDate || todayDate,
           clipOnDate: s.clipOnDate || todayDate,
@@ -884,7 +888,9 @@ const MasterView: React.FC = () => {
       shippers: Array.from(new Set(operations.map(o => o.beneficiaryName).filter((v): v is string => !!v))) as string[],
       truckers: Array.from(new Set(operations.map(o => o.trucker).filter((v): v is string => !!v))) as string[],
       gensets: Array.from(new Set(db.getStock().map(s => s.unitNumber))) as string[],
-      containers: Array.from(new Set(operations.map(o => o.containerNumber).filter((v): v is string => !!v))) as string[]
+      containers: Array.from(new Set(operations.map(o => o.containerNumber).filter((v): v is string => !!v))) as string[],
+      commodities: Array.from(new Set([...operations.map(o => o.commodity).filter((v): v is string => !!v), 'CITRUS', 'ORANGES', 'GRAPES', 'POTATOES', 'STRAWBERRIES', 'POMEGRANATE', 'FROZEN FISH', 'ONIONS', 'FROZEN VEGETABLES'])),
+      clippers: Array.from(new Set([...operations.map(o => o.clipperName).filter((v): v is string => !!v), 'Mohamed Fawzy', 'Ahmed Ali', 'Mahmoud Hassan', 'Eslam Logistics', 'Ibrahim Said', 'Sherif Hegazy']))
     };
     return suggestions;
   }, [operations]);
@@ -894,7 +900,11 @@ const MasterView: React.FC = () => {
       const searchStr = searchTerm.toLowerCase();
       const matchesSearch = op.bookingNumber.toLowerCase().includes(searchStr) || 
                             op.customerName.toLowerCase().includes(searchStr) || 
-                            op.containerNumber.toLowerCase().includes(searchStr);
+                            op.containerNumber.toLowerCase().includes(searchStr) ||
+                            (op.commodity && op.commodity.toLowerCase().includes(searchStr)) ||
+                            (op.clipperName && op.clipperName.toLowerCase().includes(searchStr)) ||
+                            (op.trucker && op.trucker.toLowerCase().includes(searchStr)) ||
+                            (op.beneficiaryName && op.beneficiaryName.toLowerCase().includes(searchStr));
       const matchesPorts = selectedPorts.length === 0 || selectedPorts.includes(op.clipOnPort as string);
       const matchesStatuses = selectedStatuses.length === 0 || selectedStatuses.includes(op.status as string);
       
@@ -1042,6 +1052,8 @@ const MasterView: React.FC = () => {
                   { key: 'status', label: t.status, align: 'text-center' },
                   { key: 'operationDate', label: isAr ? 'تاريخ التشغيل' : 'Op Date', align: 'text-center' },
                   { key: 'clipOnDate', label: isAr ? 'تاريخ التركيب' : 'Clip On', align: 'text-center', extraClass: isDark ? 'bg-emerald-950/20 text-emerald-400' : 'bg-emerald-600/10' },
+                  { key: 'commodity', label: isAr ? 'البضاعة' : 'COMMODITY', sortable: true },
+                  { key: 'clipperName', label: isAr ? 'فني التركيب' : 'CLIPPER ON', sortable: true },
                   { key: 'notes', label: t.notes },
                   { key: 'invoice', label: isAr ? 'فاتورة الحجز' : 'BOOKING INVOICE', align: 'text-center' }
                 ].map(col => (
@@ -1088,7 +1100,7 @@ const MasterView: React.FC = () => {
                 return (
                   <React.Fragment key={status}>
                     <tr className={`sticky z-30 shadow-sm ${isDark ? 'bg-slate-900' : 'bg-slate-100'}`} style={{ top: '35px' }}>
-                      <td colSpan={16} className={`px-4 py-1.5 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                      <td colSpan={18} className={`px-4 py-1.5 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                         <div className="flex items-center gap-3">
                            <div className={`w-1.5 h-1.5 rounded-full ${status === 'DONE' ? 'bg-emerald-500' : status === 'IN PROGRESS' ? 'bg-blue-500' : status === 'UNDER OPERATE' ? 'bg-amber-500' : 'bg-slate-400'}`}></div>
                            <span className={`font-black uppercase tracking-[0.2em] text-[9px] ${isDark ? 'text-[#C2A378]' : 'text-[#001F3F]'}`}>{translateEntity(status, lang)}</span>
@@ -1206,6 +1218,28 @@ const MasterView: React.FC = () => {
                               isDark={isDark} 
                               className="font-bold text-center justify-center"
                               placeholder="---"
+                            />
+                          </td>
+                          <td style={{ ...dynamicCellStyle, ...getColStyle('commodity') }} className={`px-2 border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
+                            <EditableCell 
+                              value={op.commodity || ''} 
+                              suggestions={systemSuggestions.commodities} 
+                              onSave={(val) => handleUpdateCell(op, 'commodity', val.toUpperCase())} 
+                              disabled={isReadOnly} 
+                              isDark={isDark} 
+                              className={`${isSelected ? 'text-white' : (isDark ? 'text-amber-300' : 'text-amber-800')} font-bold uppercase text-[9px]`} 
+                              placeholder={isAr ? 'البضاعة' : 'COMMODITY'} 
+                            />
+                          </td>
+                          <td style={{ ...dynamicCellStyle, ...getColStyle('clipperName') }} className={`px-2 border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
+                            <EditableCell 
+                              value={op.clipperName || ''} 
+                              suggestions={systemSuggestions.clippers} 
+                              onSave={(val) => handleUpdateCell(op, 'clipperName', val)} 
+                              disabled={isReadOnly} 
+                              isDark={isDark} 
+                              className={`${isSelected ? 'text-white' : (isDark ? 'text-emerald-400' : 'text-emerald-700')} font-bold uppercase text-[9px]`} 
+                              placeholder={isAr ? 'فني التركيب' : 'CLIPPER'} 
                             />
                           </td>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('notes') }} className={`px-2 border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
@@ -1331,7 +1365,9 @@ const MasterView: React.FC = () => {
                         <th className="p-4 text-right">{t.rate}</th>
                         <th className="p-4 min-w-[120px]">{t.shipper}</th>
                         <th className="p-4 min-w-[120px]">{t.trucker}</th>
+                        <th className="p-4 min-w-[110px]">{isAr ? 'البضاعة' : 'Commodity'}</th>
                         <th className="p-4 min-w-[120px]">{isAr ? 'وحدة المولد' : 'Genset Unit'}</th>
+                        <th className="p-4 min-w-[110px]">{isAr ? 'فني التركيب' : 'Clipper On'}</th>
                         <th className="p-4 text-center w-32">{t.actions}</th>
                       </tr>
                    </thead>
@@ -1365,7 +1401,9 @@ const MasterView: React.FC = () => {
                              <input list="truckers" className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" value={o.trucker} onChange={e => updateStagedRow(idx, 'trucker', e.target.value.toUpperCase())} />
                              {isAr && <p className="text-[7px] font-black text-blue-600 mt-1">{translateEntity(o.trucker, 'ar')}</p>}
                            </td>
+                           <td className="p-2"><input className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" placeholder="e.g. CITRUS" value={o.commodity || ''} onChange={e => updateStagedRow(idx, 'commodity', e.target.value.toUpperCase())} /></td>
                            <td className="p-2"><input list="gensets" className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" value={o.gensetNumber} onChange={e => updateStagedRow(idx, 'gensetNumber', e.target.value.toUpperCase())} /></td>
+                           <td className="p-2"><input className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" placeholder="Technician" value={o.clipperName || ''} onChange={e => updateStagedRow(idx, 'clipperName', e.target.value)} /></td>
                            <td className="p-2 text-center flex items-center justify-center gap-2">
                               <button onClick={() => duplicateRow(idx)} className="text-blue-500 hover:scale-125 transition-transform p-2 bg-blue-50 rounded-lg shadow-sm" title="Duplicate Row">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
@@ -1376,7 +1414,7 @@ const MasterView: React.FC = () => {
                       ))}
                    </tbody>
                 </table>
-                <button onClick={() => setStagedOps([...stagedOps, { customerName: '', bookingNumber: '', gensetNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, trucker: '', beneficiaryName: '', quantity: 1 }])} className="mt-4 w-full py-4 border-2 border-dashed rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all hover:bg-white/5">{isAr ? '+ إضافة سطر فارغ' : '+ Add Empty Row'}</button>
+                <button onClick={() => setStagedOps([...stagedOps, { customerName: '', bookingNumber: '', gensetNumber: '', commodity: '', clipperName: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, trucker: '', beneficiaryName: '', quantity: 1 }])} className="mt-4 w-full py-4 border-2 border-dashed rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all hover:bg-white/5">{isAr ? '+ إضافة سطر فارغ' : '+ Add Empty Row'}</button>
              </div>
              <div className={`p-8 shrink-0 flex gap-4 border-t ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                 <button type="button" onClick={() => setShowAddModal(false)} className="px-10 py-5 text-[11px] font-black uppercase text-slate-400 tracking-widest hover:text-rose-500 transition-colors">{t.cancel}</button>

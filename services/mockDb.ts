@@ -4,7 +4,8 @@ import {
   UserRole, GensetStatus, ReservationStatus, AuditEntry, 
   CustomerPrice, Procurement, GasTransaction, Employee, 
   PayrollTransaction, Payment, FoodExpense, TransportExpense, 
-  PortRent, SystemNotification, SupportContact, FAQItem, PortInfo
+  PortRent, SystemNotification, SupportContact, FAQItem, PortInfo,
+  GensetMaintenanceLog, MaintenanceServiceType
 } from '../types';
 import { INITIAL_STOCK, MOCK_RESERVATIONS, MOCK_USERS, AVATARS } from '../constants';
 
@@ -22,6 +23,7 @@ class MockDB {
   private payments: Payment[] = [];
   private customerPrices: CustomerPrice[] = [];
   private internalSerialCounter: number = 1000;
+  private maintenanceLogs: GensetMaintenanceLog[] = [];
   
   private procurements: Procurement[] = [];
   private gasTransactions: GasTransaction[] = [];
@@ -67,6 +69,7 @@ class MockDB {
     this.seedLargeDataset();
     this.syncCustomersFromOperations();
     this.seedExpenses();
+    this.seedMaintenanceLogs();
     this.saveSnapshot("System Initialization");
   }
 
@@ -77,6 +80,8 @@ class MockDB {
 
   private seedLargeDataset() {
     const demoCustomers = ['ELAMIR', 'MAERSK', 'MSC', 'FISSAL'];
+    const demoCommodities = ['ORANGES', 'CITRUS', 'GRAPES', 'POTATOES', 'STRAWBERRIES', 'POMEGRANATE', 'FROZEN FISH', 'ONIONS'];
+    const demoClippers = ['Mohamed Fawzy', 'Ahmed Ali', 'Mahmoud Hassan', 'Eslam Logistics', 'Ibrahim Said', 'Sherif Hegazy'];
     const ports = Object.values(Location).filter(l => l !== Location.MAL);
     
     // Existing dynamic seed
@@ -85,6 +90,8 @@ class MockDB {
       const portIn = ports[i % ports.length];
       const portOut = ports[(i + 1) % ports.length];
       const unit = this.stock[i % this.stock.length];
+      const commodity = demoCommodities[i % demoCommodities.length];
+      const clipperName = demoClippers[i % demoClippers.length];
       
       const op: Operation = {
         id: `op-seed-${i}`,
@@ -101,6 +108,8 @@ class MockDB {
         beneficiaryName: 'GENERAL CARGO',
         containerNumber: `MSKU${2000000 + i}`,
         gensetNumber: unit.unitNumber,
+        commodity: commodity,
+        clipperName: clipperName,
         status: i % 3 === 0 ? 'DONE' : 'IN PROGRESS',
         rate: '2200.00',
         vat: '308.00',
@@ -186,6 +195,119 @@ class MockDB {
     ];
   }
 
+  private seedMaintenanceLogs() {
+    const records: GensetMaintenanceLog[] = [
+      {
+        id: 'maint-101',
+        gensetNumber: 'SZLG221-240',
+        serviceDate: '2026-02-15',
+        serviceType: 'OIL_CHANGE',
+        technician: 'Mohamed Fawzy',
+        location: Location.ALEX,
+        runningHours: 1250,
+        cost: 1850,
+        status: 'COMPLETED',
+        description: 'Scheduled 250-hr lube change. Drained engine oil, replaced LF16015 lube filter, inspected fan belt tension.',
+        partsReplaced: '15W-40 Synthetic Oil (18L), LF16015 Filter',
+        nextServiceDue: '2026-05-15',
+        createdAt: '2026-02-15T09:30:00Z'
+      },
+      {
+        id: 'maint-102',
+        gensetNumber: 'SZLG221-284',
+        serviceDate: '2026-02-28',
+        serviceType: 'FILTER_REPLACEMENT',
+        technician: 'Ahmed Ali',
+        location: Location.DAM,
+        runningHours: 2100,
+        cost: 1400,
+        status: 'COMPLETED',
+        description: 'Replaced primary fuel water separator and secondary spin-on filter due to low fuel rail pressure alarm.',
+        partsReplaced: 'FS19732 Fuel/Water Separator, FF5612 Fuel Filter',
+        nextServiceDue: '2026-05-28',
+        createdAt: '2026-02-28T14:15:00Z'
+      },
+      {
+        id: 'maint-103',
+        gensetNumber: 'CRLG121-808',
+        serviceDate: '2026-03-05',
+        serviceType: 'ELECTRICAL_CHECK',
+        technician: 'Sherif Hegazy',
+        location: Location.ALEX,
+        runningHours: 3400,
+        cost: 2600,
+        status: 'COMPLETED',
+        description: 'Replaced 460V 32A reefer socket receptacle, calibrated internal circuit breaker, verified AVR output voltage stability at 460V ± 1.5%.',
+        partsReplaced: 'Reefer Power Socket 32A 4P, AVR Sensing Wire Harness',
+        nextServiceDue: '2026-06-05',
+        createdAt: '2026-03-05T11:00:00Z'
+      },
+      {
+        id: 'maint-104',
+        gensetNumber: '5181-133',
+        serviceDate: '2026-03-10',
+        serviceType: 'ROUTINE_INSPECTION',
+        technician: 'Eslam Logistics',
+        location: Location.ALEX,
+        runningHours: 850,
+        cost: 650,
+        status: 'COMPLETED',
+        description: 'Pre-trip seasonal inspection. Checked radiator coolant level, battery load capacity (12.6V, 800 CCA), cleaned air intake pre-cleaner.',
+        partsReplaced: 'Battery Terminal Clamps, Pre-cleaner Foam Element',
+        nextServiceDue: '2026-06-10',
+        createdAt: '2026-03-10T08:45:00Z'
+      },
+      {
+        id: 'maint-105',
+        gensetNumber: '100050-128',
+        serviceDate: '2026-03-11',
+        serviceType: 'EMERGENCY_REPAIR',
+        technician: 'Mohamed Fawzy',
+        location: Location.ALEX,
+        runningHours: 2950,
+        cost: 3200,
+        status: 'IN_PROGRESS',
+        description: 'High water temperature shut-down alert. Diagnosed coolant leak at upper radiator hose elbow. Disassembled for hose replacement and pressure testing.',
+        partsReplaced: 'Upper Radiator Hose, Constant Torque Clamps, 50/50 Premix Coolant',
+        nextServiceDue: '2026-04-11',
+        createdAt: '2026-03-11T13:20:00Z'
+      },
+      {
+        id: 'maint-106',
+        gensetNumber: 'SZLG221-258',
+        serviceDate: '2026-03-20',
+        serviceType: 'ENGINE_OVERHAUL',
+        technician: 'Sherif Hegazy',
+        location: Location.ALEX,
+        runningHours: 5200,
+        cost: 14500,
+        status: 'SCHEDULED',
+        description: 'Scheduled top-end decoke, valve clearance adjustment, injector spray pattern calibration, and turbocharger play check.',
+        partsReplaced: 'Injector Nozzles (x4), Valve Cover Gasket, Turbo Gasket Kit',
+        nextServiceDue: '2026-03-25',
+        createdAt: '2026-03-11T16:00:00Z'
+      }
+    ];
+
+    this.maintenanceLogs = records;
+
+    // Apply metadata to matching gensets
+    records.forEach(log => {
+      const unit = this.stock.find(s => s.unitNumber.toUpperCase() === log.gensetNumber.toUpperCase());
+      if (unit) {
+        if (!unit.lastMaintenanceDate || new Date(log.serviceDate) > new Date(unit.lastMaintenanceDate)) {
+          unit.lastMaintenanceDate = log.serviceDate;
+        }
+        if (log.nextServiceDue) unit.nextMaintenanceDue = log.nextServiceDue;
+        if (log.runningHours) unit.runningHours = log.runningHours;
+        unit.maintenanceCount = (unit.maintenanceCount || 0) + 1;
+        if (log.status === 'IN_PROGRESS') {
+          unit.status = GensetStatus.MAINTENANCE;
+        }
+      }
+    });
+  }
+
   getNotifications(user: User) { 
     return this.notifications.filter(n => {
       if (!n.targetUserId && !n.targetOrgName) return true;
@@ -238,6 +360,7 @@ class MockDB {
     this.internalSerialCounter = 1000;
     this.stock = this.stock.map(s => ({ ...s, status: GensetStatus.IN_STOCK }));
     this.users = this.users.filter(u => u.role !== UserRole.CUSTOMER);
+    this.maintenanceLogs = [];
     this.saveSnapshot("CRITICAL: TOTAL SYSTEM WIPE EXECUTED. DATA PURGED.");
     this.notifyChange();
   }
@@ -311,7 +434,8 @@ class MockDB {
       notifications: this.notifications,
       supportContacts: this.supportContacts,
       faqs: this.faqs,
-      portsInfo: this.portsInfo
+      portsInfo: this.portsInfo,
+      maintenanceLogs: this.maintenanceLogs
     });
     this.historyStack.push(state);
     if (this.historyStack.length > 50) this.historyStack.shift();
@@ -348,6 +472,7 @@ class MockDB {
     this.supportContacts = prevState.supportContacts || [];
     this.faqs = prevState.faqs || [];
     this.portsInfo = prevState.portsInfo || [];
+    this.maintenanceLogs = prevState.maintenanceLogs || [];
     this.notifyChange();
     return true;
   }
@@ -370,6 +495,65 @@ class MockDB {
   getSupportContacts() { return this.supportContacts; }
   getFAQs() { return this.faqs; }
   getPortsInfo() { return this.portsInfo; }
+  getMaintenanceLogs(): GensetMaintenanceLog[] { 
+    return [...this.maintenanceLogs].sort((a, b) => new Date(b.serviceDate).getTime() - new Date(a.serviceDate).getTime()); 
+  }
+  getMaintenanceLogsForGenset(unitNumber: string): GensetMaintenanceLog[] {
+    return this.maintenanceLogs
+      .filter(l => l.gensetNumber.toUpperCase() === unitNumber.toUpperCase())
+      .sort((a, b) => new Date(b.serviceDate).getTime() - new Date(a.serviceDate).getTime());
+  }
+
+  addMaintenanceLog(log: GensetMaintenanceLog) {
+    this.maintenanceLogs.unshift(log);
+    const unit = this.stock.find(s => s.unitNumber.toUpperCase() === log.gensetNumber.toUpperCase());
+    if (unit) {
+      if (!unit.lastMaintenanceDate || new Date(log.serviceDate) >= new Date(unit.lastMaintenanceDate)) {
+        unit.lastMaintenanceDate = log.serviceDate;
+      }
+      if (log.nextServiceDue) unit.nextMaintenanceDue = log.nextServiceDue;
+      if (log.runningHours && (!unit.runningHours || log.runningHours > unit.runningHours)) {
+        unit.runningHours = log.runningHours;
+      }
+      unit.maintenanceCount = (unit.maintenanceCount || 0) + 1;
+      if (log.status === 'IN_PROGRESS') {
+        unit.status = GensetStatus.MAINTENANCE;
+      } else if (log.status === 'COMPLETED' && unit.status === GensetStatus.MAINTENANCE) {
+        unit.status = GensetStatus.IN_STOCK;
+      }
+    }
+    this.saveSnapshot(`MAINTENANCE: Logged ${log.serviceType} for ${log.gensetNumber}`);
+    this.notifyChange();
+  }
+
+  updateMaintenanceLog(log: GensetMaintenanceLog) {
+    this.maintenanceLogs = this.maintenanceLogs.map(l => l.id === log.id ? log : l);
+    const unit = this.stock.find(s => s.unitNumber.toUpperCase() === log.gensetNumber.toUpperCase());
+    if (unit) {
+      if (log.status === 'IN_PROGRESS') {
+        unit.status = GensetStatus.MAINTENANCE;
+      } else if (log.status === 'COMPLETED' && unit.status === GensetStatus.MAINTENANCE) {
+        unit.status = GensetStatus.IN_STOCK;
+      }
+      if (log.runningHours && (!unit.runningHours || log.runningHours > unit.runningHours)) {
+        unit.runningHours = log.runningHours;
+      }
+      if (log.nextServiceDue) {
+        unit.nextMaintenanceDue = log.nextServiceDue;
+      }
+    }
+    this.saveSnapshot(`MAINTENANCE: Updated record for ${log.gensetNumber}`);
+    this.notifyChange();
+  }
+
+  deleteMaintenanceLog(id: string) {
+    const log = this.maintenanceLogs.find(l => l.id === id);
+    this.maintenanceLogs = this.maintenanceLogs.filter(l => l.id !== id);
+    if (log) {
+      this.saveSnapshot(`MAINTENANCE: Deleted record ${id} for ${log.gensetNumber}`);
+    }
+    this.notifyChange();
+  }
 
   updateSupportContact(contact: SupportContact) {
     this.supportContacts = this.supportContacts.map(c => c.id === contact.id ? contact : c);

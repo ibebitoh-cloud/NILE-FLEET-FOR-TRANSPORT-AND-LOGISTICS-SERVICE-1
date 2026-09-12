@@ -2,23 +2,19 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { ThemeContext, LanguageContext } from '../App';
 import { translations } from '../translations';
-import { MOCK_USERS } from '../constants';
 
 interface LoginProps { onLogin: (email: string, pass: string) => void; }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const { theme } = useContext(ThemeContext);
-  const { lang } = useContext(LanguageContext);
+  const { theme, isDark } = useContext(ThemeContext);
+  const { lang, setLang } = useContext(LanguageContext);
   const t = translations[lang];
   const isAr = lang === 'ar';
-  
-  const isDark = theme === 'black' || theme === 'midnight' || theme === 'toxic' || theme === 'navy' || theme === 'forest';
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [fullName, setFullName] = useState('');
-  const [showDemoList, setShowDemoList] = useState(true); // Default to showing helper list so user sees it instantly!
   
   // Secret Trigger State
   const [showSecret, setShowSecret] = useState(false);
@@ -79,7 +75,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       <div className="w-full h-screen grid grid-cols-1 lg:grid-cols-12 overflow-hidden relative z-10">
         
         {/* LEFT PANEL */}
-        <div className="hidden lg:flex lg:col-span-7 bg-[#001F3F] relative flex-col justify-between p-20 overflow-hidden border-r border-white/5">
+        <div className="hidden lg:flex lg:col-span-7 bg-[#001F3F] relative flex-col justify-center p-20 overflow-hidden border-r border-white/5">
           <div className="absolute inset-0 z-0">
             <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=2000" className="w-full h-full object-cover opacity-20 grayscale scale-110" alt="Fleet" />
             <div className="absolute inset-0 bg-gradient-to-br from-[#001F3F] via-[#001F3F]/80 to-transparent"></div>
@@ -88,38 +84,48 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <div className="mb-16">
               <p className="text-[#C2A378] text-[10px] font-black uppercase tracking-[0.6em] mb-6 animate-pulse">{t.secureTerminal}</p>
               <h1 className="text-7xl font-black text-white tracking-tighter uppercase italic leading-none">NILE <span className="text-[#C2A378]">FLEET</span></h1>
+              <p className="text-xs font-black uppercase tracking-[0.25em] text-[#C2A378] italic mt-3">
+                SHERIF HEGAZY
+              </p>
             </div>
             <div className="space-y-6">
-              <h2 className="text-5xl font-black leading-tight uppercase tracking-tighter italic min-h-[140px]">
-                {isAr ? <span className="text-white">قوة المولدات المتنقلة.</span> : <><AnimatedText text="CLIP-ON" baseDelay={0.2} /> <br/><AnimatedText text="GENSET FORCE." colorClass="text-[#C2A378]" baseDelay={0.8} /></>}
-              </h2>
+              <div>
+                <h2 className="text-5xl font-black leading-tight uppercase tracking-tighter italic">
+                  {isAr ? <span className="text-white">قوة المولدات.</span> : <><AnimatedText text="GENSET" baseDelay={0.2} /> <br/><AnimatedText text="POWER." colorClass="text-[#C2A378]" baseDelay={0.6} /></>}
+                </h2>
+              </div>
               <p className="text-slate-300 text-[10px] font-bold uppercase tracking-[0.4em] max-w-sm leading-relaxed border-l-2 border-[#C2A378]/30 pl-6">{t.coldChain}</p>
-            </div>
-          </div>
-          <div className="relative z-10 flex items-center gap-12 text-start">
-            <div className="group cursor-default">
-              <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1 group-hover:text-[#C2A378] transition-colors">{isAr ? 'الوضع' : 'STATUS'}</p>
-              <p className="text-white font-black text-lg italic tracking-widest">OPERATIONAL</p>
-            </div>
-            <div className="group cursor-default">
-              <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1 group-hover:text-[#C2A378] transition-colors">{isAr ? 'المنطقة' : 'REGION'}</p>
-              <p className="text-[#C2A378] font-black text-lg italic tracking-widest">MENA_HUB</p>
             </div>
           </div>
         </div>
 
         {/* RIGHT PANEL */}
         <div className={`col-span-full lg:col-span-5 flex flex-col justify-center px-8 lg:px-16 relative z-10 transition-colors duration-1000 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+          {/* Top Bar for Language Switcher */}
+          <div className="absolute top-6 right-6 lg:top-8 lg:right-8 z-20 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setLang(lang === 'en' ? 'ar' : 'en')}
+              className={`px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center gap-1.5 ${
+                isDark 
+                  ? 'border-[#C2A378]/40 bg-slate-800/80 text-[#C2A378] hover:bg-slate-700' 
+                  : 'border-slate-300 bg-slate-50 text-[#001F3F] hover:bg-slate-100'
+              }`}
+            >
+              <span>🌐</span>
+              <span>{lang === 'en' ? 'العربية' : 'ENGLISH'}</span>
+            </button>
+          </div>
+
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[30rem] lg:text-[40rem] font-black text-slate-500/5 pointer-events-none select-none italic tracking-tighter">N</div>
           <div className="max-w-md w-full mx-auto space-y-10 relative z-10">
-            <div className="space-y-4 text-center lg:text-start relative">
-              <div className="flex items-center gap-3 mb-2 opacity-50 justify-center lg:justify-start">
-                 <span className="h-px w-8 bg-[#C2A378]"></span>
-                 <span className="text-[8px] font-black uppercase tracking-[0.4em] text-slate-500">TERMINAL_ID: 2026_NF</span>
-              </div>
+            <div className="space-y-3 text-center lg:text-start relative">
               <h3 className={`text-4xl lg:text-5xl font-black uppercase italic tracking-tighter leading-[0.9] ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>
                 {isRegistering ? <>{isAr ? 'تسجيل' : 'NEW'} <br/> <span className="text-[#C2A378]">{isAr ? 'هوية جديدة' : 'ACCOUNT'}</span></> : <>{isAr ? 'مرحباً بكم في' : 'WELCOME TO'} <br/> <span className="text-[#C2A378]">{isAr ? 'أسطول النيل' : 'NILE FLEET'}</span></>}
               </h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#C2A378] italic">
+                SHERIF HEGAZY
+              </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5 text-start">
@@ -146,57 +152,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </form>
 
             <div className="flex flex-col gap-4 items-center">
-               <button type="button" onClick={() => setIsRegistering(!isRegistering)} className="text-[8px] font-black uppercase text-slate-400 hover:text-[#C2A378] tracking-[0.3em] transition-all border-b border-transparent hover:border-[#C2A378]">{isRegistering ? 'RETURN TO LOGIN PORT' : t.requestNode}</button>
-            </div>
-
-            {/* Quick Demo Accounts Drawer */}
-            <div className={`border rounded-[1.5rem] p-5 space-y-4 ${isDark ? 'border-slate-800 bg-slate-900/60' : 'border-slate-200 bg-slate-50/50'}`}>
-              <button 
-                type="button" 
-                onClick={() => setShowDemoList(!showDemoList)}
-                className="w-full flex items-center justify-between font-black text-[10px] uppercase tracking-wider text-slate-500 hover:text-[#C2A378] transition-colors"
-              >
-                <span className="flex items-center gap-2">🚀 {isAr ? 'حسابات التجربة السريعة' : 'Quick Demo Accounts'}</span>
-                <span className="text-[8px] font-black bg-slate-200 dark:bg-slate-800 px-3 py-1 rounded-full text-slate-400">
-                  {showDemoList ? (isAr ? 'إخفاء' : 'HIDE') : (isAr ? 'عرض الإعتمادات' : 'SHOW')}
-                </span>
-              </button>
-              
-              {showDemoList && (
-                <div className="grid grid-cols-1 gap-2.5 max-h-56 overflow-y-auto pr-1">
-                  {MOCK_USERS.map((u) => {
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => {
-                          setEmail(u.email);
-                          setPassword(u.password || '');
-                          onLogin(u.email, u.password || '');
-                        }}
-                        className={`flex items-center gap-3.5 p-3 rounded-2xl text-left border transition-all hover:scale-[1.01] hover:-translate-y-0.5 active:scale-[0.98] ${isDark ? 'bg-slate-800/80 border-slate-700/50 hover:bg-slate-850 hover:border-[#C2A378]/60' : 'bg-white border-slate-200/70 hover:border-[#C2A378]/60 shadow-sm'}`}
-                      >
-                        <div className="w-9 h-9 rounded-full overflow-hidden bg-slate-200/50 flex-shrink-0 flex items-center justify-center">
-                          {u.avatarUrl && u.avatarUrl.startsWith('http') ? (
-                            <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            <span className="text-base">👤</span>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-baseline gap-2 mb-0.5">
-                            <p className={`text-xs font-black truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{u.name}</p>
-                            <span className="text-[7px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest flex-shrink-0 text-[#C2A378] bg-[#C2A378]/10">{u.role}</span>
-                          </div>
-                          <p className="text-[9px] text-slate-400 truncate font-mono">
-                            {u.email} <span className="mx-1 text-slate-700 dark:text-slate-500">|</span> <span className="font-sans font-bold text-[#C2A378]/90">{isAr ? 'السر' : 'pass'}: {u.password}</span>
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+               <button type="button" onClick={() => setIsRegistering(!isRegistering)} className="text-[8px] font-black uppercase text-slate-400 hover:text-[#C2A378] tracking-[0.3em] transition-all border-b border-transparent hover:border-[#C2A378]">{isRegistering ? 'RETURN TO LOGIN' : t.requestNode}</button>
             </div>
             
             <div className="relative pt-6 border-t border-slate-100 dark:border-white/5">

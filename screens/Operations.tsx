@@ -100,6 +100,8 @@ const EditOperationModal: React.FC<{
             <div><label className={labelClass}>Genset Unit</label><input className={inputClass} value={formData.gensetNumber} onChange={e => setFormData({...formData, gensetNumber: e.target.value.toUpperCase()})} /></div>
             <div><label className={labelClass}>Trucking Co</label><input className={inputClass} value={formData.trucker} onChange={e => setFormData({...formData, trucker: e.target.value.toUpperCase()})} /></div>
             <div><label className={labelClass}>Shipper Name</label><input className={inputClass} value={formData.beneficiaryName} onChange={e => setFormData({...formData, beneficiaryName: e.target.value.toUpperCase()})} /></div>
+            <div><label className={labelClass}>Commodity</label><input className={inputClass} placeholder="e.g. CITRUS, ORANGES..." value={formData.commodity || ''} onChange={e => setFormData({...formData, commodity: e.target.value.toUpperCase()})} /></div>
+            <div><label className={labelClass}>Clipper On Person</label><input className={inputClass} placeholder="Technician / Operator" value={formData.clipperName || ''} onChange={e => setFormData({...formData, clipperName: e.target.value})} /></div>
 
             <div><label className={labelClass}>Driver Name</label><input className={inputClass} value={formData.driverName || ''} onChange={e => setFormData({...formData, driverName: e.target.value})} /></div>
             <div><label className={labelClass}>Driver Mobile</label><input className={inputClass} value={formData.driverPhone || ''} onChange={e => setFormData({...formData, driverPhone: e.target.value})} /></div>

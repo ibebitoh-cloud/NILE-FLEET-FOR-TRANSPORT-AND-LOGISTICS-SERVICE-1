@@ -91,8 +91,15 @@ const App: React.FC = () => {
 
   const [activeScreen, setActiveScreen] = useState<string>(user?.role === UserRole.GATE_OPERATOR ? 'port-gate' : 'dashboard');
   const [highlightId, setHighlightId] = useState<string | null>(null);
-  const [lang, setLang] = useState<Language>('en');
+  const [lang, setLang] = useState<Language>(() => {
+    const saved = localStorage.getItem('app_lang');
+    return (saved === 'ar' || saved === 'en') ? saved : 'en';
+  });
   const [langUpdateKey, setLangUpdateKey] = useState(0);
+
+  useEffect(() => {
+    localStorage.setItem('app_lang', lang);
+  }, [lang]);
 
   const getIsDark = (currentTheme: ThemeMode): boolean => {
     if (currentTheme === 'custom') {
@@ -287,9 +294,11 @@ const App: React.FC = () => {
 
   if (!user) {
     return (
-      <ThemeContext value={{ theme, setTheme, scale, setScale, isMuted, setIsMuted, isDark, updateCustomTheme }}>
-        <Login onLogin={handleLogin} />
-      </ThemeContext>
+      <LanguageContext value={{ lang, setLang }}>
+        <ThemeContext value={{ theme, setTheme, scale, setScale, isMuted, setIsMuted, isDark, updateCustomTheme }}>
+          <Login onLogin={handleLogin} />
+        </ThemeContext>
+      </LanguageContext>
     );
   }
 

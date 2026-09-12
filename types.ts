@@ -179,11 +179,40 @@ export interface CustomerPrice {
   includeVat?: boolean;
 }
 
+export type MaintenanceServiceType = 
+  | 'OIL_CHANGE' 
+  | 'FILTER_REPLACEMENT' 
+  | 'ENGINE_OVERHAUL' 
+  | 'ELECTRICAL_CHECK' 
+  | 'ROUTINE_INSPECTION' 
+  | 'EMERGENCY_REPAIR' 
+  | 'GENERAL_SERVICE';
+
+export interface GensetMaintenanceLog {
+  id: string;
+  gensetNumber: string;
+  serviceDate: string;
+  serviceType: MaintenanceServiceType;
+  technician: string;
+  location: Location;
+  runningHours?: number;
+  cost: number;
+  status: 'COMPLETED' | 'IN_PROGRESS' | 'SCHEDULED';
+  description: string;
+  partsReplaced?: string;
+  nextServiceDue?: string;
+  createdAt?: string;
+}
+
 export interface Genset {
   id: string;
   unitNumber: string;
   location: Location;
   status: GensetStatus;
+  lastMaintenanceDate?: string;
+  nextMaintenanceDue?: string;
+  runningHours?: number;
+  maintenanceCount?: number;
 }
 
 export interface Reservation {
@@ -219,6 +248,8 @@ export interface Operation {
   beneficiaryName: string;
   containerNumber: string;
   gensetNumber: string;
+  commodity?: string;
+  clipperName?: string;
   driverName?: string;
   driverPhone?: string;
   gaz?: string;
