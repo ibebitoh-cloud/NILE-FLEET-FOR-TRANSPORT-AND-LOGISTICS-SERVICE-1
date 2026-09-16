@@ -34,6 +34,11 @@ export const entityTranslations: Record<string, string> = {
   "SCCT": "شرق بورسعيد",
   "PSD": "بورسعيد غرب",
   "MAL": "الورشة",
+  "WORKSHOP": "الورشة",
+  "IN_STOCK": "متاح بالمخزن",
+  "CLIPPED_ON": "مركب على حاوية",
+  "MAINTENANCE": "تحت الصيانة",
+  "RETIRED": "خارج الخدمة (تكهين)",
   "DONE": "تم الانتهاء",
   "IN PROGRESS": "قيد التنفيذ",
   "UNDER OPERATE": "تحت التجهيز",
@@ -68,6 +73,37 @@ export const translateEntity = (value: any, lang: 'en' | 'ar') => {
   }
 
   return original;
+};
+
+/**
+ * Manual sweep: checks a list of real system values and returns the ones
+ * that have no Arabic translation yet, adding them to the discovery queue.
+ * Unlike the passive observer, this does not require the app to be in AR mode
+ * or for the value to have been rendered on screen.
+ */
+export const scanForUntranslated = (values: (string | undefined | null)[]): string[] => {
+  const found: string[] = [];
+  values.forEach(value => {
+    if (!value) return;
+    const original = value.toString().trim();
+    if (!original) return;
+
+    // Only flag things containing Latin letters (English terms needing Arabic)
+    if (!/[a-zA-Z]/.test(original)) return;
+
+    // Skip pure codes/IDs: container numbers, genset serials, invoice refs etc.
+    if (/^[A-Z]{2,4}[-\s]?\d{3,}/.test(original)) return;
+    if (/^\d/.test(original)) return;
+
+    const upperVal = original.toUpperCase();
+    if (entityTranslations[upperVal]) return;
+    if (dynamicTranslations[upperVal]) return;
+
+    discoveryQueue.add(original);
+    if (!found.includes(original)) found.push(original);
+  });
+  window.dispatchEvent(new CustomEvent('lang-discovered'));
+  return found.sort((a, b) => a.localeCompare(b));
 };
 
 /**

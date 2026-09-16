@@ -9,7 +9,8 @@ export enum UserRole {
 export enum GensetStatus {
   IN_STOCK = 'IN_STOCK',
   CLIPPED_ON = 'CLIPPED_ON',
-  MAINTENANCE = 'MAINTENANCE'
+  MAINTENANCE = 'MAINTENANCE',
+  RETIRED = 'RETIRED'
 }
 
 export enum ReservationStatus {
@@ -26,7 +27,8 @@ export enum Location {
   SOKHNA = 'SOKHNA',
   SCCT = 'SCCT',
   PSD = 'PSD',
-  MAL = 'MAL'
+  MAL = 'MAL',
+  WORKSHOP = 'WORKSHOP'
 }
 
 export interface SystemNotification {

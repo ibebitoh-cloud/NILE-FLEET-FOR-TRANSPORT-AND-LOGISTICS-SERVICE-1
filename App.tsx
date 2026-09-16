@@ -23,7 +23,8 @@ import BookingInvoices from './screens/BookingInvoices';
 import Notifications from './screens/Notifications';
 import Layout from './components/Layout';
 import { User, UserRole } from './types';
-import { db } from './services/mockDb';
+import { db } from './services/supabaseDb';
+import { loginWithPassword, logout as supabaseLogout, getCurrentSessionUser } from './services/authService';
 import { discoveryQueue, registerDynamicTranslations } from './translations';
 import { translateBusinessEntities, getSafeApiKey } from './services/aiService';
 
@@ -100,6 +101,11 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('app_lang', lang);
   }, [lang]);
+
+  // Bootstrap: load all data from Supabase once on app start
+  useEffect(() => {
+    db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err));
+  }, []);
 
   const getIsDark = (currentTheme: ThemeMode): boolean => {
     if (currentTheme === 'custom') {
@@ -266,23 +272,22 @@ const App: React.FC = () => {
     return () => window.removeEventListener('db-undo-success', syncUser);
   }, [user?.id]);
 
-  const handleLogin = (email: string, pass: string) => {
-    const found = db.getUsers().find(u => u.email === email && u.password === pass);
-    if (found) {
-      if (found.revoked) {
-        alert(lang === 'ar' ? 'تم تعليق هذا الحساب من قبل الإدارة' : 'This account access has been suspended/revoked by system administrator.');
-        return;
-      }
-      const u: User = { ...found };
+  const handleLogin = async (email: string, pass: string) => {
+    const result = await loginWithPassword(email, pass);
+    if (result.user) {
+      const u = result.user;
       setUser(u);
       localStorage.setItem('user', JSON.stringify(u));
       setActiveScreen(u.role === UserRole.GATE_OPERATOR ? 'port-gate' : (u.role !== UserRole.CUSTOMER ? 'dashboard' : 'cust-reservations'));
+    } else if (result.error === 'REVOKED') {
+      alert(lang === 'ar' ? 'تم تعليق هذا الحساب من قبل الإدارة' : 'This account access has been suspended/revoked by system administrator.');
     } else {
       alert(lang === 'ar' ? 'فشل المصادقة' : 'Authentication failed');
     }
   };
 
   const handleLogout = () => {
+    supabaseLogout();
     setUser(null);
     localStorage.removeItem('user');
   };

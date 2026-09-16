@@ -30,6 +30,7 @@ export const PORT_STYLING: Record<Location, { bg: string, text: string, border: 
   [Location.SCCT]: { bg: 'bg-[#87CEEB]', text: 'text-[#003366]', border: 'border-[#00BFFF]' },  
   [Location.PSD]: { bg: 'bg-[#7E57C2]', text: 'text-white', border: 'border-[#5E35B1]' },      
   [Location.MAL]: { bg: 'bg-[#4CAF50]', text: 'text-white', border: 'border-[#388E3C]' },      
+  [Location.WORKSHOP]: { bg: 'bg-[#90A4AE]', text: 'text-white', border: 'border-[#607D8B]' },
 };
 
 const generateInitialStock = (): Genset[] => {
@@ -72,6 +73,7 @@ const generateInitialStock = (): Genset[] => {
       'HRSG594773', 'HRSG594781', 'HRSG594757', 'HRSG594801', 'HRSG594797', 'HRSG594775', 
       'HRSG594792', '5173-122', '122343-112', 'FSRG1005617'
     ],
+    [Location.WORKSHOP]: [],
     [Location.SCCT]: [
       'SZLG221-281', 'SZLG220-983', 'HRSG220517', 'HRSG122128', '100311-156', '100512-107', 
       '100552-152'
