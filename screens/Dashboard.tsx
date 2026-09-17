@@ -1,6 +1,6 @@
 
 import React, { useContext, useMemo } from 'react';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { Location, GensetStatus, UserRole, User } from '../types';
 import { LanguageContext, ThemeContext } from '../App';

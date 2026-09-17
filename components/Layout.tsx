@@ -3,7 +3,7 @@ import React, { useContext, useState, useEffect, useRef } from 'react';
 import { User, UserRole, SystemNotification } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations } from '../translations';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 
 interface LayoutProps {
   user: User;

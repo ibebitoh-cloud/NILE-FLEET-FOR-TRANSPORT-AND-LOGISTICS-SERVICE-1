@@ -1,5 +1,5 @@
 import React, { useState, useContext, useMemo } from 'react';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { LanguageContext, ThemeContext } from '../App';
 import { Location, Operation, Reservation, Invoice, UserRole } from '../types';
 import InvoiceView from '../components/InvoiceView';
@@ -177,8 +177,8 @@ const BookingInvoices: React.FC = () => {
     return { total, pendingBillingCount, invoicedCount, totalInvoicedVal };
   }, [bookingsData, allInvoices]);
 
-  const handleGenerateInvoice = (bookingNumber: string, customerName: string) => {
-    const freshInvoice = db.generateInvoiceFromBooking(bookingNumber, customerName);
+  const handleGenerateInvoice = async (bookingNumber: string, customerName: string) => {
+    const freshInvoice = await db.generateInvoiceFromBooking(bookingNumber, customerName);
     if (freshInvoice) {
       alert(isAr 
         ? `تم إنشاء الفاتورة بنجاح رقم ${freshInvoice.id} بمبلغ ${freshInvoice.amount.toLocaleString()} ج.م.`

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useContext, useEffect, useRef } from 'react';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { Operation, Location, GensetStatus, UserRole, User, CustomerPrice, Invoice } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity, registerDynamicTranslation } from '../translations';
@@ -561,8 +561,8 @@ const MasterView: React.FC = () => {
     refresh();
   };
 
-  const handleQuickGenerateInvoice = (bookingNumber: string, customerName: string) => {
-    const freshInvoice = db.generateInvoiceFromBooking(bookingNumber, customerName);
+  const handleQuickGenerateInvoice = async (bookingNumber: string, customerName: string) => {
+    const freshInvoice = await db.generateInvoiceFromBooking(bookingNumber, customerName);
     if (freshInvoice) {
       alert(isAr 
         ? `تم إنشاء الفاتورة بنجاح رقم ${freshInvoice.id} بمبلغ ${freshInvoice.amount.toLocaleString()} ج.م.`
@@ -728,7 +728,7 @@ const MasterView: React.FC = () => {
 
   const handleBulkStatusChange = (newStatus: 'IN PROGRESS' | 'UNDER OPERATE' | 'DONE' | 'HOLD' | 'CANCEL') => {
     if (isReadOnly) return;
-    const ids = Array.from(selectedRowIds);
+    const ids = Array.from(selectedRowIds) as string[];
     ids.forEach(id => {
       const op = operations.find(o => o.id === id);
       if (op) db.updateOperation({ ...op, status: newStatus });
@@ -740,7 +740,7 @@ const MasterView: React.FC = () => {
 
   const handleBulkDelete = () => {
     if (!isAdmin) return;
-    const ids = Array.from(selectedRowIds);
+    const ids = Array.from(selectedRowIds) as string[];
     if (confirm(isAr ? `هل أنت متأكد من حذف ${ids.length} عملية؟` : `Are you sure you want to delete ${ids.length} operations?`)) {
       db.deleteOperationsBulk(ids);
       setSelectedRowIds(new Set());

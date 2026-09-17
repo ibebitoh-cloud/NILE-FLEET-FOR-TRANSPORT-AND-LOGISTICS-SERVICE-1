@@ -2,7 +2,7 @@
 
 
 import React, { useState, useContext, useEffect, useMemo } from 'react';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { User, UserRole } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';

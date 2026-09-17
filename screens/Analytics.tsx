@@ -1,6 +1,6 @@
 
 import React, { useMemo, useContext } from 'react';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   AreaChart, Area, PieChart, Pie, Cell

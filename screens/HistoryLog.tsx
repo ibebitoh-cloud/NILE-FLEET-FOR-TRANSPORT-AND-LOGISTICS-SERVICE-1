@@ -1,6 +1,6 @@
 
 import React, { useState, useContext, useEffect } from 'react';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { LanguageContext } from '../App';
 import { translations } from '../translations';
 import { AuditEntry } from '../types';

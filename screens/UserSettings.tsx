@@ -1,9 +1,9 @@
 
 import React, { useState, useContext, useRef, useEffect } from 'react';
 import { User, UserRole, InvoiceSettings, Location } from '../types';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { LanguageContext, ThemeContext, ThemeMode } from '../App';
-import { translations, translateEntity, discoveryQueue, dynamicTranslations, registerDynamicTranslation, deleteDynamicTranslation } from '../translations';
+import { translations, translateEntity, discoveryQueue, dynamicTranslations, registerDynamicTranslation, deleteDynamicTranslation, scanForUntranslated } from '../translations';
 import { AVATARS } from '../constants';
 import { getSafeApiKey } from '../services/aiService';
 import SignaturePad from '../components/SignaturePad';
@@ -138,6 +138,43 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
   // Linguistics State
   const [manualEn, setManualEn] = useState('');
   const [manualAr, setManualAr] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<{ found: number; scanned: number } | null>(null);
+
+  // Manual system-wide sweep for terms that still have no Arabic equivalent
+  const handleScanSystem = () => {
+    setIsScanning(true);
+    setScanResult(null);
+    try {
+      const values: (string | undefined | null)[] = [];
+
+      db.getOperations().forEach(o => {
+        values.push(o.customerName, o.trucker, o.beneficiaryName, o.commodity,
+                    o.clipperName, o.driverName, o.status, o.shipperAddress);
+      });
+      db.getReservations().forEach(r => {
+        values.push(r.customerName, r.shipper, r.trucker, r.beneficiaryName, r.shipperAddress);
+      });
+      db.getUsers().forEach(u => {
+        values.push(u.companyName, u.name, u.jobTitle, u.department, u.governorate);
+      });
+      db.getStock().forEach(s => values.push(s.location, s.status));
+      db.getInvoices().forEach(i => values.push(i.customerName, i.status));
+      db.getPayments().forEach(p => values.push(p.customerName, p.type));
+      db.getMaintenanceLogs().forEach(l => {
+        values.push(l.serviceType, l.technician, l.status, l.description, l.partsReplaced);
+      });
+      db.getEmployees().forEach(e => values.push(e.name, e.position));
+      db.getProcurements().forEach(p => values.push(p.personName, p.itemDescription, p.status));
+      db.getCustomerPrices().forEach(p => values.push(p.customerName));
+
+      const found = scanForUntranslated(values);
+      setScanResult({ found: found.length, scanned: values.filter(Boolean).length });
+      setLangUpdateTrigger(v => v + 1);
+    } finally {
+      setIsScanning(false);
+    }
+  };
   const [langUpdateTrigger, setLangUpdateTrigger] = useState(0);
 
   const NUCLEAR_PHRASE = 'WIPE';
@@ -403,7 +440,34 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
                    </div>
 
                    <div className="p-8 border-2 border-dashed border-slate-100 dark:border-white/5 rounded-[2.5rem] space-y-4">
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic">Discovery Queue</h4>
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic">Discovery Queue</h4>
+                        <span className="text-[9px] font-black text-slate-400">{discoveryQueue.size}</span>
+                      </div>
+
+                      <button
+                        onClick={handleScanSystem}
+                        disabled={isScanning}
+                        className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+                      >
+                        <span>{isScanning ? '⏳' : '🔍'}</span>
+                        <span>{isScanning
+                          ? (isAr ? 'جاري الفحص...' : 'Scanning System...')
+                          : (isAr ? 'فحص يدوي للنظام عن كلمات تحتاج ترجمة' : 'Manual Scan for Untranslated Words')}</span>
+                      </button>
+
+                      {scanResult && (
+                        <div className={`p-4 rounded-2xl text-[9px] font-black uppercase tracking-wider ${scanResult.found > 0 ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'}`}>
+                          {scanResult.found > 0
+                            ? (isAr
+                                ? `تم فحص ${scanResult.scanned} قيمة — ${scanResult.found} كلمة جديدة تحتاج ترجمة`
+                                : `Scanned ${scanResult.scanned} values — ${scanResult.found} new term(s) need translation`)
+                            : (isAr
+                                ? `تم فحص ${scanResult.scanned} قيمة — لا توجد كلمات جديدة`
+                                : `Scanned ${scanResult.scanned} values — everything is translated`)}
+                        </div>
+                      )}
+
                       <div className="flex flex-wrap gap-2">
                          {Array.from(discoveryQueue).map(word => (
                            <button 

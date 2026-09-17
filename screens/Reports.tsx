@@ -1,8 +1,8 @@
 import React, { useState, useContext, useMemo } from 'react';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { LanguageContext } from '../App';
 import { translations, translateEntity } from '../translations';
-import { getAIClient } from '../services/aiService';
+import { runThinkingAudit } from '../services/aiService';
 import { UserRole } from '../types';
 
 const Reports: React.FC = () => {
@@ -55,13 +55,6 @@ const Reports: React.FC = () => {
     setIsThinking(true);
     setAuditAdvice('');
     try {
-      const ai = getAIClient();
-      if (!ai) {
-        setAuditAdvice(lang === 'ar' ? 'نظام الذكاء الاصطناعي غير متصل: يرجى ربط المفتاح من شاشة الدخول.' : 'AI System Offline: Please link your API key from the login terminal.');
-        setIsThinking(false);
-        return;
-      }
-
       const prompt = `
         You are an elite Auditor for Nile Fleet.
         REVENUE REPORT DATA (${dateFrom} to ${dateTo}) ${selectedCustomer !== 'ALL' ? `for Customer: ${selectedCustomer}` : ''}:
@@ -75,15 +68,9 @@ const Reports: React.FC = () => {
         Respond in ${lang === 'en' ? 'English' : 'Arabic'}.
       `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: prompt,
-        config: {
-          thinkingConfig: { thinkingBudget: 4000 }
-        }
-      });
+      const text = await runThinkingAudit(prompt, 4000, 'gemini-3-pro-preview');
 
-      setAuditAdvice(response.text || 'Analysis unavailable.');
+      setAuditAdvice(text || 'Analysis unavailable.');
     } catch (err) {
       setAuditAdvice('Connection error with Reasoning Core.');
     } finally {

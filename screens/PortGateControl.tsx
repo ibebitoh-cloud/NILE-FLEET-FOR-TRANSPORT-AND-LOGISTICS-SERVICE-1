@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useContext, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { Operation, Location, GensetStatus, UserRole, User } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';

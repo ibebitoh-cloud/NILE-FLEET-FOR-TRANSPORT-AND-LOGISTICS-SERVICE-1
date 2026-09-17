@@ -3,7 +3,7 @@ import React, { useContext, useState, useMemo, useEffect } from 'react';
 import { LanguageContext, ThemeContext } from '../App';
 import { translateEntity } from '../translations';
 import { UserRole, User, SystemNotification } from '../types';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 
 const Notifications: React.FC = () => {
   const { lang } = useContext(LanguageContext);

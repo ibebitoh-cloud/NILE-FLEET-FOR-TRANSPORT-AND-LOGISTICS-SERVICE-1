@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useContext } from 'react';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
 import { Invoice, User, UserRole } from '../types';

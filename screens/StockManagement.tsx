@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useContext, useEffect } from 'react';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { Location, GensetStatus, Genset, User, UserRole, GensetMaintenanceLog, MaintenanceServiceType } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
@@ -125,11 +125,49 @@ const StockManagement: React.FC = () => {
   }, [stock, maintenanceLogs]);
 
   // Genset Handlers
-  const handleUpdateGenset = (e: React.FormEvent) => {
+  const handleUpdateGenset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly || !editingGenset) return;
-    db.updateGenset(editingGenset);
+
+    const original = stock.find(s => s.id === editingGenset.id);
+    const oldNumber = original?.unitNumber?.trim() || '';
+    const newNumber = editingGenset.unitNumber.trim();
+
+    if (!newNumber) return;
+
+    // Renaming: make sure the new number isn't already taken by another unit
+    if (oldNumber && oldNumber !== newNumber) {
+      const clash = stock.find(s => s.id !== editingGenset.id && s.unitNumber.trim().toUpperCase() === newNumber.toUpperCase());
+      if (clash) {
+        alert(isAr
+          ? `رقم المولد "${newNumber}" مستخدم بالفعل في ${clash.location}. اختر رقماً آخر.`
+          : `Genset number "${newNumber}" already exists at ${clash.location}. Choose a different number.`);
+        return;
+      }
+
+      const linkedOps = db.getOperations().filter(o => o.gensetNumber?.trim().toUpperCase() === oldNumber.toUpperCase());
+      const linkedLogs = db.getMaintenanceLogs().filter(l => l.gensetNumber?.trim().toUpperCase() === oldNumber.toUpperCase());
+
+      const confirmed = window.confirm(isAr
+        ? `إعادة تسمية "${oldNumber}" إلى "${newNumber}".\n\nسيتم تحديث ${linkedOps.length} عملية و ${linkedLogs.length} سجل صيانة مرتبط. هل تريد المتابعة؟`
+        : `Rename "${oldNumber}" to "${newNumber}".\n\nThis will also update ${linkedOps.length} linked operation(s) and ${linkedLogs.length} maintenance record(s). Continue?`);
+      if (!confirmed) return;
+
+      await db.updateGenset({ ...editingGenset, unitNumber: newNumber });
+
+      // Cascade the rename so history stays linked to the unit
+      for (const op of linkedOps) {
+        await db.updateOperation({ ...op, gensetNumber: newNumber });
+      }
+      for (const log of linkedLogs) {
+        await db.updateMaintenanceLog({ ...log, gensetNumber: newNumber });
+      }
+    } else {
+      await db.updateGenset({ ...editingGenset, unitNumber: newNumber });
+    }
+
     setEditingGenset(null);
+    setDbVersion(v => v + 1);
   };
 
   const handleAddGenset = (e: React.FormEvent) => {
@@ -1321,6 +1359,18 @@ const StockManagement: React.FC = () => {
               <button onClick={() => setEditingGenset(null)} className="text-white hover:text-rose-500">✕</button>
             </div>
             <form onSubmit={handleUpdateGenset} className="p-8 space-y-6">
+              <div>
+                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-2">{isAr ? 'رقم المولد' : 'Genset / Unit Number'}</label>
+                <input
+                  required
+                  className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl font-black text-sm text-black dark:text-white outline-none focus:border-blue-400"
+                  value={editingGenset.unitNumber}
+                  onChange={e => setEditingGenset({ ...editingGenset, unitNumber: e.target.value })}
+                />
+                <p className="text-[8px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mt-2">
+                  {isAr ? 'تحذير: تغيير الرقم يؤثر على العمليات وسجلات الصيانة المرتبطة' : 'Warning: renaming affects linked operations & maintenance records'}
+                </p>
+              </div>
               <div>
                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-2">Location Assignment</label>
                 <select className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl font-black text-xs text-black dark:text-white outline-none focus:border-blue-400" value={editingGenset.location} onChange={e => setEditingGenset({...editingGenset, location: e.target.value as any})}>

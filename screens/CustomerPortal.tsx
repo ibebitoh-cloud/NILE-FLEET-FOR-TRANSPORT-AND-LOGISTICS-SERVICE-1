@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { User, Reservation, Invoice, Location, ReservationStatus } from '../types';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import InvoiceView from '../components/InvoiceView';
 import { ProLedger } from './Financials';
 

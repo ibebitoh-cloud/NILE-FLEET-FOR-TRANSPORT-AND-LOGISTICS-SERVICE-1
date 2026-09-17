@@ -2,7 +2,7 @@
 import React, { useContext, useState, useMemo, useEffect } from 'react';
 import { LanguageContext, ThemeContext } from '../App';
 import { translateEntity } from '../translations';
-import { db } from '../services/mockDb';
+import { db } from '../services/supabaseDb';
 import { SupportContact, FAQItem, PortInfo, Location, UserRole, User } from '../types';
 
 const CustomerService: React.FC = () => {
