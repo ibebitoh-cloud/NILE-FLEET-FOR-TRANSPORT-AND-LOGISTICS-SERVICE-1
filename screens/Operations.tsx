@@ -175,9 +175,9 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
   const filteredOps = useMemo(() => {
     return operations.filter(op => {
       const search = searchTerm.toLowerCase().trim();
-      const matchesSearch = op.bookingNumber.toLowerCase().includes(search) || 
-                            op.customerName.toLowerCase().includes(search) || 
-                            op.containerNumber.toLowerCase().includes(search);
+      const matchesSearch = (op.bookingNumber || '').toLowerCase().includes(search) || 
+                            (op.customerName || '').toLowerCase().includes(search) || 
+                            (op.containerNumber || '').toLowerCase().includes(search);
       
       let matchesFilter = true;
       if (activeQuickFilter === 'DONE') matchesFilter = op.status === 'DONE';

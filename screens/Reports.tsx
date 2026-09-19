@@ -31,9 +31,9 @@ const Reports: React.FC = () => {
       const matchesDate = d >= from && d <= to;
       const matchesCustomer = selectedCustomer === 'ALL' || o.customerName === selectedCustomer;
       const matchesSearch = !search || 
-        o.bookingNumber.toLowerCase().includes(search) ||
-        o.containerNumber.toLowerCase().includes(search) ||
-        o.customerName.toLowerCase().includes(search) ||
+        (o.bookingNumber || '').toLowerCase().includes(search) ||
+        (o.containerNumber || '').toLowerCase().includes(search) ||
+        (o.customerName || '').toLowerCase().includes(search) ||
         (o.gensetNumber && o.gensetNumber.toLowerCase().includes(search));
       
       return matchesDate && matchesCustomer && matchesSearch;

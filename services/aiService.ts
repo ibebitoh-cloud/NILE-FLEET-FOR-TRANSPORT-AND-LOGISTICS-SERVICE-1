@@ -2,7 +2,7 @@
 // All Gemini AI calls go through a server-side Netlify Function
 // (netlify/functions/ai-proxy.js), so the API key never ships to the browser.
 
-const AI_ENDPOINT = '/.netlify/functions/ai-proxy';
+const AI_ENDPOINT = '/ai-proxy'; // Cloudflare Pages Function at functions/ai-proxy.js
 
 async function callAi(action: string, payload: any) {
   const res = await fetch(AI_ENDPOINT, {

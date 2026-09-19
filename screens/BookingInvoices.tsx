@@ -142,8 +142,8 @@ const BookingInvoices: React.FC = () => {
   // Filter and search bookings
   const filteredBookings = useMemo(() => {
     return bookingsData.filter(b => {
-      const matchesSearch = b.bookingNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.customerName.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = (b.bookingNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (b.customerName || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       if (!matchesSearch) return false;
 

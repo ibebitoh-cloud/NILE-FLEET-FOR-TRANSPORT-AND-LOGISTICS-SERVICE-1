@@ -5,7 +5,6 @@ import { db } from '../services/supabaseDb';
 import { LanguageContext, ThemeContext, ThemeMode } from '../App';
 import { translations, translateEntity, discoveryQueue, dynamicTranslations, registerDynamicTranslation, deleteDynamicTranslation, scanForUntranslated } from '../translations';
 import { AVATARS } from '../constants';
-import { getSafeApiKey } from '../services/aiService';
 import SignaturePad from '../components/SignaturePad';
 
 interface UserSettingsProps {
@@ -81,7 +80,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
     });
   };
 
-  const [activeTab, setActiveTab] = useState<'IDENTITY' | 'CONTACT' | 'DISPLAY' | 'BUSINESS' | 'SECURITY' | 'AI' | 'LINGUISTICS' | 'COMMAND'>('IDENTITY');
+  const [activeTab, setActiveTab] = useState<'IDENTITY' | 'CONTACT' | 'DISPLAY' | 'BUSINESS' | 'LINGUISTICS' | 'COMMAND'>('IDENTITY');
   
   const [profileData, setProfileData] = useState<Partial<User>>({
     ...user,
@@ -180,7 +179,6 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
   const NUCLEAR_PHRASE = 'WIPE';
   const logoInputRef = useRef<HTMLInputElement>(null);
   const stampInputRef = useRef<HTMLInputElement>(null);
-  const aiLinked = !!getSafeApiKey();
 
   const handleProfileUpdate = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -366,14 +364,12 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
               { id: 'CONTACT', label: 'Logistics', icon: '📍' },
               { id: 'DISPLAY', label: 'Interface', icon: '🎨' },
               { id: 'BUSINESS', label: 'Branding', icon: '🏢' },
-              { id: 'SECURITY', label: 'Security', icon: '🛡️' },
-              { id: 'AI', label: 'AI Core', icon: '🧠' },
               { id: 'LINGUISTICS', label: 'Linguistics', icon: '🗣️' },
               isSuperOwner ? { id: 'COMMAND', label: 'Command', icon: '☢️' } : null,
             ].filter((tab): tab is { id: string; label: string; icon: string } => {
               if (!tab) return false;
               if (user.role === UserRole.GATE_OPERATOR) {
-                return ['IDENTITY', 'DISPLAY', 'SECURITY', 'LINGUISTICS'].includes(tab.id);
+                return ['IDENTITY', 'DISPLAY', 'LINGUISTICS'].includes(tab.id);
               }
               return true;
             }).map((tab) => (
@@ -756,7 +752,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label className={labelClass}>Document Title</label><input className={inputClass} value={brandingSettings.documentTitle} onChange={e => updateInvoiceSetting('documentTitle', e.target.value)} /></div>
                         <div><label className={labelClass}>Currency</label><input className={inputClass} value={brandingSettings.currency} onChange={e => updateInvoiceSetting('currency', e.target.value)} /></div>
-                        <div><label className={labelClass}>VAT Percentage (%)</label><input type="number" className={inputClass} value={brandingSettings.vatPercentage} onChange={updateInvoiceSetting.bind(null, 'vatPercentage')} /></div>
+                        <div><label className={labelClass}>VAT Percentage (%)</label><input type="number" className={inputClass} value={brandingSettings.vatPercentage} onChange={e => updateInvoiceSetting('vatPercentage', parseFloat(e.target.value) || 0)} /></div>
                         <div><label className={labelClass}>Item Default Name</label><input className={inputClass} value={brandingSettings.customItemName} onChange={e => updateInvoiceSetting('customItemName', e.target.value)} /></div>
                    </div>
                    
@@ -891,46 +887,6 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
              <div><label className={labelClass}>Footer Legal Text</label><textarea className={`${inputClass} h-16 pt-3`} value={brandingSettings.footerText} onChange={e => updateInvoiceSetting('footerText', e.target.value)} /></div>
              <button type="submit" className="w-full py-5 rounded-2xl bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest shadow-xl">Deploy Branding Matrix</button>
           </form>
-        )}
-
-        {activeTab === 'SECURITY' && (
-          <form onSubmit={handleProfileUpdate} className="p-8 lg:p-12 space-y-8 animate-in slide-in-from-bottom-4 text-start">
-            <div className="max-w-md space-y-6">
-               <h4 className="text-lg font-black uppercase italic tracking-tighter text-slate-800 dark:text-white leading-none">Credential Rotation</h4>
-               <div><label className={labelClass}>New Strategic Passkey</label><input type="password" className={inputClass} value={profileData.password || ''} onChange={e => setProfileData({...profileData, password: e.target.value})} /></div>
-               <p className="text-[8px] font-bold text-slate-400 uppercase leading-relaxed">Ensure your passkey follows the fleet security protocol: minimum 8 characters with high entropy.</p>
-            </div>
-            <button type="submit" className="w-full py-5 rounded-2xl bg-rose-600 text-white font-black uppercase text-[10px] tracking-widest shadow-xl">Update Access Credentials</button>
-          </form>
-        )}
-
-        {activeTab === 'AI' && (
-          <div className="p-8 lg:p-12 space-y-8 animate-in slide-in-from-bottom-4 text-start">
-             <div className="bg-[#001F3F] p-10 rounded-[3rem] border border-white/10 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10"><span className="text-8xl font-black italic">🧠</span></div>
-                <div className="relative z-10 space-y-6">
-                   <h4 className="text-2xl font-black uppercase text-[#C2A378] italic tracking-tighter leading-none">AI Core Config</h4>
-                   <div className="flex items-center gap-4 p-6 bg-black/40 rounded-2xl border border-white/10">
-                      <div className={`w-3 h-3 rounded-full ${aiLinked ? 'bg-emerald-500 animate-pulse' : 'bg-rose-50'}`}></div>
-                      <div>
-                         <p className="text-[8px] font-black uppercase text-slate-400">Node Connectivity</p>
-                         <p className="text-lg font-black text-white">{aiLinked ? 'OPERATIONAL' : 'OFFLINE'}</p>
-                      </div>
-                   </div>
-                   <p className="text-xs font-bold text-slate-300 leading-relaxed uppercase max-w-xl">
-                      The Nile Fleet Intelligence module requires a valid Google Gemini API Key. This key enables automated manifest mapping, financial audits, and strategic fleet advice.
-                   </p>
-                   {!aiLinked && (
-                      <button 
-                        onClick={async () => { if (window.aistudio?.openSelectKey) await window.aistudio.openSelectKey(); }}
-                        className="bg-[#C2A378] text-[#001F3F] px-10 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:scale-105 transition-all"
-                      >
-                        Authorize AI Node
-                      </button>
-                   )}
-                </div>
-             </div>
-          </div>
         )}
 
         {activeTab === 'COMMAND' && isSuperOwner && (

@@ -4,6 +4,8 @@ import { db } from '../services/supabaseDb';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
 import { Procurement, GasTransaction, Employee, PayrollTransaction, User, UserRole, FoodExpense, TransportExpense, PortRent, Location } from '../types';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
+import * as XLSX from 'xlsx';
 
 const ExpenseHub: React.FC = () => {
   const { lang } = useContext(LanguageContext);
@@ -29,6 +31,13 @@ const ExpenseHub: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
+
+  // --- Command Center: filters ---
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+  const [dateFrom, setDateFrom] = useState<string>(monthStart);
+  const [dateTo, setDateTo] = useState<string>(today.toISOString().split('T')[0]);
+  const [portFilter, setPortFilter] = useState<Location | 'ALL'>('ALL');
 
   const refresh = () => {
     setProcurements([...db.getProcurements()]);
@@ -108,6 +117,88 @@ const ExpenseHub: React.FC = () => {
     });
   }, [employees, payrollMonth, portRents]);
 
+  // --- Command Center: unify every expense category into one comparable shape ---
+  type UnifiedExpense = { id: string; category: string; date: string; amount: number; port: Location | null; label: string; };
+
+  const allExpenses: UnifiedExpense[] = useMemo(() => {
+    const list: UnifiedExpense[] = [];
+    procurements.forEach(p => list.push({ id: p.id, category: 'PROCURE', date: p.date, amount: p.amount, port: null, label: p.itemDescription }));
+    gasTransactions.forEach(t => { if (t.type === 'TOPUP') list.push({ id: t.id, category: 'GAS', date: t.date, amount: t.amount, port: null, label: t.reference }); });
+    foodExpenses.forEach(e => list.push({ id: e.id, category: 'FOOD', date: e.toDate || e.fromDate, amount: e.amount, port: null, label: `${e.workerCount} staffers` }));
+    transportExpenses.forEach(e => list.push({ id: e.id, category: 'TRANSPORT', date: e.date, amount: e.amount, port: e.fromPort, label: `${e.fromPort} -> ${e.toPort}` }));
+    portRents.forEach(e => list.push({ id: e.id, category: 'RENT', date: e.date, amount: e.amount, port: e.port, label: e.period }));
+    // Payroll: each transaction is a real cash movement
+    employees.forEach(emp => {
+      db.getPayrollTransactions().filter(tx => tx.employeeId === emp.id).forEach(tx => {
+        list.push({ id: tx.id, category: 'PAYROLL', date: tx.date, amount: tx.amount, port: null, label: `${emp.name} - ${tx.type}` });
+      });
+    });
+    return list;
+  }, [procurements, gasTransactions, foodExpenses, transportExpenses, portRents, employees]);
+
+  const filteredExpenses = useMemo(() => {
+    return allExpenses.filter(e => {
+      if (e.date && dateFrom && e.date < dateFrom) return false;
+      if (e.date && dateTo && e.date > dateTo) return false;
+      if (portFilter !== 'ALL' && e.port !== null && e.port !== portFilter) return false;
+      if (portFilter !== 'ALL' && e.port === null) return false; // port-less categories excluded when a specific port is chosen
+      return true;
+    });
+  }, [allExpenses, dateFrom, dateTo, portFilter]);
+
+  const CATEGORY_META: Record<string, { label: string; labelAr: string; color: string }> = {
+    PROCURE: { label: 'Procurement', labelAr: 'مشتريات', color: '#6366F1' },
+    GAS: { label: 'Fuel Ledger', labelAr: 'وقود', color: '#F59E0B' },
+    PAYROLL: { label: 'Staff Hub', labelAr: 'رواتب', color: '#0EA5E9' },
+    FOOD: { label: 'Allowances', labelAr: 'إعاشة', color: '#EF4444' },
+    TRANSPORT: { label: 'Fleet Moves', labelAr: 'نقل', color: '#22C55E' },
+    RENT: { label: 'Hub Rent', labelAr: 'إيجار', color: '#C2A378' },
+  };
+
+  const categoryBreakdown = useMemo(() => {
+    const totals: Record<string, number> = {};
+    filteredExpenses.forEach(e => { totals[e.category] = (totals[e.category] || 0) + e.amount; });
+    return Object.entries(totals)
+      .map(([category, value]) => ({ category, value, ...CATEGORY_META[category] }))
+      .filter(c => c.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [filteredExpenses]);
+
+  const totalThisRange = useMemo(() => filteredExpenses.reduce((s, e) => s + e.amount, 0), [filteredExpenses]);
+
+  // Previous period of equal length, immediately before dateFrom, for trend comparison
+  const trendVsPrevious = useMemo(() => {
+    const from = new Date(dateFrom);
+    const to = new Date(dateTo);
+    const rangeDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000) + 1);
+    const prevTo = new Date(from.getTime() - 86400000);
+    const prevFrom = new Date(prevTo.getTime() - (rangeDays - 1) * 86400000);
+    const prevFromStr = prevFrom.toISOString().split('T')[0];
+    const prevToStr = prevTo.toISOString().split('T')[0];
+    const prevTotal = allExpenses
+      .filter(e => e.date && e.date >= prevFromStr && e.date <= prevToStr && (portFilter === 'ALL' || e.port === portFilter))
+      .reduce((s, e) => s + e.amount, 0);
+    if (prevTotal === 0) return null;
+    const pct = ((totalThisRange - prevTotal) / prevTotal) * 100;
+    return { prevTotal, pct };
+  }, [allExpenses, dateFrom, dateTo, portFilter, totalThisRange]);
+
+  const handleExport = () => {
+    const rows = filteredExpenses
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+      .map(e => ({
+        Date: e.date,
+        Category: CATEGORY_META[e.category]?.label || e.category,
+        Description: e.label,
+        Port: e.port || '',
+        'Amount (EGP)': e.amount,
+      }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
+    XLSX.writeFile(wb, `Nile-Fleet-Expenses_${dateFrom}_to_${dateTo}.xlsx`);
+  };
+
   const toggleWorker = (name: string) => {
     const current = formData.selectedWorkers || [];
     if (current.includes(name)) {
@@ -164,6 +255,83 @@ const ExpenseHub: React.FC = () => {
               {translateEntity(tab.id, lang)}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* ===== Command Center Dashboard ===== */}
+      <div className="bg-white dark:bg-slate-800 rounded-[3.5rem] shadow-2xl border border-slate-200 dark:border-slate-700 p-10 space-y-8">
+        {/* Filters */}
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-2">{isAr ? 'من تاريخ' : 'From'}</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="p-3 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl font-bold text-sm text-black dark:text-white outline-none focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-2">{isAr ? 'إلى تاريخ' : 'To'}</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="p-3 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl font-bold text-sm text-black dark:text-white outline-none focus:border-blue-400" />
+          </div>
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-2">{isAr ? 'الميناء' : 'Port'}</label>
+            <select value={portFilter} onChange={e => setPortFilter(e.target.value as any)} className="p-3 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-xl font-bold text-sm text-black dark:text-white outline-none focus:border-blue-400">
+              <option value="ALL">{isAr ? 'كل الموانئ' : 'All Ports'}</option>
+              {Object.values(Location).map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2 ml-auto">
+            <button onClick={() => { setDateFrom(monthStart); setDateTo(today.toISOString().split('T')[0]); setPortFilter('ALL'); }} className="px-5 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-[#001F3F] dark:hover:text-white transition-colors">
+              {isAr ? 'إعادة تعيين' : 'Reset'}
+            </button>
+            <button onClick={handleExport} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 flex items-center gap-2">
+              <span>⬇</span> {isAr ? 'تصدير إكسل' : 'Export Excel'}
+            </button>
+          </div>
+        </div>
+
+        {/* Summary cards + chart */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-1 space-y-4">
+            <div className="bg-[#001F3F] text-white rounded-[2rem] p-8">
+              <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-2">{isAr ? 'إجمالي المصروفات للفترة' : 'Total Spend (Selected Range)'}</p>
+              <p className="text-4xl font-black">EGP {totalThisRange.toLocaleString()}</p>
+              {trendVsPrevious && (
+                <p className={`text-[10px] font-black mt-3 uppercase tracking-wider ${trendVsPrevious.pct > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
+                  {trendVsPrevious.pct > 0 ? '▲' : '▼'} {Math.abs(trendVsPrevious.pct).toFixed(1)}% {isAr ? 'مقارنة بالفترة السابقة' : 'vs previous period'}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              {categoryBreakdown.map(c => (
+                <div key={c.category} className="flex items-center justify-between px-5 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900">
+                  <div className="flex items-center gap-3">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: c.color }} />
+                    <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-300">{isAr ? c.labelAr : c.label}</span>
+                  </div>
+                  <span className="text-[11px] font-black text-slate-800 dark:text-white">EGP {c.value.toLocaleString()}</span>
+                </div>
+              ))}
+              {categoryBreakdown.length === 0 && (
+                <p className="text-center text-[10px] font-bold text-slate-400 uppercase py-6">{isAr ? 'لا توجد بيانات لهذه الفترة' : 'No expenses in this range'}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="lg:col-span-2 h-[340px]">
+            {categoryBreakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={categoryBreakdown} dataKey="value" nameKey="category" innerRadius={70} outerRadius={120} paddingAngle={3}>
+                    {categoryBreakdown.map((c) => <Cell key={c.category} fill={c.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => `EGP ${v.toLocaleString()}`} />
+                  <Legend formatter={(value: string) => isAr ? (CATEGORY_META[value]?.labelAr || value) : (CATEGORY_META[value]?.label || value)} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-slate-300 text-sm font-bold uppercase">
+                {isAr ? 'لا توجد رسوم بيانية للعرض' : 'Nothing to chart yet'}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

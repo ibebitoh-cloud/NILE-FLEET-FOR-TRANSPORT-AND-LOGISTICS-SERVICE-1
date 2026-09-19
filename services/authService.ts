@@ -27,6 +27,9 @@ function mapProfileToUser(profile: any, email: string): User {
     mfaEnabled: profile.mfa_enabled,
     allowedScreens: profile.allowed_screens || undefined,
     permissions: profile.permissions || undefined,
+    invoiceSettings: profile.invoice_settings || undefined,
+    wipePassword: profile.wipe_password || undefined,
+    signatureUrl: profile.signature_url || undefined,
   };
 }
 

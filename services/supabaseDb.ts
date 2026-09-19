@@ -488,12 +488,10 @@ class SupabaseDB {
   }
 
   async deleteUser(id: string): Promise<void> {
-    // Deleting from auth.users cascades to profiles via FK
-    const { error } = await supabase.auth.admin?.deleteUser(id) || {};
-    if (error) {
-      // Fallback: just mark revoked in profiles if admin API not available
-      await update('profiles', id, { revoked: true });
-    }
+    // The Supabase admin API (full account deletion) requires a service-role key,
+    // which must never be exposed in browser code. So we revoke access instead —
+    // this is a real, persisted change (blocks login), unlike a client-side admin call.
+    await update('profiles', id, { revoked: true });
     _users = _users.filter(u => u.id !== id);
     await auditLog('USER', `Deleted user profile ${id}`);
     dispatchChange();

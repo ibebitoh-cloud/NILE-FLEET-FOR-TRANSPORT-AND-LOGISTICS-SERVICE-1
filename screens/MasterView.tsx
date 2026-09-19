@@ -898,9 +898,9 @@ const MasterView: React.FC = () => {
   const filteredAndSortedOps = useMemo(() => {
     let result = [...operations].filter(op => {
       const searchStr = searchTerm.toLowerCase();
-      const matchesSearch = op.bookingNumber.toLowerCase().includes(searchStr) || 
-                            op.customerName.toLowerCase().includes(searchStr) || 
-                            op.containerNumber.toLowerCase().includes(searchStr) ||
+      const matchesSearch = (op.bookingNumber || '').toLowerCase().includes(searchStr) || 
+                            (op.customerName || '').toLowerCase().includes(searchStr) || 
+                            (op.containerNumber || '').toLowerCase().includes(searchStr) ||
                             (op.commodity && op.commodity.toLowerCase().includes(searchStr)) ||
                             (op.clipperName && op.clipperName.toLowerCase().includes(searchStr)) ||
                             (op.trucker && op.trucker.toLowerCase().includes(searchStr)) ||

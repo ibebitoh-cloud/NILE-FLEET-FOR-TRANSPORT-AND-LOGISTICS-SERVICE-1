@@ -81,7 +81,7 @@ const StockManagement: React.FC = () => {
   // Filtered Stock
   const filteredStock = useMemo(() => {
     return stock.filter(s => {
-      const matchesSearch = s.unitNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = (s.unitNumber || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStat = filterStat === 'ALL' || s.status === filterStat;
       const matchesLoc = filterLoc === 'ALL' || s.location === filterLoc;
       return matchesSearch && matchesStat && matchesLoc;
@@ -92,9 +92,9 @@ const StockManagement: React.FC = () => {
   const filteredMaintLogs = useMemo(() => {
     return maintenanceLogs.filter(log => {
       const matchesSearch = 
-        log.gensetNumber.toLowerCase().includes(maintSearch.toLowerCase()) ||
-        log.technician.toLowerCase().includes(maintSearch.toLowerCase()) ||
-        log.description.toLowerCase().includes(maintSearch.toLowerCase()) ||
+        (log.gensetNumber || '').toLowerCase().includes(maintSearch.toLowerCase()) ||
+        (log.technician || '').toLowerCase().includes(maintSearch.toLowerCase()) ||
+        (log.description || '').toLowerCase().includes(maintSearch.toLowerCase()) ||
         (log.partsReplaced && log.partsReplaced.toLowerCase().includes(maintSearch.toLowerCase()));
       const matchesType = maintFilterType === 'ALL' || log.serviceType === maintFilterType;
       const matchesStat = maintFilterStat === 'ALL' || log.status === maintFilterStat;
