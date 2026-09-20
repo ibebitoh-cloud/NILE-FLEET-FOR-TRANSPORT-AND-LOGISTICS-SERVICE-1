@@ -57,7 +57,12 @@ async function query<T>(table: string, options?: { filter?: Record<string, any>;
 }
 
 async function insert<T>(table: string, row: Partial<T>): Promise<T | null> {
-  const { data, error } = await supabase.from(table).insert(camelToSnake(row)).select().single();
+  // The UI still generates placeholder ids like "G-ABC-123" or "op-man-172..." —
+  // leftover from the old in-memory mock database. Every real table's id column
+  // is a uuid with a default generator, so a non-UUID id here makes Postgres
+  // reject the whole insert. Strip it and let the database assign the real id.
+  const { id, ...rest } = row as any;
+  const { data, error } = await supabase.from(table).insert(camelToSnake(rest)).select().single();
   if (error) { console.error(`[supabaseDb] insert ${table}:`, error.message); return null; }
   return snakeToCamel(data) as T;
 }
@@ -308,7 +313,8 @@ class SupabaseDB {
 
   async addOperationsBulk(ops: Operation[]): Promise<void> {
     const prepared = ops.map(op => ({ ...op, internalSerial: op.internalSerial || generateInternalSerial() }));
-    const { data, error } = await supabase.from('operations').insert(prepared.map(camelToSnake)).select();
+    const rowsToInsert = prepared.map(op => { const { id, ...rest } = op as any; return camelToSnake(rest); });
+    const { data, error } = await supabase.from('operations').insert(rowsToInsert).select();
     if (error) { console.error('[supabaseDb] bulk insert operations:', error.message); return; }
     const saved = snakeToCamel(data || []) as Operation[];
     _operations = [...saved, ..._operations];
