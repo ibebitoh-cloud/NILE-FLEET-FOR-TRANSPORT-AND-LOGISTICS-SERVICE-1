@@ -4,6 +4,7 @@ import { User, UserRole, Location, UserPermissions } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translateEntity } from '../translations';
 import { runThinkingAudit } from '../services/aiService';
+import { createRealAccount } from '../services/authService';
 import { AVATARS } from '../constants';
 
 const ALL_SYSTEM_SCREENS = [
@@ -178,16 +179,32 @@ const UserMgmt: React.FC = () => {
     }
   };
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
     const isCustomer = editingUser.role === UserRole.CUSTOMER;
-    let newUser = {
-      ...editingUser,
-      id: editingUser.id || (isCustomer ? `cust-${Date.now()}` : `staff-${Date.now()}`),
-      companyName: isCustomer ? (editingUser.companyName || editingUser.name) : editingUser.companyName,
-    };
-    db.addUser(newUser);
+    const companyName = isCustomer ? (editingUser.companyName || editingUser.name) : editingUser.companyName;
+
+    if (!editingUser.id) {
+      // New account: create a REAL login via the secure server-side function
+      if (!editingUser.email || !editingUser.password) {
+        alert(lang === 'ar' ? 'البريد الإلكتروني وكلمة المرور مطلوبان' : 'Email and password are required');
+        return;
+      }
+      const { userId, error } = await createRealAccount(editingUser.email, editingUser.password, {
+        ...editingUser,
+        companyName,
+      });
+      if (error) {
+        alert((lang === 'ar' ? 'فشل إنشاء الحساب: ' : 'Failed to create account: ') + error);
+        return;
+      }
+      await db.reloadUsers();
+    } else {
+      let newUser = { ...editingUser, companyName };
+      await db.updateUser(editingUser.id, newUser);
+    }
+
     setShowAddModal(false);
     setEditingUser(null);
     refreshData();

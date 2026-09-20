@@ -193,6 +193,16 @@ class SupabaseDB {
   getInvoices(): Invoice[] { return _invoices; }
   getPayments(): Payment[] { return _payments; }
   getUsers(): User[] { return _users; }
+
+  /**
+   * Re-fetches profiles from the database. Needed after creating an account
+   * through the secure server-side function, since that bypasses the normal
+   * insert() path and so doesn't update the local cache automatically.
+   */
+  async reloadUsers(): Promise<void> {
+    _users = await query<User>('profiles', { order: 'created_at' });
+    dispatchChange();
+  }
   getAuditLogs(): AuditEntry[] { return _auditLogs; }
   getCustomerPrices(): CustomerPrice[] { return _customerPrices; }
   getProcurements(): Procurement[] { return _procurements; }

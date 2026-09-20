@@ -77,3 +77,23 @@ export async function getCurrentSessionUser(): Promise<User | null> {
 
   return mapProfileToUser(profile, sessionUser.email || '');
 }
+
+/**
+ * Creates a REAL login account (Supabase Auth + profile), via the secure
+ * server-side function. Used by User Management when adding a new staff
+ * or customer account. Returns an error string on failure.
+ */
+export async function createRealAccount(email: string, password: string, profile: Partial<User>): Promise<{ userId?: string; error?: string }> {
+  try {
+    const res = await fetch('/create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, profile }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || 'Failed to create account' };
+    return { userId: data.userId };
+  } catch (e: any) {
+    return { error: e?.message || 'Network error creating account' };
+  }
+}
