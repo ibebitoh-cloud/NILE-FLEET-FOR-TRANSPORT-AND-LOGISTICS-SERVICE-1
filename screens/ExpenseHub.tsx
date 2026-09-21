@@ -48,18 +48,23 @@ const ExpenseHub: React.FC = () => {
     setPortRents([...db.getPortRents()]);
   };
 
-  const handleDelete = (type: string, id: string) => {
+  const handleDelete = async (type: string, id: string) => {
     if (isReadOnly) return;
     if (!confirm(isAr ? 'تأكيد: هل أنت متأكد من حذف هذه العملية نهائياً؟' : 'Purge Authorization: Permanently delete this entry?')) return;
     
+    let saved = false;
     switch (type) {
-      case 'PROCURE': db.deleteProcurement(id); break;
-      case 'GAS': db.deleteGasTransaction(id); break;
-      case 'EMP': db.deleteEmployee(id); break;
-      case 'TX': db.deletePayrollTransaction(id); break;
-      case 'FOOD': db.deleteFoodExpense(id); break;
-      case 'TRANSPORT': db.deleteTransportExpense(id); break;
-      case 'RENT': db.deletePortRent(id); break;
+      case 'PROCURE': saved = await db.deleteProcurement(id); break;
+      case 'GAS': saved = await db.deleteGasTransaction(id); break;
+      case 'EMP': saved = await db.deleteEmployee(id); break;
+      case 'TX': saved = await db.deletePayrollTransaction(id); break;
+      case 'FOOD': saved = await db.deleteFoodExpense(id); break;
+      case 'TRANSPORT': saved = await db.deleteTransportExpense(id); break;
+      case 'RENT': saved = await db.deletePortRent(id); break;
+    }
+    if (!saved) {
+      alert(isAr ? `فشل الحذف: ${db.getLastDbError() || ''}` : `Delete failed: ${db.getLastDbError() || ''}`);
+      return;
     }
     refresh();
   };
@@ -76,34 +81,40 @@ const ExpenseHub: React.FC = () => {
     else if (type === 'RENT') setFormData({ port: item.port, amount: item.amount, date: item.date, period: item.period, notes: item.notes });
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
     const today = new Date().toISOString().split('T')[0];
 
+    let saved = true;
+
     if (showModal === 'PROCURE') {
       const data = { id: editingId || `proc-${Date.now()}`, personName: formData.personName, itemDescription: formData.description, amount: parseFloat(formData.amount), date: formData.date || today, status: 'PENDING' as const };
-      editingId ? db.updateProcurement(data) : db.addProcurement(data);
+      saved = editingId ? await db.updateProcurement(data) : await db.addProcurement(data);
     } else if (showModal === 'GAS') {
       const data = { id: editingId || `gas-${Date.now()}`, date: formData.date || today, type: 'TOPUP' as const, amount: parseFloat(formData.amount), reference: formData.reference || 'Oktan Prepaid' };
-      editingId ? db.updateGasTransaction(data) : db.addGasTransaction(data);
+      saved = editingId ? await db.updateGasTransaction(data) : await db.addGasTransaction(data);
     } else if (showModal === 'EMP') {
       const data = { id: editingId || `emp-${Date.now()}`, name: formData.name, position: formData.position, baseSalary: parseFloat(formData.salary), startDate: formData.date || today };
-      editingId ? db.updateEmployee(data) : db.addEmployee(data);
+      saved = editingId ? await db.updateEmployee(data) : await db.addEmployee(data);
     } else if (showModal === 'TX') {
       const data = { id: editingId || `tx-${Date.now()}`, employeeId: formData.empId, type: formData.type, amount: parseFloat(formData.amount), date: formData.date || today, month: formData.month || payrollMonth, notes: formData.notes };
-      editingId ? db.updatePayrollTransaction(data) : db.addPayrollTransaction(data);
+      saved = editingId ? await db.updatePayrollTransaction(data) : await db.addPayrollTransaction(data);
     } else if (showModal === 'FOOD') {
       const data = { id: editingId || `food-${Date.now()}`, amount: parseFloat(formData.amount), fromDate: formData.fromDate, toDate: formData.toDate, workerCount: formData.selectedWorkers.length, workerNames: formData.selectedWorkers.join(', '), notes: formData.notes };
-      editingId ? db.updateFoodExpense(data) : db.addFoodExpense(data);
+      saved = editingId ? await db.updateFoodExpense(data) : await db.addFoodExpense(data);
     } else if (showModal === 'TRANSPORT') {
       const data = { id: editingId || `trans-${Date.now()}`, amount: parseFloat(formData.amount), fromPort: formData.fromPort, toPort: formData.toPort, date: formData.date || today, workerNames: formData.selectedWorkers.join(', '), notes: formData.notes };
-      editingId ? db.updateTransportExpense(data) : db.addTransportExpense(data);
+      saved = editingId ? await db.updateTransportExpense(data) : await db.addTransportExpense(data);
     } else if (showModal === 'RENT') {
       const data = { id: editingId || `rent-${Date.now()}`, port: formData.port, amount: parseFloat(formData.amount), date: formData.date || today, period: formData.period, notes: formData.notes };
-      editingId ? db.updatePortRent(data) : db.addPortRent(data);
+      saved = editingId ? await db.updatePortRent(data) : await db.addPortRent(data);
     }
 
+    if (!saved) {
+      alert(isAr ? `فشل حفظ البيانات: ${db.getLastDbError() || ''}` : `Save failed: ${db.getLastDbError() || ''}`);
+      return;
+    }
     refresh(); 
     setShowModal('NONE'); 
     setFormData({ selectedWorkers: [] });
