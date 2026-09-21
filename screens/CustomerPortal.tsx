@@ -121,8 +121,12 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
   const myReservations = db.getReservations().filter(r => r.customerId === user.id);
   const myInvoices = db.getInvoices().filter(i => i.customerName === (user.companyName || user.name));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.bookingNumber.trim() || !Number.isFinite(formData.gensetsNeeded) || formData.gensetsNeeded < 1 || formData.gensetsNeeded > 100) {
+      alert('Please enter a valid booking number and 1–100 gensets.');
+      return;
+    }
     const newRes: Reservation = {
       id: `res-${Date.now()}`,
       customerId: user.id,
@@ -136,7 +140,13 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
       shipper: formData.shipper,
       trucker: formData.trucker
     };
-    db.addReservation(newRes);
+    const before = db.getReservations().length;
+    await db.addReservation(newRes);
+    const saved = db.getReservations().length > before;
+    if (!saved) {
+      alert('Reservation could not be saved. Please try again.');
+      return;
+    }
     setIsBooking(false);
     alert('Reservation requested successfully! Our team will review and approve it shortly.');
   };
@@ -170,7 +180,7 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
                 </div>
                 <div className="col-span-2 md:col-span-1">
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Gensets Needed</label>
-                  <input type="number" min="1" max="10" required className="w-full px-4 py-2 border rounded-lg" value={formData.gensetsNeeded} onChange={e => setFormData({...formData, gensetsNeeded: parseInt(e.target.value)})} />
+                  <input type="number" min="1" max="100" required className="w-full px-4 py-2 border rounded-lg" value={formData.gensetsNeeded} onChange={e => setFormData({...formData, gensetsNeeded: parseInt(e.target.value)})} />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Port In</label>
