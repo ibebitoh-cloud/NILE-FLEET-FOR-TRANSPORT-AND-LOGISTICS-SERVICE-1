@@ -3,6 +3,7 @@ import React, { useState, useContext, useMemo, useEffect } from 'react';
 import { db } from '../services/supabaseDb';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations } from '../translations';
+import { Operation } from '../types';
 import { runThinkingAudit, getSafeApiKey } from '../services/aiService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
 
