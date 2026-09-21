@@ -865,15 +865,19 @@ class SupabaseDB {
     const saved = await insert<Procurement>('procurement', p);
     if (saved) { _procurements = [..._procurements, saved]; await auditLog('EXP', `General Procurement ${p.itemDescription}`); dispatchChange(); }
   }
-  async updateProcurement(p: Procurement): Promise<void> {
-    await update('procurement', p.id, p);
+  async updateProcurement(p: Procurement): Promise<boolean> {
+    const saved = await update('procurement', p.id, p);
+    if (!saved) return false;
     _procurements = _procurements.map(item => item.id === p.id ? p : item);
     dispatchChange();
+    return true;
   }
-  async deleteProcurement(id: string): Promise<void> {
-    await remove('procurement', id);
+  async deleteProcurement(id: string): Promise<boolean> {
+    const removed = await remove('procurement', id);
+    if (!removed) return false;
     _procurements = _procurements.filter(p => p.id !== id);
     dispatchChange();
+    return true;
   }
   async updateProcurementStatus(id: string, status: 'PENDING' | 'COMPLETED'): Promise<void> {
     await update('procurement', id, { status });
@@ -887,15 +891,19 @@ class SupabaseDB {
     const saved = await insert<GasTransaction>('gas_transactions', t);
     if (saved) { _gasTransactions = [..._gasTransactions, saved]; await auditLog('EXP', `Gas Topup ${t.amount}`); dispatchChange(); }
   }
-  async updateGasTransaction(t: GasTransaction): Promise<void> {
-    await update('gas_transactions', t.id, t);
+  async updateGasTransaction(t: GasTransaction): Promise<boolean> {
+    const saved = await update('gas_transactions', t.id, t);
+    if (!saved) return false;
     _gasTransactions = _gasTransactions.map(item => item.id === t.id ? t : item);
     dispatchChange();
+    return true;
   }
-  async deleteGasTransaction(id: string): Promise<void> {
-    await remove('gas_transactions', id);
+  async deleteGasTransaction(id: string): Promise<boolean> {
+    const removed = await remove('gas_transactions', id);
+    if (!removed) return false;
     _gasTransactions = _gasTransactions.filter(t => t.id !== id);
     dispatchChange();
+    return true;
   }
 
   // ─── employees / payroll ───────────────────────────────────────────────────
@@ -904,29 +912,37 @@ class SupabaseDB {
     const saved = await insert<Employee>('employees', e);
     if (saved) { _employees = [..._employees, saved]; dispatchChange(); }
   }
-  async updateEmployee(e: Employee): Promise<void> {
-    await update('employees', e.id, e);
+  async updateEmployee(e: Employee): Promise<boolean> {
+    const saved = await update('employees', e.id, e);
+    if (!saved) return false;
     _employees = _employees.map(item => item.id === e.id ? e : item);
     dispatchChange();
+    return true;
   }
-  async deleteEmployee(id: string): Promise<void> {
-    await remove('employees', id);
+  async deleteEmployee(id: string): Promise<boolean> {
+    const removed = await remove('employees', id);
+    if (!removed) return false;
     _employees = _employees.filter(e => e.id !== id);
     dispatchChange();
+    return true;
   }
   async addPayrollTransaction(t: PayrollTransaction): Promise<void> {
     const saved = await insert<PayrollTransaction>('payroll_transactions', t);
     if (saved) { _payrollTransactions = [..._payrollTransactions, saved]; dispatchChange(); }
   }
-  async updatePayrollTransaction(t: PayrollTransaction): Promise<void> {
-    await update('payroll_transactions', t.id, t);
+  async updatePayrollTransaction(t: PayrollTransaction): Promise<boolean> {
+    const saved = await update('payroll_transactions', t.id, t);
+    if (!saved) return false;
     _payrollTransactions = _payrollTransactions.map(item => item.id === t.id ? t : item);
     dispatchChange();
+    return true;
   }
-  async deletePayrollTransaction(id: string): Promise<void> {
-    await remove('payroll_transactions', id);
+  async deletePayrollTransaction(id: string): Promise<boolean> {
+    const removed = await remove('payroll_transactions', id);
+    if (!removed) return false;
     _payrollTransactions = _payrollTransactions.filter(t => t.id !== id);
     dispatchChange();
+    return true;
   }
 
   // ─── food / transport / port rent ──────────────────────────────────────────
@@ -935,45 +951,57 @@ class SupabaseDB {
     const saved = await insert<FoodExpense>('food_expenses', e);
     if (saved) { _foodExpenses = [..._foodExpenses, saved]; await auditLog('EXP', `Food Allowance ${e.amount}`); dispatchChange(); }
   }
-  async updateFoodExpense(e: FoodExpense): Promise<void> {
-    await update('food_expenses', e.id, e);
+  async updateFoodExpense(e: FoodExpense): Promise<boolean> {
+    const saved = await update('food_expenses', e.id, e);
+    if (!saved) return false;
     _foodExpenses = _foodExpenses.map(item => item.id === e.id ? e : item);
     dispatchChange();
+    return true;
   }
-  async deleteFoodExpense(id: string): Promise<void> {
-    await remove('food_expenses', id);
+  async deleteFoodExpense(id: string): Promise<boolean> {
+    const removed = await remove('food_expenses', id);
+    if (!removed) return false;
     _foodExpenses = _foodExpenses.filter(e => e.id !== id);
     dispatchChange();
+    return true;
   }
 
   async addTransportExpense(e: TransportExpense): Promise<void> {
     const saved = await insert<TransportExpense>('transport_expenses', e);
     if (saved) { _transportExpenses = [..._transportExpenses, saved]; await auditLog('EXP', `Transport ${e.amount}`); dispatchChange(); }
   }
-  async updateTransportExpense(e: TransportExpense): Promise<void> {
-    await update('transport_expenses', e.id, e);
+  async updateTransportExpense(e: TransportExpense): Promise<boolean> {
+    const saved = await update('transport_expenses', e.id, e);
+    if (!saved) return false;
     _transportExpenses = _transportExpenses.map(item => item.id === e.id ? e : item);
     dispatchChange();
+    return true;
   }
-  async deleteTransportExpense(id: string): Promise<void> {
-    await remove('transport_expenses', id);
+  async deleteTransportExpense(id: string): Promise<boolean> {
+    const removed = await remove('transport_expenses', id);
+    if (!removed) return false;
     _transportExpenses = _transportExpenses.filter(e => e.id !== id);
     dispatchChange();
+    return true;
   }
 
   async addPortRent(e: PortRent): Promise<void> {
     const saved = await insert<PortRent>('port_rents', e);
     if (saved) { _portRents = [..._portRents, saved]; await auditLog('EXP', `Port Rent ${e.amount} at ${e.port}`); dispatchChange(); }
   }
-  async updatePortRent(e: PortRent): Promise<void> {
-    await update('port_rents', e.id, e);
+  async updatePortRent(e: PortRent): Promise<boolean> {
+    const saved = await update('port_rents', e.id, e);
+    if (!saved) return false;
     _portRents = _portRents.map(item => item.id === e.id ? e : item);
     dispatchChange();
+    return true;
   }
-  async deletePortRent(id: string): Promise<void> {
-    await remove('port_rents', id);
+  async deletePortRent(id: string): Promise<boolean> {
+    const removed = await remove('port_rents', id);
+    if (!removed) return false;
     _portRents = _portRents.filter(e => e.id !== id);
     dispatchChange();
+    return true;
   }
 
   // ─── audit / history ───────────────────────────────────────────────────────
