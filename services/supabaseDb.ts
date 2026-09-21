@@ -301,19 +301,19 @@ class SupabaseDB {
 
   // ─── operations ────────────────────────────────────────────────────────────
 
-  async addOperation(op: Operation): Promise<void> {
+  async addOperation(op: Operation): Promise<boolean> {
     if (!op.internalSerial) op.internalSerial = generateInternalSerial();
     const row = { ...op, id: op.id || undefined };
     const saved = await insert<Operation>('operations', row);
-    if (saved) {
-      _operations = [saved, ..._operations];
-      await this._syncGensetStatus(op);
-      if (op.status === 'DONE' && !op.invoiced) {
-        await this.generateInvoiceFromBooking(op.bookingNumber, op.customerName);
-      }
-      await auditLog('OPS', `Manual Entry ${op.bookingNumber}`);
-      dispatchChange();
+    if (!saved) return false;
+    _operations = [saved, ..._operations];
+    await this._syncGensetStatus(saved);
+    if (saved.status === 'DONE' && !saved.invoiced) {
+      await this.generateInvoiceFromBooking(saved.bookingNumber, saved.customerName);
     }
+    await auditLog('OPS', `Manual Entry ${saved.bookingNumber}`);
+    dispatchChange();
+    return true;
   }
 
   async updateOperation(updatedOp: Operation): Promise<void> {
