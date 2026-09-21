@@ -204,7 +204,7 @@ const PortGateControl: React.FC = () => {
       const jobs = selectedGensets.map(async unitNum => {
         const imageTag = evidenceImage ? `[IMAGE_DATA:${evidenceImage}]` : '';
         if (isManualBooking) {
-          return db.addOperation({
+          const saved = await db.addOperation({
             id: `op-man-${Date.now()}-${unitNum}`,
             internalSerial: '',
             customerName: manualBooking.customer || 'WALK-IN',
@@ -228,11 +228,12 @@ const PortGateControl: React.FC = () => {
             shipperAddress: '',
             notes: imageTag
           });
+          return { saved, unitNum };
         }
 
         const op = operations.find(o => o.id === selectedBookingId);
         if (!op) return;
-        return db.updateOperation({
+        const saved = await db.updateOperation({
           ...op,
           containerNumber: scannedContainer.toUpperCase(),
           gensetNumber: unitNum,
@@ -243,9 +244,22 @@ const PortGateControl: React.FC = () => {
           gaz: manualGaz,
           notes: (op.notes || '').includes('[IMAGE_DATA:') ? op.notes : (op.notes || '') + imageTag
         });
+        return { saved, unitNum };
       });
 
-      await Promise.all(jobs);
+      const results = await Promise.all(jobs);
+      const failedUnits = results
+        .filter((r: any) => r && r.saved === false)
+        .map((r: any) => r.unitNum);
+
+      if (failedUnits.length > 0) {
+        addNotification(isAr
+          ? `❌ فشل حفظ العملية في قاعدة البيانات للمولد: ${failedUnits.join(', ')}. لم يتم تأكيد التصريح.`
+          : `❌ DATABASE SAVE FAILED for genset: ${failedUnits.join(', ')}. Gate authorization NOT confirmed.`);
+        setShowDoubleConfirm(false);
+        return;
+      }
+
       addNotification(isAr ? 'تم التصريح بالخروج بعد تأكيد الحفظ' : 'GATE AUTHORIZED — SAVED');
     }
 
