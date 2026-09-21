@@ -537,25 +537,30 @@ class SupabaseDB {
     return saved;
   }
 
-  async updateInvoice(id: string, updated: Partial<Invoice>): Promise<void> {
-    await update('invoices', id, updated);
+  async updateInvoice(id: string, updated: Partial<Invoice>): Promise<boolean> {
+    const saved = await update('invoices', id, updated);
+    if (!saved) return false;
     _invoices = _invoices.map(i => i.id === id ? { ...i, ...updated } : i);
     await auditLog('FIN', `Updated Invoice ${id}`);
     dispatchChange();
+    return true;
   }
 
-  async updateInvoiceEtaStatus(id: string, etaStatus: 'DRAFT' | 'SUBMITTED' | 'VALID' | 'INVALID'): Promise<void> {
-    await update('invoices', id, { etaStatus });
+  async updateInvoiceEtaStatus(id: string, etaStatus: 'DRAFT' | 'SUBMITTED' | 'VALID' | 'INVALID'): Promise<boolean> {
+    const saved = await update('invoices', id, { etaStatus });
+    if (!saved) return false;
     _invoices = _invoices.map(i => i.id === id ? { ...i, etaStatus } : i);
     await auditLog('ETA', `Status update for ${id} -> ${etaStatus}`);
     dispatchChange();
+    return true;
   }
 
   // ─── payments ──────────────────────────────────────────────────────────────
 
-  async addPayment(payment: Payment, allocatedInvoiceIds: string[] = []): Promise<void> {
-    await insert('payments', payment);
-    _payments = [..._payments, payment];
+  async addPayment(payment: Payment, allocatedInvoiceIds: string[] = []): Promise<boolean> {
+    const savedPayment = await insert<Payment>('payments', payment);
+    if (!savedPayment) return false;
+    _payments = [..._payments, savedPayment];
 
     let remainingMoney = payment.amount;
     for (const invId of allocatedInvoiceIds) {
@@ -584,6 +589,7 @@ class SupabaseDB {
 
     await auditLog('FIN', `Recorded Payment ${payment.amount} from ${payment.customerName}`);
     dispatchChange();
+    return true;
   }
 
   // ─── gensets ───────────────────────────────────────────────────────────────
@@ -597,34 +603,42 @@ class SupabaseDB {
     }
   }
 
-  async updateGenset(updatedGenset: Genset): Promise<void> {
-    await update('gensets', updatedGenset.id, updatedGenset);
+  async updateGenset(updatedGenset: Genset): Promise<boolean> {
+    const saved = await update('gensets', updatedGenset.id, updatedGenset);
+    if (!saved) return false;
     _stock = _stock.map(s => s.id === updatedGenset.id ? updatedGenset : s);
     await auditLog('STOCK', `Updated unit ${updatedGenset.unitNumber}`);
     dispatchChange();
+    return true;
   }
 
-  async deleteGenset(id: string): Promise<void> {
-    await remove('gensets', id);
+  async deleteGenset(id: string): Promise<boolean> {
+    const removed = await remove('gensets', id);
+    if (!removed) return false;
     _stock = _stock.filter(s => s.id !== id);
     await auditLog('STOCK', `Deleted unit ${id}`);
     dispatchChange();
+    return true;
   }
 
   // ─── users / customers ─────────────────────────────────────────────────────
 
-  async updateUser(id: string, updates: Partial<User>): Promise<void> {
-    await update('profiles', id, updates);
+  async updateUser(id: string, updates: Partial<User>): Promise<boolean> {
+    const saved = await update('profiles', id, updates);
+    if (!saved) return false;
     _users = _users.map(u => u.id === id ? { ...u, ...updates } : u);
     await auditLog('USER', `Updated user access profile for ${id}`);
     dispatchChange();
+    return true;
   }
 
-  async updateUserFinance(userId: string, updates: { pastOutstandingAmount?: number }): Promise<void> {
-    await update('profiles', userId, updates);
+  async updateUserFinance(userId: string, updates: { pastOutstandingAmount?: number }): Promise<boolean> {
+    const saved = await update('profiles', userId, updates);
+    if (!saved) return false;
     _users = _users.map(u => u.id === userId ? { ...u, ...updates } : u);
     await auditLog('FIN', `Updated ledger balance for ${userId}`);
     dispatchChange();
+    return true;
   }
 
   async deleteUser(id: string): Promise<void> {
@@ -681,13 +695,15 @@ class SupabaseDB {
     }
   }
 
-  async updateReservationStatus(id: string, status: ReservationStatus): Promise<void> {
-    await update('reservations', id, { status });
+  async updateReservationStatus(id: string, status: ReservationStatus): Promise<boolean> {
+    const saved = await update('reservations', id, { status });
+    if (!saved) return false;
     _reservations = _reservations.map(r => r.id === id ? { ...r, status } : r);
     dispatchChange();
+    return true;
   }
 
-  async createOperationFromReservation(res: Reservation): Promise<void> {
+  async createOperationFromReservation(res: Reservation): Promise<boolean> {
     const newOperations: Operation[] = Array.from({ length: res.gensetsNeeded }).map((_, idx) => {
       const foundPrice = _customerPrices.find(p => p.customerName === res.customerName && p.portIn === res.portIn && p.portOut === res.portOut);
       return {
@@ -716,8 +732,10 @@ class SupabaseDB {
         reviewedByManager: false,
       } as Operation;
     });
-    await this.addOperationsBulk(newOperations);
-    await this.updateReservationStatus(res.id, ReservationStatus.APPROVED);
+    const operationsSaved = await this.addOperationsBulk(newOperations);
+    if (!operationsSaved) return false;
+    const reservationSaved = await this.updateReservationStatus(res.id, ReservationStatus.APPROVED);
+    return reservationSaved;
   }
 
   // ─── customer prices ───────────────────────────────────────────────────────
