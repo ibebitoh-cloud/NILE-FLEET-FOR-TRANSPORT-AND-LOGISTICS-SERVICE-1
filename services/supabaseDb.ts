@@ -32,6 +32,20 @@ function snakeToCamel(obj: any): any {
   );
 }
 
+function normalizeDateForDb(value: unknown, fallback = ''): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return fallback;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const dmy = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return fallback;
+}
+
 function camelToSnake(obj: any): any {
   if (Array.isArray(obj)) return obj.map(camelToSnake);
   if (obj === null || typeof obj !== 'object') return obj;
@@ -362,7 +376,18 @@ class SupabaseDB {
 
   async addOperationsBulk(ops: Operation[]): Promise<boolean> {
     const prepared = ops.map(op => ({ ...op, internalSerial: op.internalSerial || generateInternalSerial() }));
-    const rowsToInsert = prepared.map(op => { const { id, ...rest } = op as any; return camelToSnake(rest); });
+    const rowsToInsert = prepared.map(op => {
+      const { id, ...rest } = op as any;
+      const today = new Date().toISOString().slice(0, 10);
+      const opDate = normalizeDateForDb(rest.operationDate, today);
+      return camelToSnake({
+        ...rest,
+        operationDate: opDate,
+        dateReceived: normalizeDateForDb(rest.dateReceived, opDate),
+        clipOnDate: normalizeDateForDb(rest.clipOnDate, opDate),
+        clipOffDate: normalizeDateForDb(rest.clipOffDate, '')
+      });
+    });
     const { data, error } = await supabase.from('operations').insert(rowsToInsert).select();
     if (error) { _lastDbError = `operations: ${error.message}`; console.error('[supabaseDb] bulk insert operations:', error.message); return false; }
     const saved = snakeToCamel(data || []) as Operation[];
