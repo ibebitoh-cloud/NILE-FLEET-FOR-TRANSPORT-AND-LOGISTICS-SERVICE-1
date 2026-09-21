@@ -36,7 +36,8 @@ const Analytics: React.FC = () => {
       const baseHealth = 100;
       const trips_degradation = trips * 1.5;
       const health = Math.max(40, baseHealth - trips_degradation);
-      const totalFuel = unitOps.reduce((sum, op) => sum + (parseFloat(String(op.gaz || '0').replace(/,/g, '')) || 0), 0);\n      const fuelEfficiency = trips > 0 ? totalFuel / trips : 0;
+      const totalFuel = unitOps.reduce((sum, op) => sum + (parseFloat(String(op.gaz || '0').replace(/,/g, '')) || 0), 0);
+      const fuelEfficiency = trips > 0 ? totalFuel / trips : 0;
       const maintenanceDays = Math.max(0, 30 - (trips % 5) * 6);
 
       return {
