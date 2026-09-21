@@ -589,13 +589,29 @@ const MasterView: React.FC = () => {
     density: number;
     scale: number;
   }>(() => {
-    const saved = localStorage.getItem(`master_prefs_v5_${currentUser.id}`);
-    return saved ? JSON.parse(saved) : { density: 4, scale: 100 };
+    try {
+      const saved = localStorage.getItem(`master_prefs_v5_${currentUser.id}`);
+      return saved ? { density: 4, scale: 100, ...JSON.parse(saved) } : { density: 4, scale: 100 };
+    } catch {
+      localStorage.removeItem(`master_prefs_v5_${currentUser.id}`);
+      return { density: 4, scale: 100 };
+    }
   });
 
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem(`master_col_widths_${currentUser.id}`);
-    return saved ? { ...DEFAULT_COLUMN_WIDTHS, ...JSON.parse(saved) } : DEFAULT_COLUMN_WIDTHS;
+    try {
+      const saved = localStorage.getItem(`master_col_widths_${currentUser.id}`);
+      const parsed = saved ? JSON.parse(saved) : {};
+      const safe: Record<string, number> = {};
+      Object.keys(DEFAULT_COLUMN_WIDTHS).forEach(key => {
+        const value = Number(parsed?.[key] ?? DEFAULT_COLUMN_WIDTHS[key]);
+        safe[key] = Number.isFinite(value) ? Math.max(35, Math.min(500, value)) : DEFAULT_COLUMN_WIDTHS[key];
+      });
+      return safe;
+    } catch {
+      localStorage.removeItem(`master_col_widths_${currentUser.id}`);
+      return { ...DEFAULT_COLUMN_WIDTHS };
+    }
   });
 
   useEffect(() => {
@@ -634,33 +650,84 @@ const MasterView: React.FC = () => {
   }, [operations]);
 
   const resizingRef = useRef<{ colKey: string; startX: number; startWidth: number } | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  const resizeFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      resizeCleanupRef.current?.();
+      resizeCleanupRef.current = null;
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+      resizingRef.current = null;
+    };
+  }, []);
 
   const handleMouseDownResize = (e: React.MouseEvent, colKey: string) => {
     e.preventDefault();
     e.stopPropagation();
-    const startX = e.clientX;
-    const startWidth = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
-    resizingRef.current = { colKey, startX, startWidth };
 
+    // Always terminate a previous drag before starting another one.
+    resizeCleanupRef.current?.();
+    resizeCleanupRef.current = null;
+
+    const startX = e.clientX;
+    const startWidth = Number(colWidths[colKey] ?? DEFAULT_COLUMN_WIDTHS[colKey] ?? 100);
+    const safeStartWidth = Number.isFinite(startWidth) ? Math.max(35, Math.min(500, startWidth)) : 100;
     const resizeColumnKey = colKey;
     const resizeStartX = startX;
-    const resizeStartWidth = startWidth;
+    const resizeStartWidth = safeStartWidth;
+
+    resizingRef.current = { colKey: resizeColumnKey, startX: resizeStartX, startWidth: resizeStartWidth };
+
+    let lastWidth = resizeStartWidth;
+    const finishResize = () => {
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleWindowBlur);
+      resizeCleanupRef.current = null;
+      resizingRef.current = null;
+    };
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current) return;
       const deltaX = moveEvent.clientX - resizeStartX;
       const actualDelta = isAr ? -deltaX : deltaX;
-      const newWidth = Math.max(35, Math.min(500, resizeStartWidth + actualDelta));
-      setColWidths(prev => ({ ...prev, [resizeColumnKey]: newWidth }));
+      lastWidth = Math.max(35, Math.min(500, resizeStartWidth + actualDelta));
+
+      // Throttle React state updates to one per animation frame. This prevents
+      // a rapid mousemove stream from overwhelming the Master View render cycle.
+      if (resizeFrameRef.current === null) {
+        resizeFrameRef.current = requestAnimationFrame(() => {
+          resizeFrameRef.current = null;
+          if (resizingRef.current) {
+            setColWidths(prev => ({ ...prev, [resizeColumnKey]: lastWidth }));
+          }
+        });
+      }
     };
 
     const handleMouseUp = () => {
-      resizingRef.current = null;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+      setColWidths(prev => ({ ...prev, [resizeColumnKey]: lastWidth }));
+      finishResize();
     };
 
+    const handleWindowBlur = () => finishResize();
+
+    resizeCleanupRef.current = finishResize;
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleWindowBlur);
   };
 
   const shrinkColumn = (colKey: string, delta = 15) => {
