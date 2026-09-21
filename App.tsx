@@ -29,7 +29,7 @@ import { discoveryQueue, registerDynamicTranslations, translateUiText } from './
 import { translateBusinessEntities, getSafeApiKey } from './services/aiService';
 
 type Language = 'en' | 'ar';
-export type ThemeMode = 'black' | 'white' | 'yellow' | 'navy' | 'forest' | 'sahara' | 'cyber' | 'slate' | 'midnight' | 'rose' | 'emerald-vibrant' | 'ocean' | 'lava' | 'phantom' | 'mint' | 'copper' | 'arctic' | 'toxic' | 'custom';
+export type ThemeMode = 'black' | 'white' | 'yellow' | 'navy' | 'forest' | 'sahara' | 'cyber' | 'slate' | 'midnight' | 'rose' | 'emerald-vibrant' | 'ocean' | 'lava' | 'phantom' | 'mint' | 'copper' | 'arctic' | 'toxic' | 'nile' | 'carbon' | 'royal' | 'sandstorm' | 'corporate' | 'crimson' | 'custom';
 
 interface LanguageContextType {
   lang: Language;
@@ -111,7 +111,7 @@ const App: React.FC = () => {
     if (currentTheme === 'custom') {
       return localStorage.getItem('custom_is_dark') === 'true';
     }
-    const DARK_THEMES = ['black', 'navy', 'forest', 'sahara', 'cyber', 'slate', 'midnight', 'toxic', 'lava', 'copper', 'phantom'];
+    const DARK_THEMES = ['black', 'navy', 'forest', 'sahara', 'cyber', 'slate', 'midnight', 'toxic', 'lava', 'copper', 'phantom', 'nile', 'carbon', 'royal', 'crimson'];
     return DARK_THEMES.includes(currentTheme);
   };
 
