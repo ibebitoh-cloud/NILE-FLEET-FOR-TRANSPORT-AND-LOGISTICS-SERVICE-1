@@ -32,8 +32,8 @@ export const runThinkingAudit = async (prompt: string, budget: number = 1200) =>
     });
     return text || '';
   } catch (e) {
-    console.error('NILE AI failed', e);
-    return 'NILE AI is temporarily unavailable. The operational data remains available.';
+    console.error('DALI 1.0 failed', e);
+    throw e;
   }
 };
 
