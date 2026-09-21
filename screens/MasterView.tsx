@@ -636,9 +636,9 @@ const MasterView: React.FC = () => {
   const duplicateActiveGensets = useMemo(() => {
     const counts: Record<string, number> = {};
     operations.forEach(op => {
-      const isOperatingOrInProgress = op.status === 'UNDER OPERATE' || op.status === 'IN PROGRESS';
+      const isInProgress = op.status === 'IN PROGRESS';
       const gen = op.gensetNumber?.trim().toUpperCase();
-      if (gen && gen !== '---' && gen !== 'N/A' && gen !== 'NONE' && isOperatingOrInProgress) {
+      if (gen && gen !== '---' && gen !== 'N/A' && gen !== 'NONE' && isInProgress) {
         counts[gen] = (counts[gen] || 0) + 1;
       }
     });
@@ -989,7 +989,6 @@ const MasterView: React.FC = () => {
     const customerNames = Array.from(new Set(
       db.getUsers().filter(u => u.role === UserRole.CUSTOMER).map(u => (u.companyName || u.name || '').trim()).filter(Boolean)
     )) as string[];
-    const customerNameKeys = new Set(customerNames.map(name => name.toLowerCase()));
     const suggestions: Record<string, string[]> = {
       customers: customerNames,
       shippers: Array.from(new Set(operations.map(o => o.beneficiaryName).filter((v): v is string => !!v))) as string[],
@@ -1001,6 +1000,13 @@ const MasterView: React.FC = () => {
     };
     return suggestions;
   }, [operations]);
+
+  // Keep this outside the suggestions useMemo so the customer validation
+  // set is available to the table renderer on every render.
+  const customerNameKeys = useMemo(
+    () => new Set(systemSuggestions.customers.map(name => name.trim().toLowerCase())),
+    [systemSuggestions]
+  );
 
   const filteredAndSortedOps = useMemo(() => {
     let result = [...operations].filter(op => {
@@ -1219,7 +1225,7 @@ const MasterView: React.FC = () => {
                       const isSelected = selectedRowIds.has(op.id);
                       const isContainerDup = Boolean(op.containerNumber?.trim() && duplicateContainerNumbers.has(op.containerNumber.trim().toUpperCase()));
                       const isGensetDup = Boolean(
-                        (op.status === 'UNDER OPERATE' || op.status === 'IN PROGRESS') &&
+                        op.status === 'IN PROGRESS' &&
                         op.gensetNumber?.trim() &&
                         duplicateActiveGensets.has(op.gensetNumber.trim().toUpperCase())
                       );
@@ -1284,7 +1290,7 @@ const MasterView: React.FC = () => {
                           <td 
                             style={{ ...dynamicCellStyle, ...getColStyle('gensetNumber') }} 
                             className={`px-2 border-r text-center transition-all duration-300 ${isGensetDup ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-400 font-black shadow-lg' : isDark ? 'border-slate-800' : 'border-slate-50'}`}
-                            title={isGensetDup ? (isAr ? 'تنبيه: المولد مستخدم في أكثر من عملية نشطة (IN PROGRESS / UNDER OPERATE)!' : 'WARNING: Genset unit assigned to multiple active operations!') : undefined}
+                            title={isGensetDup ? (isAr ? 'تنبيه: المولد مستخدم في أكثر من عملية IN PROGRESS!' : 'WARNING: Genset unit assigned to multiple IN PROGRESS operations!') : undefined}
                           >
                             <div className="flex items-center justify-center gap-1">
                               {isGensetDup && <span className="text-[10px] shrink-0">⚡</span>}
