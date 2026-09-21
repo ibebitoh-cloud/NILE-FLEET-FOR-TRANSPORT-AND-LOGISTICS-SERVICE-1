@@ -800,63 +800,82 @@ class SupabaseDB {
     }
   }
 
-  async dismissNotification(id: string): Promise<void> {
-    await update('system_notifications', id, { active: false });
+  async dismissNotification(id: string): Promise<boolean> {
+    const saved = await update('system_notifications', id, { active: false });
+    if (!saved) return false;
     _notifications = _notifications.map(n => n.id === id ? { ...n, active: false } : n);
     dispatchChange();
+    return true;
   }
 
-  async clearAllNotifications(): Promise<void> {
-    await supabase.from('system_notifications').update({ active: false }).eq('active', true);
+  async clearAllNotifications(): Promise<boolean> {
+    const { error } = await supabase.from('system_notifications').update({ active: false }).eq('active', true);
+    if (error) {
+      _lastDbError = `system_notifications: ${error.message}`;
+      return false;
+    }
     _notifications = _notifications.map(n => ({ ...n, active: false }));
     dispatchChange();
+    return true;
   }
 
   // ─── support / FAQ / ports ─────────────────────────────────────────────────
 
-  async updateSupportContact(contact: SupportContact): Promise<void> {
-    await update('support_contacts', contact.id, contact);
+  async updateSupportContact(contact: SupportContact): Promise<boolean> {
+    const saved = await update('support_contacts', contact.id, contact);
+    if (!saved) return false;
     _supportContacts = _supportContacts.map(c => c.id === contact.id ? contact : c);
     dispatchChange();
+    return true;
   }
   async addSupportContact(contact: SupportContact): Promise<void> {
     const saved = await insert<SupportContact>('support_contacts', contact);
     if (saved) { _supportContacts = [..._supportContacts, saved]; dispatchChange(); }
   }
-  async deleteSupportContact(id: string): Promise<void> {
-    await remove('support_contacts', id);
+  async deleteSupportContact(id: string): Promise<boolean> {
+    const removed = await remove('support_contacts', id);
+    if (!removed) return false;
     _supportContacts = _supportContacts.filter(c => c.id !== id);
     dispatchChange();
+    return true;
   }
 
-  async updateFAQ(item: FAQItem): Promise<void> {
-    await update('faqs', item.id, item);
+  async updateFAQ(item: FAQItem): Promise<boolean> {
+    const saved = await update('faqs', item.id, item);
+    if (!saved) return false;
     _faqs = _faqs.map(f => f.id === item.id ? item : f);
     dispatchChange();
+    return true;
   }
   async addFAQ(item: FAQItem): Promise<void> {
     const saved = await insert<FAQItem>('faqs', item);
     if (saved) { _faqs = [..._faqs, saved]; dispatchChange(); }
   }
-  async deleteFAQ(id: string): Promise<void> {
-    await remove('faqs', id);
+  async deleteFAQ(id: string): Promise<boolean> {
+    const removed = await remove('faqs', id);
+    if (!removed) return false;
     _faqs = _faqs.filter(f => f.id !== id);
     dispatchChange();
+    return true;
   }
 
-  async updatePortInfo(info: PortInfo): Promise<void> {
-    await update('ports_info', info.id, info);
+  async updatePortInfo(info: PortInfo): Promise<boolean> {
+    const saved = await update('ports_info', info.id, info);
+    if (!saved) return false;
     _portsInfo = _portsInfo.map(p => p.id === info.id ? info : p);
     dispatchChange();
+    return true;
   }
   async addPortInfo(info: PortInfo): Promise<void> {
     const saved = await insert<PortInfo>('ports_info', info);
     if (saved) { _portsInfo = [..._portsInfo, saved]; dispatchChange(); }
   }
-  async deletePortInfo(id: string): Promise<void> {
-    await remove('ports_info', id);
+  async deletePortInfo(id: string): Promise<boolean> {
+    const removed = await remove('ports_info', id);
+    if (!removed) return false;
     _portsInfo = _portsInfo.filter(p => p.id !== id);
     dispatchChange();
+    return true;
   }
 
   // ─── procurement ───────────────────────────────────────────────────────────
