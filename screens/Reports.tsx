@@ -51,7 +51,7 @@ const Reports: React.FC = () => {
     };
   }, [filteredData]);
 
-  const runGeminiAuditor = async () => {
+  const runDaliAuditor = async () => {
     setIsThinking(true);
     setAuditAdvice('');
     try {
@@ -63,16 +63,16 @@ const Reports: React.FC = () => {
         - Collected VAT: EGP ${summary.vat.toLocaleString()}
         - Total Inflow: EGP ${summary.grandTotal.toLocaleString()}
         
-        Analyze the financial efficiency and VAT compliance based on these numbers. 
+        Analyze the financial efficiency and VAT compliance based only on these numbers. 
         Provide 3 key takeaways using your deep reasoning capability.
         Respond in ${lang === 'en' ? 'English' : 'Arabic'}.
       `;
 
-      const text = await runThinkingAudit(prompt, 4000, 'gemini-3-pro-preview');
+      const text = await runThinkingAudit(prompt, 4000);
 
       setAuditAdvice(text || 'Analysis unavailable.');
     } catch (err) {
-      setAuditAdvice('Connection error with Reasoning Core.');
+      setAuditAdvice('DALI 1.0 connection error.');
     } finally {
       setIsThinking(false);
     }
@@ -202,13 +202,13 @@ const Reports: React.FC = () => {
           </div>
         </div>
 
-        {/* Gemini Auditor Panel */}
+        {/* DALI 1.0 Auditor Panel */}
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-2xl border-4 border-slate-50 dark:border-slate-700 flex flex-col h-full">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-12 h-12 bg-[#001F3F] text-[#C2A378] rounded-2xl flex items-center justify-center text-xl shadow-lg">🛡️</div>
               <div>
-                <h3 className="text-lg font-black text-[#001F3F] dark:text-white uppercase italic leading-none">Gemini Auditor</h3>
+                <h3 className="text-lg font-black text-[#001F3F] dark:text-white uppercase italic leading-none">DALI 1.0</h3>
                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Financial Integrity AI</p>
               </div>
             </div>
@@ -235,7 +235,7 @@ const Reports: React.FC = () => {
             </div>
 
             <button 
-              onClick={runGeminiAuditor}
+              onClick={runDaliAuditor}
               disabled={isThinking}
               className="w-full bg-[#001F3F] text-white py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-[#002b57] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
             >
