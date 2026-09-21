@@ -366,6 +366,11 @@ class SupabaseDB {
     const { data, error } = await supabase.from('operations').insert(rowsToInsert).select();
     if (error) { _lastDbError = `operations: ${error.message}`; console.error('[supabaseDb] bulk insert operations:', error.message); return false; }
     const saved = snakeToCamel(data || []) as Operation[];
+    if (saved.length !== rowsToInsert.length) {
+      _lastDbError = `operations: database accepted ${saved.length}/${rowsToInsert.length} rows but did not return all inserted records`;
+      console.error('[supabaseDb] bulk insert verification mismatch:', _lastDbError);
+      return false;
+    }
     _operations = [...saved, ..._operations];
     await Promise.all(prepared.map(op => this._syncGensetStatus(op)));
     const doneBookings = Array.from(new Set(prepared.filter(o => o.status === 'DONE').map(o => o.bookingNumber)));
