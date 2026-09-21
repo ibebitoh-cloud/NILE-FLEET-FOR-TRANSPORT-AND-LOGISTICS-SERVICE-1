@@ -92,21 +92,104 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     setAiChatInput('');
     setAiChatMessages(prev => [...prev, { role: 'user', text: question }]);
     setAiChatLoading(true);
+
     try {
+      const operations = db.getOperations();
+      const invoices = db.getInvoices();
+      const gensets = db.getStock();
+      const reservations = db.getReservations();
+      const maintenance = db.getMaintenanceLogs();
+
+      // Deterministic lookup for short factual questions. Do not make the LLM
+      // guess a number that the application can calculate exactly.
+      const normalize = (value: unknown) => String(value ?? '')
+        .toUpperCase()
+        .replace(/[أإآ]/g, 'ا')
+        .replace(/[ة]/g, 'ه')
+        .replace(/[^A-Z0-9\u0600-\u06FF]+/g, '');
+
+      const questionTokens = question
+        .split(/\s+/)
+        .map(token => normalize(token))
+        .filter(token => token.length >= 4 && ![
+          'HOW', 'MANY', 'MUCH', 'WORK', 'HAVE', 'HAS', 'THE', 'THIS',
+          'WHAT', 'TOTAL', 'NUMBER', 'OPERATIONS', 'OPERATION', 'SHOW',
+          'TELL', 'ABOUT', 'FOR', 'FROM', 'WITH', 'ARE', 'IS', 'DOES'
+        ].includes(token));
+
+      const fieldNames = ['customerName', 'beneficiaryName', 'trucker', 'shipperAddress', 'bookingNumber', 'containerNumber', 'gensetNumber'];
+      const matches = operations.filter(op => questionTokens.some(token =>
+        fieldNames.some(field => normalize((op as any)[field]).includes(token))
+      ));
+
+      const asksForWork = /\\b(work|works|operations?|ops)\\b/i.test(question) ||
+        /how many/i.test(question) || /كام|عدد|شغل|عمليات/i.test(question);
+
+      if (asksForWork && questionTokens.length > 0 && matches.length > 0) {
+        const byStatus = matches.reduce<Record<string, number>>((acc, op) => {
+          const status = String(op.status || 'UNKNOWN').toUpperCase();
+          acc[status] = (acc[status] || 0) + 1;
+          return acc;
+        }, {});
+        const totalValue = matches.reduce((sum, op) => {
+          const rate = Number.parseFloat(String(op.rate ?? '').replace(/,/g, '')) || 0;
+          const vat = Number.parseFloat(String(op.vat ?? '').replace(/,/g, '')) || 0;
+          return sum + rate + vat;
+        }, 0);
+        const matchedNames = Array.from(new Set(matches.flatMap(op =>
+          fieldNames
+            .filter(field => questionTokens.some(token => normalize((op as any)[field]).includes(token)))
+            .map(field => String((op as any)[field] || '').trim())
+            .filter(Boolean)
+        ))).slice(0, 4);
+
+        const statusText = Object.entries(byStatus).map(([status, count]) => `${status}: ${count}`).join(' | ');
+        const answer = isAr
+          ? `وجدت ${matches.length} عملية مسجلة مطابقة لـ ${matchedNames.join(' / ')}. الحالة: ${statusText}. إجمالي قيمة العمليات المسجلة (السعر + الضريبة): ${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP.`
+          : `I found ${matches.length} recorded operations matching ${matchedNames.join(' / ')}. Status: ${statusText}. Recorded operation value (rate + VAT): ${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP.`;
+
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+        return;
+      }
+
       const context = {
         user: { role: user.role, name: user.name },
-        operations: db.getOperations(),
-        gensets: db.getStock(),
-        invoices: db.getInvoices(),
-        reservations: db.getReservations(),
+        // Compact summaries make the model reason over facts instead of drowning
+        // in thousands of raw fields.
+        totals: {
+          operations: operations.length,
+          invoices: invoices.length,
+          gensets: gensets.length,
+          reservations: reservations.length,
+          maintenance: maintenance.length
+        },
+        operations,
+        invoices,
+        gensets,
+        reservations,
+        maintenance,
         gasByPort: db.getGasByPort(),
         gasByGenset: db.getGasByGenset(),
         gasBalance: db.getGasBalance(),
-        maintenance: db.getMaintenanceLogs(),
         customers: db.getCustomerPrices(),
         ports: db.getPortsInfo()
       };
-      const prompt = `You are DALI 1.0, the dashboard assistant for Nile Fleet for Transport and Logistics Service. Answer the user's question directly. You can answer general business, logistics, Excel, operations, genset, invoicing, and system questions. When the question is about Nile Fleet data, use ONLY the supplied live operational data and calculate from it. Never invent values. If Arabic is requested or the user writes Arabic, answer entirely in professional Arabic. Preserve booking, container and genset identifiers exactly. User question: ${question}. LIVE DATA: ${JSON.stringify(context)}`;
+
+      const prompt = `You are DALI 1.0, the Nile Fleet dashboard assistant.
+Answer the user's exact question FIRST. You are not allowed to reply with generic instructions when the supplied data can answer the question.
+
+RULES:
+1. For Nile Fleet data questions, calculate the answer from LIVE DATA yourself.
+2. Never invent, estimate, or ask the user to provide data that is already in LIVE DATA.
+3. "How much work / how many operations does [name] have?" means count matching operations and give a status breakdown. Search customerName, beneficiaryName, trucker, shipperAddress, bookingNumber, containerNumber, and gensetNumber.
+4. "How much does [name] owe / unpaid / outstanding" means filter invoices for that name and calculate the exact outstanding amount from invoice status/amount.
+5. If a name matches multiple fields, state which field(s) matched.
+6. Show the exact number and amount first, then a short explanation. Do not output Python code.
+7. If the data does not contain the requested entity, say that clearly and do not invent a result.
+8. Arabic question -> professional Arabic only. Preserve IDs, dates, and numbers exactly.
+
+USER QUESTION: ${question}
+LIVE DATA: ${JSON.stringify(context)}`;
       const answer = await runThinkingAudit(prompt, 1600);
       setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من الذكاء الاصطناعي.' : 'No AI response received.') }]);
     } catch (e) {
