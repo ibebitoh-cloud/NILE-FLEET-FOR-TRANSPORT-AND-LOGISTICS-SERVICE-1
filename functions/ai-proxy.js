@@ -1,34 +1,44 @@
-// Cloudflare Pages Function: runs all AI features on Cloudflare Workers AI —
-// free, open-source models (Llama 3.3 for text, Llama 3.2 Vision for images).
-// No external API key, no billing account: the model runs directly on
-// Cloudflare's infrastructure via the "AI" binding (Settings -> Functions ->
-// Bindings -> add "AI" -> variable name AI). Free tier: 10,000 Neurons/day,
-// resets daily, no credit card required.
+// Cloudflare Pages Function: NILE AI Core using Cloudflare Workers AI.
+// Operational AI is server-side; no provider API key is exposed to the browser.
 
 const TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
-// Open models are less reliable than Claude/GPT at strictly following
-// "return only JSON" instructions — strip code fences and grab the first
-// {...} or [...] block to make parsing robust.
 function parseJsonLoose(text) {
-  let cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
-  const firstBrace = Math.min(
-    ...[cleaned.indexOf('{'), cleaned.indexOf('[')].filter(i => i !== -1)
-  );
-  const lastBrace = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
-  if (firstBrace !== Infinity && lastBrace !== -1 && lastBrace > firstBrace) {
-    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-  }
+  let cleaned = String(text || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  const starts = [cleaned.indexOf('{'), cleaned.indexOf('[')].filter(i => i >= 0);
+  const first = starts.length ? Math.min(...starts) : -1;
+  const last = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
+  if (first >= 0 && last > first) cleaned = cleaned.slice(first, last + 1);
   return JSON.parse(cleaned);
+}
+
+function normalizeContainer(value) {
+  return String(value || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+}
+
+// ISO 6346 check digit. This prevents the vision model from returning a
+// syntactically plausible but operationally invalid container number.
+function isValidContainerCode(value) {
+  const code = normalizeContainer(value);
+  if (!/^[A-Z]{4}[0-9]{7}$/.test(code)) return false;
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    const n = chars.indexOf(code[i]);
+    if (n < 0) return false;
+    sum += n * (2 ** i);
+  }
+  return (sum % 11) % 10 === Number(code[10]);
 }
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  if (!env.AI) return json({ error: 'Workers AI binding not configured.' }, 500);
 
-  if (!env.AI) {
-    return json({ error: 'Workers AI binding not configured. Add an "AI" binding in Cloudflare -> Settings -> Functions -> Bindings.' }, 500);
-  }
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength > MAX_BODY_BYTES) return json({ error: 'Request too large. Compress the image before scanning.' }, 413);
 
   let body;
   try {
@@ -37,81 +47,69 @@ export async function onRequestPost(context) {
     return json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { action, payload } = body;
-
+  const { action, payload = {} } = body || {};
   try {
     switch (action) {
       case 'translateBusinessEntities': {
-        const { names } = payload;
-        if (!names || names.length === 0) return json({});
+        const names = Array.isArray(payload.names) ? payload.names.slice(0, 100) : [];
+        if (!names.length) return json({});
         const result = await env.AI.run(TEXT_MODEL, {
           messages: [
-            { role: 'system', content: 'You translate logistics business entity names (trucking companies, shippers, clients) into professional Arabic. Respond with ONLY a raw JSON object — no markdown, no code fences, no commentary — where each key is the original name and each value is its Arabic translation.' },
+            { role: 'system', content: 'Translate logistics business entity names into professional Arabic. Return ONLY a raw JSON object mapping each original name to Arabic.' },
             { role: 'user', content: `Names: ${names.join(', ')}` },
-          ],
-          max_tokens: 1500,
+          ], max_tokens: 1500,
         });
         return json(parseJsonLoose(result.response || ''));
       }
 
       case 'runThinkingAudit': {
-        const { prompt } = payload;
+        const prompt = typeof payload.prompt === 'string' ? payload.prompt.slice(0, 30000) : '';
+        if (!prompt) return json({ error: 'Prompt is required.' }, 400);
         const result = await env.AI.run(TEXT_MODEL, {
           messages: [
-            { role: 'system', content: 'You are a sharp, concise financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis.' },
+            { role: 'system', content: 'You are a concise operations and financial auditor for a genset-rental logistics business. Use only numbers and facts supplied in the prompt. Do not invent database facts.' },
             { role: 'user', content: prompt },
-          ],
-          max_tokens: 3000,
+          ], max_tokens: 3000,
         });
         return json({ text: result.response || '' });
       }
 
       case 'scanImageForContainer': {
-        const { base64Data } = payload;
+        const base64Data = typeof payload.base64Data === 'string' ? payload.base64Data : '';
+        if (!base64Data || base64Data.length > MAX_BODY_BYTES) return json({ error: 'Image is missing or too large.' }, 400);
         const dataUri = base64Data.startsWith('data:') ? base64Data : `data:image/jpeg;base64,${base64Data}`;
         const result = await env.AI.run(VISION_MODEL, {
           messages: [
-            { role: 'system', content: "Extract the shipping container BIC code (4 letters followed by 7 digits, e.g. MEDU9907021) from the image. Respond with ONLY the code itself, nothing else. If no valid code is visible, respond with exactly: NOT_FOUND" },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Extract the container code.' },
-                { type: 'image_url', image_url: { url: dataUri } },
-              ],
-            },
-          ],
-          max_tokens: 50,
+            { role: 'system', content: 'Extract the shipping container BIC code. Return ONLY the 11-character code. If none is visible, return NOT_FOUND.' },
+            { role: 'user', content: [
+              { type: 'text', text: 'Extract the container code.' },
+              { type: 'image_url', image_url: { url: dataUri } },
+            ]},
+          ], max_tokens: 50,
         });
-        return json({ text: (result.response || '').trim() || 'NOT_FOUND' });
+        const candidate = normalizeContainer(result.response || '');
+        return json({ text: isValidContainerCode(candidate) ? candidate : 'NOT_FOUND' });
       }
 
       case 'mapSpreadsheetToSchema': {
-        const { csvData } = payload;
+        const csvData = typeof payload.csvData === 'string' ? payload.csvData.slice(0, 100000) : '';
+        if (!csvData) return json({ error: 'CSV data is required.' }, 400);
         const result = await env.AI.run(TEXT_MODEL, {
           messages: [
-            { role: 'system', content: `You are a logistics data mapper. Convert the given CSV/text data into a JSON array. Identify columns even if their names differ slightly from expected. For every entity field (customerName, beneficiaryName, trucker), also provide its Arabic translation in a field suffixed with 'Ar'.
-
-Each array item must have exactly these fields: customerName, customerNameAr, bookingNumber, containerNumber, gensetNumber, clipOnPort, clipOffPort, rate, operationDate, trucker, truckerAr, beneficiaryName, beneficiaryNameAr.
-
-Respond with ONLY the raw JSON array — no markdown, no code fences, no commentary.` },
+            { role: 'system', content: `Convert CSV/text logistics data into a JSON array. Each item must have exactly: customerName, customerNameAr, bookingNumber, containerNumber, gensetNumber, clipOnPort, clipOffPort, rate, operationDate, trucker, truckerAr, beneficiaryName, beneficiaryNameAr. Return ONLY raw JSON.` },
             { role: 'user', content: csvData },
-          ],
-          max_tokens: 4000,
+          ], max_tokens: 4000,
         });
         return json(parseJsonLoose(result.response || ''));
       }
-
-      default:
-        return json({ error: 'Unknown action' }, 400);
+      default: return json({ error: 'Unknown action' }, 400);
     }
   } catch (err) {
-    return json({ error: 'AI request failed: ' + (err?.message || String(err)) }, 500);
+    console.error('[NILE AI CORE]', err);
+    return json({ error: 'AI request failed.' }, 500);
   }
 }
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
