@@ -316,10 +316,10 @@ class SupabaseDB {
     return true;
   }
 
-  async updateOperation(updatedOp: Operation): Promise<void> {
+  async updateOperation(updatedOp: Operation): Promise<boolean> {
     const previous = _operations.find(o => o.id === updatedOp.id);
     const saved = await update('operations', updatedOp.id, updatedOp);
-    if (!saved) return;
+    if (!saved) return false;
     _operations = _operations.map(o => o.id === updatedOp.id ? updatedOp : o);
     await this._syncGensetStatus(updatedOp, previous);
     if (updatedOp.status === 'DONE' && !updatedOp.invoiced) {
@@ -327,6 +327,7 @@ class SupabaseDB {
     }
     await auditLog('OPS', `Updated operation ${updatedOp.bookingNumber}`);
     dispatchChange();
+    return true;
   }
 
   async confirmOperation(id: string): Promise<void> {
