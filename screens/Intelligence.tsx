@@ -184,7 +184,7 @@ ${JSON.stringify(viewData)}`;
       setAdvice(result || (isAr ? 'لا توجد نتائج إضافية مهمة لهذا القسم.' : 'No additional important findings for this section.'));
     } catch (err) {
       setLinkError(true);
-      setAdvice(isAr ? 'تعذر الاتصال بمحرك الذكاء الاصطناعي. أعد المحاولة.' : 'AI engine connection failed. Please retry.');
+      setAdvice(isAr ? 'تعذر الاتصال بـ DALI 1.0. أعد المحاولة.' : 'DALI 1.0 connection failed. Please retry.');
     } finally {
       clearInterval(phaseInterval);
       setIsThinking(false);
@@ -442,7 +442,7 @@ ${JSON.stringify(viewData)}`;
                     </button>
                  )}
                  <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
-                    <span className="text-[8px] font-black text-slate-500 uppercase">{isAr ? 'محرك الذكاء الاصطناعي' : 'AI ENGINE'}</span>
+                    <span className="text-[8px] font-black text-slate-500 uppercase">{'DALI 1.0'}</span>
                     <span className="text-[9px] font-black text-blue-500 italic uppercase">DALI 1.0 — Llama</span>
                  </div>
               </div>
