@@ -106,11 +106,11 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         customers: db.getCustomerPrices(),
         ports: db.getPortsInfo()
       };
-      const prompt = `You are NILE AI, the dashboard assistant for Nile Fleet for Transport and Logistics Service. Answer the user's question directly. You can answer general business, logistics, Excel, operations, genset, invoicing, and system questions. When the question is about Nile Fleet data, use ONLY the supplied live operational data and calculate from it. Never invent values. If Arabic is requested or the user writes Arabic, answer entirely in professional Arabic. Preserve booking, container and genset identifiers exactly. User question: ${question}. LIVE DATA: ${JSON.stringify(context)}`;
+      const prompt = `You are DALI 1.0, the dashboard assistant for Nile Fleet for Transport and Logistics Service. Answer the user's question directly. You can answer general business, logistics, Excel, operations, genset, invoicing, and system questions. When the question is about Nile Fleet data, use ONLY the supplied live operational data and calculate from it. Never invent values. If Arabic is requested or the user writes Arabic, answer entirely in professional Arabic. Preserve booking, container and genset identifiers exactly. User question: ${question}. LIVE DATA: ${JSON.stringify(context)}`;
       const answer = await runThinkingAudit(prompt, 1600);
       setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من الذكاء الاصطناعي.' : 'No AI response received.') }]);
     } catch (e) {
-      setAiChatMessages(prev => [...prev, { role: 'ai', text: isAr ? 'تعذر الاتصال بـ NILE AI حالياً.' : 'NILE AI is unavailable right now.' }]);
+      setAiChatMessages(prev => [...prev, { role: 'ai', text: isAr ? 'تعذر الاتصال بـ DALI 1.0 حالياً.' : 'DALI 1.0 is unavailable right now.' }]);
     } finally {
       setAiChatLoading(false);
     }
@@ -491,28 +491,28 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         </div>
       )}
 
-      {/* NILE AI floating dashboard assistant */}
+      {/* DALI 1.0 floating dashboard assistant */}
       <div className="fixed bottom-6 right-6 z-[100] no-print">
         {isAiChatOpen && (
           <div className={`absolute bottom-16 right-0 w-[min(92vw,420px)] h-[min(70vh,620px)] rounded-[2rem] overflow-hidden border shadow-2xl flex flex-col ${isTerminal ? 'bg-[#001224] border-white/10' : 'bg-white border-slate-200'}`}>
             <div className="px-5 py-4 bg-gradient-to-r from-[#001F3F] to-[#073b6d] text-white flex items-center justify-between">
-              <div><p className="text-[8px] font-black tracking-[0.3em] text-[#C2A378]">NILE AI</p><p className="text-sm font-black">{isAr ? 'مساعد لوحة القيادة' : 'Dashboard AI Assistant'}</p></div>
+              <div><p className="text-[8px] font-black tracking-[0.3em] text-[#C2A378]">DALI 1.0</p><p className="text-sm font-black">{isAr ? 'مساعد لوحة القيادة' : 'Dashboard AI Assistant'}</p></div>
               <button onClick={() => setIsAiChatOpen(false)} className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {aiChatMessages.length === 0 && <div className={`rounded-2xl p-4 text-xs leading-6 ${isTerminal ? 'bg-white/5 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>{isAr ? 'اسألني عن العمليات، المخزون، الحجوزات، الفواتير، الوقود، أو أي سؤال عام.' : 'Ask me about operations, stock, bookings, invoices, fuel, logistics, or any general question.'}</div>}
               {aiChatMessages.map((m, i) => <div key={i} className={`rounded-2xl p-3 text-xs leading-6 whitespace-pre-wrap ${m.role === 'user' ? 'bg-blue-600 text-white ml-8' : (isTerminal ? 'bg-white/5 text-slate-200 mr-4' : 'bg-slate-100 text-slate-700 mr-4')}`}>{m.text}</div>)}
-              {aiChatLoading && <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 animate-pulse">{isAr ? 'جاري التفكير...' : 'NILE AI IS THINKING...'}</div>}
+              {aiChatLoading && <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 animate-pulse">{isAr ? 'جاري التفكير...' : 'DALI 1.0 IS THINKING...'}</div>}
             </div>
             <div className={`p-3 border-t ${isTerminal ? 'border-white/10' : 'border-slate-200'}`}>
               <div className="flex gap-2">
-                <textarea value={aiChatInput} onChange={e => setAiChatInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askNileAi(); } }} placeholder={isAr ? 'اكتب سؤالك...' : 'Ask NILE AI anything...'} className={`flex-1 resize-none rounded-xl border px-3 py-2 text-xs outline-none min-h-[44px] ${isTerminal ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
+                <textarea value={aiChatInput} onChange={e => setAiChatInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askNileAi(); } }} placeholder={isAr ? 'اكتب سؤالك...' : 'Ask DALI 1.0 anything...'} className={`flex-1 resize-none rounded-xl border px-3 py-2 text-xs outline-none min-h-[44px] ${isTerminal ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
                 <button onClick={askNileAi} disabled={aiChatLoading || !aiChatInput.trim()} className="self-end w-11 h-11 rounded-xl bg-[#001F3F] text-white disabled:opacity-40">➤</button>
               </div>
             </div>
           </div>
         )}
-        <button onClick={() => setIsAiChatOpen(v => !v)} className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#001F3F] to-[#0a4b82] text-white shadow-2xl border border-white/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center text-2xl" title={isAr ? 'مساعد NILE AI' : 'NILE AI Assistant'}>✦</button>
+        <button onClick={() => setIsAiChatOpen(v => !v)} className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#001F3F] to-[#0a4b82] text-white shadow-2xl border border-white/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center text-2xl" title={isAr ? 'مساعد DALI 1.0' : 'DALI 1.0 Assistant'}>✦</button>
       </div>
 
       {/* MAIN CONTENT */}
