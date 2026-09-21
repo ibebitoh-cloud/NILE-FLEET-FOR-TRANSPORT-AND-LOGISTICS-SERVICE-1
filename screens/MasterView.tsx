@@ -919,8 +919,12 @@ const MasterView: React.FC = () => {
   };
 
   const systemSuggestions = useMemo(() => {
+    const customerNames = Array.from(new Set(
+      db.getUsers().filter(u => u.role === UserRole.CUSTOMER).map(u => (u.companyName || u.name || '').trim()).filter(Boolean)
+    )) as string[];
+    const customerNameKeys = new Set(customerNames.map(name => name.toLowerCase()));
     const suggestions: Record<string, string[]> = {
-      customers: Array.from(new Set(db.getUsers().filter(u => u.role === UserRole.CUSTOMER).map(u => (u.companyName || u.name) as string))) as string[],
+      customers: customerNames,
       shippers: Array.from(new Set(operations.map(o => o.beneficiaryName).filter((v): v is string => !!v))) as string[],
       truckers: Array.from(new Set(operations.map(o => o.trucker).filter((v): v is string => !!v))) as string[],
       gensets: Array.from(new Set(db.getStock().map(s => s.unitNumber))) as string[],
@@ -1172,7 +1176,7 @@ const MasterView: React.FC = () => {
                             <EditableCell value={op.bookingNumber} onSave={(val) => handleUpdateCell(op, 'bookingNumber', val)} disabled={isReadOnly} isDark={isDark} className={`font-black ${isSelected ? 'text-white' : op.reviewedByManager ? 'text-emerald-500' : (isDark ? 'text-blue-400' : 'text-blue-600')}`} />
                           </td>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('customerName') }} className={`px-2 border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
-                            <EditableCell value={translateEntity(op.customerName, lang)} onSave={(val) => handleUpdateCell(op, 'customerName', val)} disabled={isReadOnly} suggestions={systemSuggestions.customers} isDark={isDark} className={`${isSelected ? 'text-white' : (isDark ? 'text-slate-300' : 'text-slate-800')} font-bold uppercase`} />
+                            <EditableCell value={translateEntity(op.customerName, lang)} onSave={(val) => handleUpdateCell(op, 'customerName', val)} disabled={isReadOnly} suggestions={systemSuggestions.customers} isDark={isDark} className={`${isSelected ? 'text-white' : ((op.customerName || '').trim() && !customerNameKeys.has((op.customerName || '').trim().toLowerCase()) ? 'text-red-500 font-black' : (isDark ? 'text-slate-300' : 'text-slate-800'))} font-bold uppercase`} />
                           </td>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('trucker') }} className={`px-2 border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
                             <EditableCell value={translateEntity(op.trucker, lang)} onSave={(val) => handleUpdateCell(op, 'trucker', val)} disabled={isReadOnly} isDark={isDark} className={`${isSelected ? 'text-white' : 'text-slate-500'} font-bold uppercase text-[9px]`} placeholder={t.trucker} />
