@@ -642,12 +642,15 @@ const MasterView: React.FC = () => {
     const startWidth = colWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
     resizingRef.current = { colKey, startX, startWidth };
 
+    const resizeColumnKey = colKey;
+    const resizeStartX = startX;
+    const resizeStartWidth = startWidth;
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!resizingRef.current) return;
-      const deltaX = moveEvent.clientX - resizingRef.current.startX;
+      const deltaX = moveEvent.clientX - resizeStartX;
       const actualDelta = isAr ? -deltaX : deltaX;
-      const newWidth = Math.max(35, Math.min(500, resizingRef.current.startWidth + actualDelta));
-      setColWidths(prev => ({ ...prev, [resizingRef.current!.colKey]: newWidth }));
+      const newWidth = Math.max(35, Math.min(500, resizeStartWidth + actualDelta));
+      setColWidths(prev => ({ ...prev, [resizeColumnKey]: newWidth }));
     };
 
     const handleMouseUp = () => {
