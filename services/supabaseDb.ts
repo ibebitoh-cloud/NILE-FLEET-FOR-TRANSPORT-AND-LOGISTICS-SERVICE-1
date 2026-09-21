@@ -52,7 +52,7 @@ async function query<T>(table: string, options?: { filter?: Record<string, any>;
     q = q.order(options.order, { ascending: options.ascending ?? false }) as any;
   }
   const { data, error } = await q;
-  if (error) { console.error(`[supabaseDb] query ${table}:`, error.message); return []; }
+  if (error) { _lastDbError = `${table}: ${error.message}`; console.error(`[supabaseDb] query ${table}:`, error.message); return []; }
   return snakeToCamel(data || []) as T[];
 }
 
@@ -93,6 +93,7 @@ async function remove(table: string, id: string): Promise<boolean> {
 
 function dispatchChange() {
   window.dispatchEvent(new CustomEvent('db-undo-success'));
+  window.dispatchEvent(new CustomEvent('db-change'));
 }
 
 async function auditLog(action: string, details: string) {
@@ -202,9 +203,16 @@ class SupabaseDB {
 
   getLastDbError(): string { return _lastDbError; }
 
-  async reloadOperations(): Promise<void> {
-    _operations = await query<Operation>('operations', { order: 'created_at' });
+  async reloadOperations(): Promise<boolean> {
+    const { data, error } = await supabase.from('operations').select('*').order('created_at', { ascending: false });
+    if (error) {
+      _lastDbError = `operations: ${error.message}`;
+      console.error('[supabaseDb] reload operations:', error.message);
+      return false;
+    }
+    _operations = snakeToCamel(data || []) as Operation[];
     dispatchChange();
+    return true;
   }
 
   /** Returns other active assignments using the same genset. Duplicates are allowed;
@@ -352,11 +360,11 @@ class SupabaseDB {
     dispatchChange();
   }
 
-  async addOperationsBulk(ops: Operation[]): Promise<void> {
+  async addOperationsBulk(ops: Operation[]): Promise<boolean> {
     const prepared = ops.map(op => ({ ...op, internalSerial: op.internalSerial || generateInternalSerial() }));
     const rowsToInsert = prepared.map(op => { const { id, ...rest } = op as any; return camelToSnake(rest); });
     const { data, error } = await supabase.from('operations').insert(rowsToInsert).select();
-    if (error) { console.error('[supabaseDb] bulk insert operations:', error.message); return; }
+    if (error) { _lastDbError = `operations: ${error.message}`; console.error('[supabaseDb] bulk insert operations:', error.message); return false; }
     const saved = snakeToCamel(data || []) as Operation[];
     _operations = [...saved, ..._operations];
     await Promise.all(prepared.map(op => this._syncGensetStatus(op)));
@@ -367,6 +375,7 @@ class SupabaseDB {
     }
     await auditLog('OPS', `Bulk deployment ${ops.length} units`);
     dispatchChange();
+    return true;
   }
 
   async deleteOperation(id: string): Promise<void> {
