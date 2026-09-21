@@ -63,7 +63,7 @@ async function insert<T>(table: string, row: Partial<T>): Promise<T | null> {
   // reject the whole insert. Strip it and let the database assign the real id.
   const { id, ...rest } = row as any;
   const { data, error } = await supabase.from(table).insert(camelToSnake(rest)).select().single();
-  if (error) { console.error(`[supabaseDb] insert ${table}:`, error.message); return null; }
+  if (error) { _lastDbError = `${table}: ${error.message}`; console.error(`[supabaseDb] insert ${table}:`, error.message); return null; }
   return snakeToCamel(data) as T;
 }
 
@@ -134,6 +134,7 @@ let _faqs: FAQItem[] = [];
 let _portsInfo: PortInfo[] = [];
 let _maintenanceLogs: GensetMaintenanceLog[] = [];
 let _loaded = false;
+let _lastDbError = '';
 
 class SupabaseDB {
 
@@ -198,6 +199,13 @@ class SupabaseDB {
   getStock(): Genset[] { return _stock; }
   getReservations(): Reservation[] { return _reservations; }
   getOperations(): Operation[] { return _operations; }
+
+  getLastDbError(): string { return _lastDbError; }
+
+  async reloadOperations(): Promise<void> {
+    _operations = await query<Operation>('operations', { order: 'created_at' });
+    dispatchChange();
+  }
 
   /** Returns other active assignments using the same genset. Duplicates are allowed;
    * callers should warn the operator when both records are IN PROGRESS. */
