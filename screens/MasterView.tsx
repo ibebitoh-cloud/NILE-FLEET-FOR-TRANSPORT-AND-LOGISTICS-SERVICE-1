@@ -800,23 +800,29 @@ const MasterView: React.FC = () => {
     localStorage.setItem(`master_prefs_v5_${currentUser.id}`, JSON.stringify(viewPrefs));
   }, [viewPrefs, currentUser.id]);
 
-  const handleBulkStatusChange = (newStatus: 'IN PROGRESS' | 'UNDER OPERATE' | 'DONE' | 'HOLD' | 'CANCEL') => {
+  const handleBulkStatusChange = async (newStatus: 'IN PROGRESS' | 'UNDER OPERATE' | 'DONE' | 'HOLD' | 'CANCEL') => {
     if (isReadOnly) return;
     const ids = Array.from(selectedRowIds) as string[];
-    ids.forEach(id => {
+    const jobs = ids.map(id => {
       const op = operations.find(o => o.id === id);
-      if (op) db.updateOperation({ ...op, status: newStatus });
+      return op ? db.updateOperation({ ...op, status: newStatus }) : Promise.resolve(true);
     });
+    const results = await Promise.all(jobs);
+    const failed = results.filter(saved => saved === false).length;
+    if (failed) {
+      alert(isAr ? `فشل تحديث ${failed} عملية. ${db.getLastDbError() || ''}` : `Failed to update ${failed} operations. ${db.getLastDbError() || ''}`);
+      return;
+    }
     setSelectedRowIds(new Set());
     refresh();
     alert(isAr ? `تم تحديث حالة ${ids.length} عملية` : `Updated status for ${ids.length} operations.`);
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (!isAdmin) return;
     const ids = Array.from(selectedRowIds) as string[];
     if (confirm(isAr ? `هل أنت متأكد من حذف ${ids.length} عملية؟` : `Are you sure you want to delete ${ids.length} operations?`)) {
-      db.deleteOperationsBulk(ids);
+      await db.deleteOperationsBulk(ids);
       setSelectedRowIds(new Set());
       refresh();
     }
