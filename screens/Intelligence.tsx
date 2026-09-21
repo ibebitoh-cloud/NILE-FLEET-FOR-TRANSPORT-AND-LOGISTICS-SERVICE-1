@@ -127,71 +127,64 @@ const Intelligence: React.FC = () => {
     setIsThinking(true);
     setLinkError(false);
     setAdvice('');
-    
+
     const phaseInterval = setInterval(() => {
       setThinkingPhase(prev => (prev + 1) % phases.length);
     }, 1200);
 
+    const viewConfig = {
+      PORT: {
+        en: 'PORTS',
+        ar: 'الموانئ',
+        instruction: 'Analyze ONLY port operations: active/completed operations by port, genset stock by port, fuel consumption by port, and port-specific operational issues.'
+      },
+      UNIT: {
+        en: 'FLEET ASSETS',
+        ar: 'أصول الأسطول',
+        instruction: 'Analyze ONLY genset/fleet assets: total fleet, stock, clipped-on, maintenance, retired, duplicate active assignments, utilization, and individual-unit signals.'
+      },
+      SUPPLIER: {
+        en: 'FUEL LEDGER',
+        ar: 'سجل الوقود',
+        instruction: 'Analyze ONLY fuel: gas by port, gas by genset, gas balance, fuel concentration, and estimated coverage.'
+      },
+      COSTS: {
+        en: 'OPERATIONS',
+        ar: 'العمليات',
+        instruction: 'Analyze ONLY operations: total, active, completed, under-operate, hold, cancelled, completion/cancellation rates, operation values, and data-quality issues affecting operations.'
+      }
+    }[activeView];
+
     try {
-      const prompt = `You are the NILE FLEET Command Intel operational, financial and fleet-control auditor. LANGUAGE: ${isAr ? 'ARABIC ONLY' : 'ENGLISH'}.
-If Arabic is requested, respond ENTIRELY in professional Arabic. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly.
-Use ONLY the supplied data. Never invent data.
+      const viewData = activeView === 'PORT'
+        ? { portStats: analytics.portStats, gasByPort }
+        : activeView === 'UNIT'
+        ? { fleet: { total: analytics.fleetTotal, inStock: analytics.fleetInStock, clippedOn: analytics.fleetActive, maintenance: analytics.fleetMaintenance, retired: analytics.fleetRetired, duplicateActiveGensets: analytics.duplicateUnits }, gasByGenset: gasByUnit }
+        : activeView === 'SUPPLIER'
+        ? { gasByPort, gasByGenset: gasByUnit, gasBalance: db.getGasBalance(), oktan }
+        : { operations: ops, summary: { total: ops.length, active: analytics.activeOps.length, completed: analytics.completedOps.length, underOperate: analytics.underOperate.length, hold: analytics.holdOps.length, cancelled: analytics.cancelledOps.length, completionRate: analytics.completionRate, cancellationRate: analytics.cancellationRate, completedRevenue: analytics.totalRevenue, activeExposure: analytics.activeRevenue, missingData: analytics.missingData } };
 
-Analyze:
-1) Operations: active, done, under-operate, hold, cancelled, completion and cancellation rates.
-2) Genset control: fleet total, stock, clipped-on, maintenance, retired, duplicate IN PROGRESS assignments.
-3) Port performance: active operations, completed operations, stock position and fuel consumption by port.
-4) Revenue and billing: completed revenue, active exposure, unpaid/overdue invoices, average revenue per completed operation.
-5) Customer concentration: customers generating revenue and customers carrying outstanding balances.
-6) Maintenance: units due for service, maintenance in progress, maintenance history signals.
-7) Reservations pipeline: pending/approved demand that may require future gensets.
-8) Data quality: missing container, genset, rate, trucker and completed-operation clip-off dates.
-9) Fuel: total by port and genset, gas balance, estimated coverage; flag abnormal concentrations but do not invent thresholds.
-10) Management actions: identify concrete operational risks and what should be checked next.
+      const prompt = `You are DALI 1.0, NILE FLEET Command Intelligence.
 
-Return a compact management report with: CRITICAL ALERTS, FINANCIAL, FLEET, PORTS, CUSTOMERS, MAINTENANCE, DATA QUALITY, ACTIONS.
-Clearly separate facts from recommendations. ${JSON.stringify({
-  summary: {
-    totalOperations: ops.length,
-    active: analytics.activeOps.length,
-    done: analytics.completedOps.length,
-    underOperate: analytics.underOperate.length,
-    hold: analytics.holdOps.length,
-    cancelled: analytics.cancelledOps.length,
-    completionRate: analytics.completionRate,
-    cancellationRate: analytics.cancellationRate
-  },
-  fleet: {
-    total: analytics.fleetTotal,
-    inStock: analytics.fleetInStock,
-    clippedOn: analytics.fleetActive,
-    maintenance: analytics.fleetMaintenance,
-    retired: analytics.fleetRetired
-  },
-  revenue: {
-    completedRevenue: analytics.totalRevenue,
-    activeExposure: analytics.activeRevenue,
-    averagePerDone: analytics.averageRevenuePerDone,
-    outstandingInvoices: analytics.outstanding,
-    unpaidInvoiceCount: analytics.unpaidInvoices.length,
-    overdueInvoiceCount: analytics.overdueInvoices.length
-  },
-  duplicateActiveGensets: analytics.duplicateUnits,
-  ports: analytics.portStats,
-  topCustomers: analytics.topCustomers,
-  maintenance: { due: analytics.dueMaintenance, inProgress: analytics.maintenanceInProgress },
-  reservationsPendingOrApproved: analytics.pendingReservations,
-  dataQuality: analytics.missingData,
-  gasByPort,
-  gasByGenset: gasByUnit,
-  oktan
-})}`;
+CURRENT VIEW: ${viewConfig.en}
+SCOPE: ${viewConfig.instruction}
 
-      const result = await runThinkingAudit(prompt);
-      setAdvice(result || (isAr ? 'لم يتم العثور على بيانات تشغيلية كافية.' : 'No telemetry data resolved.'));
+CRITICAL: Answer ONLY for the current view. NEVER produce a complete company report. NEVER discuss unrelated categories.
+LANGUAGE: ${isAr ? 'Arabic only, professional Arabic.' : 'English only, professional English.'}
+Use ONLY supplied live data. Never invent or estimate.
+Give the answer FIRST. Normally use 3-7 concise bullets.
+If there is no important issue, give only the key numbers for this view.
+Preserve booking/container/genset IDs, dates and numbers exactly.
+Do not output Python code.
+
+LIVE DATA:
+${JSON.stringify(viewData)}`;
+
+      const result = await runThinkingAudit(prompt, 900);
+      setAdvice(result || (isAr ? 'لا توجد نتائج إضافية مهمة لهذا القسم.' : 'No additional important findings for this section.'));
     } catch (err) {
       setLinkError(true);
-      setAdvice(isAr ? 'تعذر الاتصال بمحرك الذكاء الاصطناعي. أعد المحاولة.' : 'NETWORK INTEGRITY COMPROMISED. RE-LINK NODE.');
+      setAdvice(isAr ? 'تعذر الاتصال بمحرك الذكاء الاصطناعي. أعد المحاولة.' : 'AI engine connection failed. Please retry.');
     } finally {
       clearInterval(phaseInterval);
       setIsThinking(false);
@@ -222,7 +215,7 @@ Clearly separate facts from recommendations. ${JSON.stringify({
                   {apiKeySet ? '🛰️' : '📡'}
                </div>
                <div>
-                  <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase leading-none">ذكاء القيادة</h1>
+                  <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase leading-none">{isAr ? 'ذكاء القيادة' : 'COMMAND INTELLIGENCE'}</h1>
                   <div className="flex items-center gap-3 mt-2">
                      <span className={`w-1.5 h-1.5 rounded-full ${apiKeySet ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'}`}></span>
                      <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.4em]">{isAr ? `اتصال المحرك: ${apiKeySet ? 'مستقر' : 'منقطع'}` : `Node Connectivity: ${apiKeySet ? 'STABLE' : 'LINK LOST'}`}</p>
@@ -323,7 +316,7 @@ Clearly separate facts from recommendations. ${JSON.stringify({
 
           {activeView === 'UNIT' && (
             <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-2xl">
-               <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-8">توزيع تشغيل الأصول</h3>
+               <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-8">{isAr ? 'توزيع تشغيل الأصول' : 'ASSET UTILIZATION'}</h3>
                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {gasByUnit.slice(0, 16).map(u => (
                     <div key={u.unit} className="p-4 bg-slate-50 dark:bg-slate-950 border border-transparent hover:border-[#C2A378] rounded-2xl transition-all">
@@ -339,14 +332,14 @@ Clearly separate facts from recommendations. ${JSON.stringify({
             <div className="bg-[#001F3F] p-12 rounded-[4rem] text-white relative overflow-hidden border border-white/10 shadow-2xl">
                <div className="absolute bottom-0 right-0 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl -mb-40 -mr-40"></div>
                <div className="relative z-10">
-                  <h3 className="text-4xl font-black text-[#C2A378] uppercase italic tracking-tighter mb-12">مصفوفة لوجستيات الوقود</h3>
+                  <h3 className="text-4xl font-black text-[#C2A378] uppercase italic tracking-tighter mb-12">{isAr ? 'مصفوفة لوجستيات الوقود' : 'FUEL LOGISTICS MATRIX'}</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                      <div className="space-y-6">
-                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">رصيد السجل</span><span className="text-2xl font-black">EGP {oktan.balance.toLocaleString()}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">{isAr ? 'رصيد السجل' : 'LEDGER BALANCE'}</span><span className="text-2xl font-black">EGP {oktan.balance.toLocaleString()}</span></div>
                         <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-[#C2A378]" style={{width: '65%'}}></div></div>
                      </div>
                      <div className="space-y-6">
-                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">حد استهلاك الوقود</span><span className="text-2xl font-black">{oktan.daysRemaining} {isAr ? 'دورات' : 'Cycles'}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">{isAr ? 'حد استهلاك الوقود' : 'FUEL COVERAGE'}</span><span className="text-2xl font-black">{oktan.daysRemaining} {isAr ? 'دورات' : 'Cycles'}</span></div>
                         <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{width: '80%'}}></div></div>
                      </div>
                   </div>
@@ -356,7 +349,7 @@ Clearly separate facts from recommendations. ${JSON.stringify({
 
           {activeView === 'COSTS' && (
              <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-2xl">
-                <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-10">توزيع المصروفات</h3>
+                <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-10">{isAr ? 'توزيع المصروفات' : 'EXPENSE DISTRIBUTION'}</h3>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
                    <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
@@ -398,8 +391,8 @@ Clearly separate facts from recommendations. ${JSON.stringify({
               <div className="flex items-center gap-4 mb-8">
                  <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-xl shadow-lg shadow-blue-500/20">🧠</div>
                  <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest text-white italic">المستشار الذكي</h4>
-                    <p className="text-[7px] font-black text-blue-400 uppercase tracking-[0.4em]">محرك التحليل التشغيلي</p>
+                    <h4 className="text-sm font-black uppercase tracking-widest text-white italic">{isAr ? 'المستشار الذكي' : 'INTELLIGENCE ADVISOR'}</h4>
+                    <p className="text-[7px] font-black text-blue-400 uppercase tracking-[0.4em]">{isAr ? 'محرك التحليل التشغيلي' : 'TARGETED ANALYSIS ENGINE'}</p>
                  </div>
               </div>
 
@@ -409,7 +402,7 @@ Clearly separate facts from recommendations. ${JSON.stringify({
                        <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
                        <div>
                           <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] mb-2">{phases[thinkingPhase]}</p>
-                          <p className="text-[8px] font-bold text-slate-600 uppercase">جاري مزامنة سجل الأسطول...</p>
+                          <p className="text-[8px] font-bold text-slate-600 uppercase">{isAr ? 'جاري مزامنة البيانات...' : 'SYNCING LIVE DATA...'}</p>
                        </div>
                     </div>
                  ) : linkError ? (
@@ -445,11 +438,11 @@ Clearly separate facts from recommendations. ${JSON.stringify({
                        disabled={isThinking}
                        className="w-full bg-white text-[#001F3F] py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.4em] shadow-xl hover:bg-slate-100 disabled:opacity-30 transition-all group"
                     >
-                       <span className="group-hover:scale-105 transition-transform block">طلب تدقيق تشغيلي</span>
+                       <span className="group-hover:scale-105 transition-transform block">{isAr ? 'تحليل هذا القسم فقط' : 'ANALYZE THIS SECTION ONLY'}</span>
                     </button>
                  )}
                  <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
-                    <span className="text-[8px] font-black text-slate-500 uppercase">محرك الذكاء الاصطناعي</span>
+                    <span className="text-[8px] font-black text-slate-500 uppercase">{isAr ? 'محرك الذكاء الاصطناعي' : 'AI ENGINE'}</span>
                     <span className="text-[9px] font-black text-blue-500 italic uppercase">DALI 1.0 — Llama</span>
                  </div>
               </div>
