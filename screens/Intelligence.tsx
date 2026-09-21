@@ -450,7 +450,7 @@ Clearly separate facts from recommendations. ${JSON.stringify({
                  )}
                  <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
                     <span className="text-[8px] font-black text-slate-500 uppercase">محرك الذكاء الاصطناعي</span>
-                    <span className="text-[9px] font-black text-blue-500 italic uppercase">NILE AI — Llama</span>
+                    <span className="text-[9px] font-black text-blue-500 italic uppercase">DALI 1.0 — Llama</span>
                  </div>
               </div>
            </div>
