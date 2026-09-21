@@ -70,10 +70,8 @@ export const ThemeContext = createContext<ThemeContextType>({
 });
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   
   const [theme, setTheme] = useState<ThemeMode>(() => {
     return (localStorage.getItem('theme') as ThemeMode) || 'rose';
@@ -102,9 +100,29 @@ const App: React.FC = () => {
     localStorage.setItem('app_lang', lang);
   }, [lang]);
 
-  // Bootstrap: load all data from Supabase once on app start
+  // Bootstrap: load live data and verify the real Supabase session.
+  // localStorage is only a UI cache and must never be treated as authentication.
   useEffect(() => {
-    db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err));
+    let cancelled = false;
+    Promise.all([
+      db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err)),
+      getCurrentSessionUser().catch(err => {
+        console.error('Failed to verify Supabase session:', err);
+        return null;
+      })
+    ]).then(([, sessionUser]) => {
+      if (cancelled) return;
+      if (sessionUser) {
+        setUser(sessionUser);
+        localStorage.setItem('user', JSON.stringify(sessionUser));
+        setActiveScreen(sessionUser.role === UserRole.GATE_OPERATOR ? 'port-gate' : (sessionUser.role === UserRole.CUSTOMER ? 'cust-reservations' : 'dashboard'));
+      } else {
+        setUser(null);
+        localStorage.removeItem('user');
+      }
+      setAuthChecked(true);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const getIsDark = (currentTheme: ThemeMode): boolean => {
@@ -333,6 +351,18 @@ const App: React.FC = () => {
     setHighlightId(id || null);
     setActiveScreen(screen);
   };
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary,#f8fafc)] text-[var(--text-primary,#0f172a)]">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-slate-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-[10px] font-black uppercase tracking-[0.25em]">NILE FLEET</p>
+          <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-1">Verifying session...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
