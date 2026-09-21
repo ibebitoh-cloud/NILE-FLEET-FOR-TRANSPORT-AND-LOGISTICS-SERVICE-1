@@ -191,7 +191,7 @@ RULES:
 USER QUESTION: ${question}
 LIVE DATA: ${JSON.stringify(context)}`;
       const answer = await runThinkingAudit(prompt, 1600);
-      setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من الذكاء الاصطناعي.' : 'No AI response received.') }]);
+      setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من DALI 1.0.' : 'No response from DALI 1.0.') }]);
     } catch (e) {
       setAiChatMessages(prev => [...prev, { role: 'ai', text: isAr ? 'تعذر الاتصال بـ DALI 1.0 حالياً.' : 'DALI 1.0 is unavailable right now.' }]);
     } finally {
@@ -579,7 +579,7 @@ LIVE DATA: ${JSON.stringify(context)}`;
         {isAiChatOpen && (
           <div className={`absolute bottom-16 right-0 w-[min(92vw,420px)] h-[min(70vh,620px)] rounded-[2rem] overflow-hidden border shadow-2xl flex flex-col ${isTerminal ? 'bg-[#001224] border-white/10' : 'bg-white border-slate-200'}`}>
             <div className="px-5 py-4 bg-gradient-to-r from-[#001F3F] to-[#073b6d] text-white flex items-center justify-between">
-              <div><p className="text-[8px] font-black tracking-[0.3em] text-[#C2A378]">DALI 1.0</p><p className="text-sm font-black">{isAr ? 'مساعد لوحة القيادة' : 'Dashboard AI Assistant'}</p></div>
+              <div><p className="text-[8px] font-black tracking-[0.3em] text-[#C2A378]">DALI 1.0</p><p className="text-sm font-black">{isAr ? 'DALI 1.0' : 'DALI 1.0'}</p></div>
               <button onClick={() => setIsAiChatOpen(false)} className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
