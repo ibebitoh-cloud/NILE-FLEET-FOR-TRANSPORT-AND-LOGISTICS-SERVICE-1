@@ -73,14 +73,22 @@ async function upsert<T>(table: string, row: Partial<T>): Promise<T | null> {
   return snakeToCamel(data) as T;
 }
 
-async function update<T>(table: string, id: string, updates: Partial<T>): Promise<void> {
+async function update<T>(table: string, id: string, updates: Partial<T>): Promise<boolean> {
   const { error } = await supabase.from(table).update(camelToSnake(updates)).eq('id', id);
-  if (error) console.error(`[supabaseDb] update ${table}:`, error.message);
+  if (error) {
+    console.error(`[supabaseDb] update ${table}:`, error.message);
+    return false;
+  }
+  return true;
 }
 
-async function remove(table: string, id: string): Promise<void> {
+async function remove(table: string, id: string): Promise<boolean> {
   const { error } = await supabase.from(table).delete().eq('id', id);
-  if (error) console.error(`[supabaseDb] delete ${table}:`, error.message);
+  if (error) {
+    console.error(`[supabaseDb] delete ${table}:`, error.message);
+    return false;
+  }
+  return true;
 }
 
 function dispatchChange() {
@@ -190,6 +198,18 @@ class SupabaseDB {
   getStock(): Genset[] { return _stock; }
   getReservations(): Reservation[] { return _reservations; }
   getOperations(): Operation[] { return _operations; }
+
+  /** Returns other active assignments using the same genset. Duplicates are allowed;
+   * callers should warn the operator when both records are IN PROGRESS. */
+  getActiveGensetConflicts(unitNumber: string, excludeOperationId?: string): Operation[] {
+    const normalized = unitNumber.trim().toUpperCase();
+    return _operations.filter(o =>
+      o.status === 'IN PROGRESS' &&
+      o.gensetNumber?.trim().toUpperCase() === normalized &&
+      o.id !== excludeOperationId
+    );
+  }
+
   getInvoices(): Invoice[] { return _invoices; }
   getPayments(): Payment[] { return _payments; }
   getUsers(): User[] { return _users; }
@@ -297,9 +317,11 @@ class SupabaseDB {
   }
 
   async updateOperation(updatedOp: Operation): Promise<void> {
-    await update('operations', updatedOp.id, updatedOp);
+    const previous = _operations.find(o => o.id === updatedOp.id);
+    const saved = await update('operations', updatedOp.id, updatedOp);
+    if (!saved) return;
     _operations = _operations.map(o => o.id === updatedOp.id ? updatedOp : o);
-    await this._syncGensetStatus(updatedOp);
+    await this._syncGensetStatus(updatedOp, previous);
     if (updatedOp.status === 'DONE' && !updatedOp.invoiced) {
       await this.generateInvoiceFromBooking(updatedOp.bookingNumber, updatedOp.customerName);
     }
@@ -339,33 +361,80 @@ class SupabaseDB {
   }
 
   async deleteOperation(id: string): Promise<void> {
-    await remove('operations', id);
+    const previous = _operations.find(o => o.id === id);
+    const removed = await remove('operations', id);
+    if (!removed) return;
     _operations = _operations.filter(o => o.id !== id);
+    if (previous?.status === 'IN PROGRESS' && previous.gensetNumber) {
+      await this._releaseGensetIfUnused(previous.gensetNumber);
+    }
     await auditLog('OPS', `Deleted operation ${id}`);
     dispatchChange();
   }
 
   async deleteOperationsBulk(ids: string[]): Promise<void> {
-    await Promise.all(ids.map(id => remove('operations', id)));
-    _operations = _operations.filter(o => !ids.includes(o.id));
-    await auditLog('OPS', `Force deleted ${ids.length} manifest entries`);
+    const previous = _operations.filter(o => ids.includes(o.id));
+    const results = await Promise.all(ids.map(id => remove('operations', id)));
+    const removedIds = ids.filter((_, i) => results[i]);
+    if (!removedIds.length) return;
+    _operations = _operations.filter(o => !removedIds.includes(o.id));
+    const units = Array.from(new Set(
+      previous.filter(o => removedIds.includes(o.id) && o.status === 'IN PROGRESS' && o.gensetNumber)
+        .map(o => o.gensetNumber as string)
+    ));
+    await Promise.all(units.map(unit => this._releaseGensetIfUnused(unit)));
+    await auditLog('OPS', `Force deleted ${removedIds.length} manifest entries`);
     dispatchChange();
   }
 
-  private async _syncGensetStatus(op: Operation): Promise<void> {
-    if (!op.gensetNumber) return;
-    const genset = _stock.find(s => s.unitNumber === op.gensetNumber);
+  private async _releaseGensetIfUnused(unitNumber: string): Promise<void> {
+    const normalized = unitNumber.trim().toUpperCase();
+    const stillActive = _operations.some(o =>
+      o.status === 'IN PROGRESS' &&
+      o.gensetNumber?.trim().toUpperCase() === normalized
+    );
+    if (stillActive) return;
+    const genset = _stock.find(s => s.unitNumber?.trim().toUpperCase() === normalized);
     if (!genset) return;
-    let updates: Partial<Genset> = {};
-    if (op.status === 'IN PROGRESS') {
-      updates.status = GensetStatus.CLIPPED_ON;
-    } else if (op.status === 'DONE' || op.status === 'CANCEL') {
-      updates.status = GensetStatus.IN_STOCK;
-      if (op.status === 'DONE' && op.clipOffPort) updates.location = op.clipOffPort as Location;
+    const updates: Partial<Genset> = { status: GensetStatus.IN_STOCK };
+    const saved = await update('gensets', genset.id, updates);
+    if (saved) _stock = _stock.map(s => s.id === genset.id ? { ...s, ...updates } : s);
+  }
+
+  private async _syncGensetStatus(op: Operation, previous?: Operation): Promise<void> {
+    // If an operation switches units, release the old unit only when no other
+    // IN PROGRESS operation is still using it.
+    if (previous?.gensetNumber && previous.gensetNumber !== op.gensetNumber) {
+      await this._releaseGensetIfUnused(previous.gensetNumber);
     }
-    if (Object.keys(updates).length > 0) {
-      await update('gensets', genset.id, updates);
-      _stock = _stock.map(s => s.id === genset.id ? { ...s, ...updates } : s);
+    if (!op.gensetNumber) return;
+    const normalized = op.gensetNumber.trim().toUpperCase();
+    const genset = _stock.find(s => s.unitNumber?.trim().toUpperCase() === normalized);
+    if (!genset) return;
+
+    if (op.status === 'IN PROGRESS') {
+      const updates: Partial<Genset> = { status: GensetStatus.CLIPPED_ON };
+      const saved = await update('gensets', genset.id, updates);
+      if (saved) _stock = _stock.map(s => s.id === genset.id ? { ...s, ...updates } : s);
+    } else if (op.status === 'DONE' || op.status === 'CANCEL') {
+      // A completed/cancelled record must not put a genset back in stock while
+      // another IN PROGRESS record is legitimately using the same unit.
+      await this._releaseGensetIfUnused(op.gensetNumber);
+      if (op.status === 'DONE' && op.clipOffPort) {
+        const stillActive = _operations.some(o =>
+          o.status === 'IN PROGRESS' &&
+          o.id !== op.id &&
+          o.gensetNumber?.trim().toUpperCase() === normalized
+        );
+        if (!stillActive) {
+          const locationUpdates: Partial<Genset> = {
+            location: op.clipOffPort as Location,
+            status: GensetStatus.IN_STOCK
+          };
+          const saved = await update('gensets', genset.id, locationUpdates);
+          if (saved) _stock = _stock.map(s => s.id === genset.id ? { ...s, ...locationUpdates } : s);
+        }
+      }
     }
   }
 
