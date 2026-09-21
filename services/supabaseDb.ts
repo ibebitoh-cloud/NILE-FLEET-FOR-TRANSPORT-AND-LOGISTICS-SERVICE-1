@@ -70,13 +70,23 @@ async function query<T>(table: string, options?: { filter?: Record<string, any>;
   return snakeToCamel(data || []) as T[];
 }
 
+function prepareOperationsDbRow(row: any): any {
+  const today = new Date().toISOString().slice(0, 10);
+  const opDate = normalizeDateForDb(row.operationDate, today);
+  return {
+    ...row,
+    operationDate: opDate,
+    dateReceived: normalizeDateForDb(row.dateReceived, opDate),
+    clipOnDate: normalizeDateForDb(row.clipOnDate, opDate),
+    clipOffDate: normalizeDateForDb(row.clipOffDate, '')
+  };
+}
+
 async function insert<T>(table: string, row: Partial<T>): Promise<T | null> {
-  // The UI still generates placeholder ids like "G-ABC-123" or "op-man-172..." —
-  // leftover from the old in-memory mock database. Every real table's id column
-  // is a uuid with a default generator, so a non-UUID id here makes Postgres
-  // reject the whole insert. Strip it and let the database assign the real id.
+  // Strip UI-generated placeholder ids and let Postgres generate UUIDs.
   const { id, ...rest } = row as any;
-  const { data, error } = await supabase.from(table).insert(camelToSnake(rest)).select().single();
+  const prepared = table === 'operations' ? prepareOperationsDbRow(rest) : rest;
+  const { data, error } = await supabase.from(table).insert(camelToSnake(prepared)).select().single();
   if (error) { _lastDbError = `${table}: ${error.message}`; console.error(`[supabaseDb] insert ${table}:`, error.message); return null; }
   return snakeToCamel(data) as T;
 }
@@ -88,8 +98,10 @@ async function upsert<T>(table: string, row: Partial<T>): Promise<T | null> {
 }
 
 async function update<T>(table: string, id: string, updates: Partial<T>): Promise<boolean> {
-  const { error } = await supabase.from(table).update(camelToSnake(updates)).eq('id', id);
+  const prepared = table === 'operations' ? prepareOperationsDbRow(updates) : updates;
+  const { error } = await supabase.from(table).update(camelToSnake(prepared)).eq('id', id);
   if (error) {
+    _lastDbError = `${table}: ${error.message}`;
     console.error(`[supabaseDb] update ${table}:`, error.message);
     return false;
   }
@@ -378,15 +390,7 @@ class SupabaseDB {
     const prepared = ops.map(op => ({ ...op, internalSerial: op.internalSerial || generateInternalSerial() }));
     const rowsToInsert = prepared.map(op => {
       const { id, ...rest } = op as any;
-      const today = new Date().toISOString().slice(0, 10);
-      const opDate = normalizeDateForDb(rest.operationDate, today);
-      return camelToSnake({
-        ...rest,
-        operationDate: opDate,
-        dateReceived: normalizeDateForDb(rest.dateReceived, opDate),
-        clipOnDate: normalizeDateForDb(rest.clipOnDate, opDate),
-        clipOffDate: normalizeDateForDb(rest.clipOffDate, '')
-      });
+      return camelToSnake(prepareOperationsDbRow(rest));
     });
     const { data, error } = await supabase.from('operations').insert(rowsToInsert).select();
     if (error) { _lastDbError = `operations: ${error.message}`; console.error('[supabaseDb] bulk insert operations:', error.message); return false; }
