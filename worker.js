@@ -1,4 +1,5 @@
-import { onRequestPost } from './functions/ai-proxy.js';
+import { onRequestPost as onAiRequestPost } from './functions/ai-proxy.js';
+import { onRequestPost as onCreateUserRequestPost } from './functions/create-user.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -7,7 +8,11 @@ export default {
     // Keep the AI endpoint as a Worker route while all normal requests
     // are served from the Vite-built static assets.
     if (url.pathname === '/ai-proxy') {
-      return onRequestPost({ request, env, ctx });
+      return onAiRequestPost({ request, env, ctx });
+    }
+
+    if (url.pathname === '/create-user' && request.method === 'POST') {
+      return onCreateUserRequestPost({ request, env, ctx });
     }
 
     return env.ASSETS.fetch(request);
