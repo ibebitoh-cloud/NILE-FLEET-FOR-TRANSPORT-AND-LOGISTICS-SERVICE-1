@@ -185,7 +185,7 @@ Clearly separate facts from recommendations. ${JSON.stringify({
   gasByPort,
   gasByGenset: gasByUnit,
   oktan
-})}`;`;
+})}`;
 
       const result = await runThinkingAudit(prompt);
       setAdvice(result || (isAr ? 'لم يتم العثور على بيانات تشغيلية كافية.' : 'No telemetry data resolved.'));
