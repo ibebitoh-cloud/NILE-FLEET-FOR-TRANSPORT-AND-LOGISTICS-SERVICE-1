@@ -234,21 +234,22 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
     return match ? match[1] : null;
   };
 
-  const handleUpdateCell = (op: Operation, field: keyof Operation, val: any) => {
+  const handleUpdateCell = async (op: Operation, field: keyof Operation, val: any) => {
     if (!isAdmin) return;
-    db.updateOperation({ ...op, [field]: val });
-    refresh();
+    const saved = await db.updateOperation({ ...op, [field]: val });
+    if (saved) refresh();
+    else alert(isAr ? `فشل حفظ التعديل. ${db.getLastDbError() || ''}` : `Failed to save change. ${db.getLastDbError() || ''}`);
   };
 
-  const handleConfirmRecord = (opId: string) => {
+  const handleConfirmRecord = async (opId: string) => {
     if (!isAdmin) return;
     if (confirm(isAr ? 'تأكيد صحة بيانات هذه العملية؟' : 'Authorize and verify this manifest entry?')) {
-      db.confirmOperation(opId);
+      await db.confirmOperation(opId);
       refresh();
     }
   };
 
-  const handleForceVerifyAll = () => {
+  const handleForceVerifyAll = async () => {
     if (!isAdmin) return;
     const pendingIds = filteredOps.filter(o => !o.reviewedByManager).map(o => o.id);
     if (pendingIds.length === 0) {
@@ -256,13 +257,17 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
       return;
     }
     if (confirm(isAr ? `تأكيد اعتماد جميع العمليات الـ ${pendingIds.length} المعروضة؟` : `FORCE VERIFY: Authenticate all ${pendingIds.length} visible pending records?`)) {
-      db.confirmOperationsBulk(pendingIds);
+      await db.confirmOperationsBulk(pendingIds);
       refresh();
     }
   };
 
-  const handleSaveForceEdit = (updatedOp: Operation) => {
-    db.updateOperation(updatedOp);
+  const handleSaveForceEdit = async (updatedOp: Operation) => {
+    const saved = await db.updateOperation(updatedOp);
+    if (!saved) {
+      alert(isAr ? `فشل حفظ التعديل. ${db.getLastDbError() || ''}` : `Failed to save change. ${db.getLastDbError() || ''}`);
+      return;
+    }
     setEditingOp(null);
     refresh();
     alert(isAr ? 'تم تحديث البيانات بنجاح' : 'Manifest entry successfully updated.');
