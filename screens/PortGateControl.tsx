@@ -253,13 +253,17 @@ const PortGateControl: React.FC = () => {
         .map((r: any) => r.unitNum);
 
       if (failedUnits.length > 0) {
+        const dbError = db.getLastDbError();
         addNotification(isAr
-          ? `❌ فشل حفظ العملية في قاعدة البيانات للمولد: ${failedUnits.join(', ')}. لم يتم تأكيد التصريح.`
-          : `❌ DATABASE SAVE FAILED for genset: ${failedUnits.join(', ')}. Gate authorization NOT confirmed.`);
+          ? `❌ فشل حفظ العملية للمولد: ${failedUnits.join(', ')}. السبب: ${dbError || 'خطأ غير محدد'}`
+          : `❌ DATABASE SAVE FAILED for genset: ${failedUnits.join(', ')}. Reason: ${dbError || 'Unknown database error'}`);
         setShowDoubleConfirm(false);
         return;
       }
 
+      // Re-read operations from Supabase so the UI is proving the saved record exists,
+      // rather than relying only on the local cache.
+      await db.reloadOperations();
       addNotification(isAr ? 'تم التصريح بالخروج بعد تأكيد الحفظ' : 'GATE AUTHORIZED — SAVED');
     }
 
