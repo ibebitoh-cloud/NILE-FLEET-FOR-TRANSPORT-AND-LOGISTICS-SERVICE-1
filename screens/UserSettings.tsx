@@ -572,25 +572,28 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
                   <h3 className="text-lg font-black uppercase italic tracking-tighter text-[#001F3F] dark:text-white">Interface Personalization</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { id: 'rose', label: 'Classic', bg: 'bg-rose-500' },
-                      { id: 'black', label: 'Terminal', bg: 'bg-slate-900' },
-                      { id: 'navy', label: 'Ocean', bg: 'bg-blue-900' },
-                      { id: 'forest', label: 'Eco', bg: 'bg-emerald-900' },
-                      { id: 'lava', label: 'Magma', bg: 'bg-rose-900' },
-                      { id: 'copper', label: 'Vintage', bg: 'bg-orange-900' },
-                      { id: 'arctic', label: 'Frozen', bg: 'bg-sky-100' },
-                      { id: 'toxic', label: 'Acid', bg: 'bg-lime-400' },
-                      { id: 'emerald-vibrant', label: 'Vibrant Green', bg: 'bg-emerald-500' },
-                      { id: 'phantom', label: 'Stealth', bg: 'bg-zinc-800' },
-                      { id: 'custom', label: 'Custom Palette', bg: 'bg-gradient-to-tr from-rose-500 via-green-500 to-blue-500' }
-                    ].map(t => (
+                      { id: 'rose', label: isAr ? 'كلاسيكي' : 'Classic', bg: 'bg-rose-500' },
+                      { id: 'nile', label: isAr ? 'النيل' : 'Nile Command', bg: 'bg-emerald-800' },
+                      { id: 'corporate', label: isAr ? 'مؤسسي' : 'Corporate', bg: 'bg-sky-600' },
+                      { id: 'carbon', label: isAr ? 'كربون' : 'Carbon', bg: 'bg-zinc-900' },
+                      { id: 'royal', label: isAr ? 'ملكي' : 'Royal', bg: 'bg-violet-700' },
+                      { id: 'sandstorm', label: isAr ? 'رملي' : 'Sandstorm', bg: 'bg-amber-600' },
+                      { id: 'crimson', label: isAr ? 'قرمزي' : 'Crimson', bg: 'bg-rose-700' },
+                      { id: 'black', label: isAr ? 'طرفية' : 'Terminal', bg: 'bg-black' },
+                      { id: 'navy', label: isAr ? 'كحلي' : 'Navy', bg: 'bg-blue-900' },
+                      { id: 'forest', label: isAr ? 'غابة' : 'Forest', bg: 'bg-emerald-900' },
+                      { id: 'lava', label: isAr ? 'حمم' : 'Magma', bg: 'bg-red-900' },
+                      { id: 'arctic', label: isAr ? 'جليدي' : 'Arctic', bg: 'bg-sky-100' },
+                      { id: 'emerald-vibrant', label: isAr ? 'زمردي' : 'Emerald', bg: 'bg-emerald-500' },
+                      { id: 'phantom', label: isAr ? 'شبح' : 'Phantom', bg: 'bg-zinc-800' },
+                      { id: 'custom', label: isAr ? 'مخصص' : 'Custom', bg: 'bg-gradient-to-tr from-rose-500 via-green-500 to-blue-500' }                    ].map(t => (
                       <button 
                         key={t.id}
                         onClick={() => setTheme(t.id as any)}
-                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${theme === t.id ? 'border-rose-500 scale-105 shadow-xl bg-slate-50 dark:bg-slate-800' : 'border-slate-100 dark:border-white/5 hover:border-slate-200'}`}
+                        className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 min-h-[82px] ${theme === t.id ? 'border-[var(--accent)] scale-[1.03] shadow-xl' : 'border-slate-100 dark:border-white/5 hover:border-[var(--accent)]/50'}`}
                       >
                         <div className={`w-8 h-8 rounded-full ${t.bg} shadow-inner`}></div>
-                        <span className="text-[8px] font-black uppercase text-slate-400">{t.label}</span>
+                        <span className="text-[8px] font-black uppercase" style={{ color: "var(--text-secondary)" }}>{t.label}</span>
                       </button>
                     ))}
                   </div>
