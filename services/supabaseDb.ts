@@ -861,9 +861,9 @@ class SupabaseDB {
 
   // ─── procurement ───────────────────────────────────────────────────────────
 
-  async addProcurement(p: Procurement): Promise<void> {
+  async addProcurement(p: Procurement): Promise<boolean> {
     const saved = await insert<Procurement>('procurement', p);
-    if (saved) { _procurements = [..._procurements, saved]; await auditLog('EXP', `General Procurement ${p.itemDescription}`); dispatchChange(); }
+    if (saved) { _procurements = [..._procurements, saved]; await auditLog('EXP', `General Procurement ${p.itemDescription}`); dispatchChange(); return true; } return false;
   }
   async updateProcurement(p: Procurement): Promise<boolean> {
     const saved = await update('procurement', p.id, p);
@@ -887,9 +887,9 @@ class SupabaseDB {
 
   // ─── gas ───────────────────────────────────────────────────────────────────
 
-  async addGasTransaction(t: GasTransaction): Promise<void> {
+  async addGasTransaction(t: GasTransaction): Promise<boolean> {
     const saved = await insert<GasTransaction>('gas_transactions', t);
-    if (saved) { _gasTransactions = [..._gasTransactions, saved]; await auditLog('EXP', `Gas Topup ${t.amount}`); dispatchChange(); }
+    if (saved) { _gasTransactions = [..._gasTransactions, saved]; await auditLog('EXP', `Gas Topup ${t.amount}`); dispatchChange(); return true; } return false;
   }
   async updateGasTransaction(t: GasTransaction): Promise<boolean> {
     const saved = await update('gas_transactions', t.id, t);
@@ -908,9 +908,9 @@ class SupabaseDB {
 
   // ─── employees / payroll ───────────────────────────────────────────────────
 
-  async addEmployee(e: Employee): Promise<void> {
+  async addEmployee(e: Employee): Promise<boolean> {
     const saved = await insert<Employee>('employees', e);
-    if (saved) { _employees = [..._employees, saved]; dispatchChange(); }
+    if (saved) { _employees = [..._employees, saved]; dispatchChange(); return true; } return false;
   }
   async updateEmployee(e: Employee): Promise<boolean> {
     const saved = await update('employees', e.id, e);
@@ -926,9 +926,9 @@ class SupabaseDB {
     dispatchChange();
     return true;
   }
-  async addPayrollTransaction(t: PayrollTransaction): Promise<void> {
+  async addPayrollTransaction(t: PayrollTransaction): Promise<boolean> {
     const saved = await insert<PayrollTransaction>('payroll_transactions', t);
-    if (saved) { _payrollTransactions = [..._payrollTransactions, saved]; dispatchChange(); }
+    if (saved) { _payrollTransactions = [..._payrollTransactions, saved]; dispatchChange(); return true; } return false;
   }
   async updatePayrollTransaction(t: PayrollTransaction): Promise<boolean> {
     const saved = await update('payroll_transactions', t.id, t);
@@ -947,9 +947,9 @@ class SupabaseDB {
 
   // ─── food / transport / port rent ──────────────────────────────────────────
 
-  async addFoodExpense(e: FoodExpense): Promise<void> {
+  async addFoodExpense(e: FoodExpense): Promise<boolean> {
     const saved = await insert<FoodExpense>('food_expenses', e);
-    if (saved) { _foodExpenses = [..._foodExpenses, saved]; await auditLog('EXP', `Food Allowance ${e.amount}`); dispatchChange(); }
+    if (saved) { _foodExpenses = [..._foodExpenses, saved]; await auditLog('EXP', `Food Allowance ${e.amount}`); dispatchChange(); return true; } return false;
   }
   async updateFoodExpense(e: FoodExpense): Promise<boolean> {
     const saved = await update('food_expenses', e.id, e);
@@ -966,9 +966,9 @@ class SupabaseDB {
     return true;
   }
 
-  async addTransportExpense(e: TransportExpense): Promise<void> {
+  async addTransportExpense(e: TransportExpense): Promise<boolean> {
     const saved = await insert<TransportExpense>('transport_expenses', e);
-    if (saved) { _transportExpenses = [..._transportExpenses, saved]; await auditLog('EXP', `Transport ${e.amount}`); dispatchChange(); }
+    if (saved) { _transportExpenses = [..._transportExpenses, saved]; await auditLog('EXP', `Transport ${e.amount}`); dispatchChange(); return true; } return false;
   }
   async updateTransportExpense(e: TransportExpense): Promise<boolean> {
     const saved = await update('transport_expenses', e.id, e);
@@ -985,9 +985,9 @@ class SupabaseDB {
     return true;
   }
 
-  async addPortRent(e: PortRent): Promise<void> {
+  async addPortRent(e: PortRent): Promise<boolean> {
     const saved = await insert<PortRent>('port_rents', e);
-    if (saved) { _portRents = [..._portRents, saved]; await auditLog('EXP', `Port Rent ${e.amount} at ${e.port}`); dispatchChange(); }
+    if (saved) { _portRents = [..._portRents, saved]; await auditLog('EXP', `Port Rent ${e.amount} at ${e.port}`); dispatchChange(); return true; } return false;
   }
   async updatePortRent(e: PortRent): Promise<boolean> {
     const saved = await update('port_rents', e.id, e);
