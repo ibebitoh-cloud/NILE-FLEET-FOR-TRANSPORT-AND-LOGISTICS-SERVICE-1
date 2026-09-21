@@ -67,37 +67,37 @@ const BookingInvoices: React.FC = () => {
     setEditEtaStatus(inv.etaStatus || 'DRAFT');
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingInvoice) return;
-    db.updateInvoice(editingInvoice.id, {
+    const saved = await db.updateInvoice(editingInvoice.id, {
       amount: editAmount,
       date: editDate,
       dueDate: editDueDate || undefined,
       status: editStatus,
       etaStatus: editEtaStatus
     });
+    if (!saved) {
+      alert(isAr ? `فشل حفظ الفاتورة: ${db.getLastDbError() || ''}` : `Invoice save failed: ${db.getLastDbError() || ''}`);
+      return;
+    }
     setEditingInvoice(null);
     refreshData();
   };
 
-  const handleSubmitInvoice = (invId: string) => {
+  const handleSubmitInvoice = async (invId: string) => {
     setSubmittingInvoiceId(invId);
-    setTimeout(() => {
-      db.updateInvoice(invId, {
-        etaStatus: 'SUBMITTED'
-      });
-      setSubmittingInvoiceId(null);
+    try {
+      // Do not fabricate an ETA VALID response. Until the real ETA endpoint is connected,
+      // the invoice can only be marked as submitted locally.
+      const saved = await db.updateInvoice(invId, { etaStatus: 'SUBMITTED' });
+      if (!saved) {
+        alert(isAr ? `فشل إرسال الفاتورة: ${db.getLastDbError() || ''}` : `Invoice submission failed: ${db.getLastDbError() || ''}`);
+        return;
+      }
       refreshData();
-
-      // Represent real-time portal validating cycle
-      setTimeout(() => {
-        db.updateInvoice(invId, {
-          etaStatus: 'VALID',
-          etaInternalId: 'ETA-' + Math.floor(100000 + Math.random() * 900000)
-        });
-        refreshData();
-      }, 1500);
-    }, 1000);
+    } finally {
+      setSubmittingInvoiceId(null);
+    }
   };
 
   // Group bookings by Booking Number
