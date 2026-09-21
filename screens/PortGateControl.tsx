@@ -177,21 +177,35 @@ const PortGateControl: React.FC = () => {
     e.target.value = '';
   };
 
-  const handleProcessAction = () => {
+  const handleProcessAction = async () => {
     const timestamp = new Date().toISOString().split('T')[0];
+
     if (mode === 'PORT_MOVE') {
       if (!targetPort) return;
-      selectedGensets.forEach(unitNum => {
+      await Promise.all(selectedGensets.map(async unitNum => {
         const unit = stock.find(s => s.unitNumber === unitNum);
-        if (unit) db.updateGenset({ ...unit, location: targetPort });
-      });
+        if (unit) await db.updateGenset({ ...unit, location: targetPort });
+      }));
       addNotification(isAr ? `تم النقل إلى ${translateEntity(targetPort, lang)}` : `TRANSFERRED TO ${targetPort}`);
     } else {
-      selectedGensets.forEach(unitNum => {
+      // Duplicates are intentionally allowed. Warn only when the selected unit
+      // is already assigned to another IN PROGRESS operation.
+      const conflicts = selectedGensets.flatMap(unitNum =>
+        db.getActiveGensetConflicts(unitNum, isManualBooking ? undefined : selectedBookingId)
+          .map(op => ({ unitNum, bookingNumber: op.bookingNumber }))
+      );
+      if (conflicts.length) {
+        const details = conflicts.map(c => `${c.unitNum} / ${c.bookingNumber}`).join(', ');
+        addNotification(isAr
+          ? `🔴 تنبيه: المولد مستخدم بالفعل في تشغيل نشط — ${details}. تم السماح بالحفظ.`
+          : `🔴 ALERT: unit already has IN PROGRESS assignment — ${details}. SAVE IS ALLOWED.`);
+      }
+
+      const jobs = selectedGensets.map(async unitNum => {
         const imageTag = evidenceImage ? `[IMAGE_DATA:${evidenceImage}]` : '';
         if (isManualBooking) {
-          db.addOperation({
-            id: `op-man-${Date.now()}`,
+          return db.addOperation({
+            id: `op-man-${Date.now()}-${unitNum}`,
             internalSerial: '',
             customerName: manualBooking.customer || 'WALK-IN',
             bookingNumber: manualBooking.number.toUpperCase(),
@@ -212,27 +226,29 @@ const PortGateControl: React.FC = () => {
             rate: '0.00',
             vat: '0.00',
             shipperAddress: '',
-            notes: imageTag 
+            notes: imageTag
           });
-        } else {
-          const op = operations.find(o => o.id === selectedBookingId);
-          if (op) {
-            db.updateOperation({
-              ...op,
-              containerNumber: scannedContainer.toUpperCase(),
-              gensetNumber: unitNum,
-              driverName: manualBooking.driverName,
-              driverPhone: manualBooking.driverPhone,
-              status: 'IN PROGRESS',
-              clipOnDate: timestamp,
-              gaz: manualGaz,
-              notes: (op.notes || '').includes('[IMAGE_DATA:') ? op.notes : (op.notes || '') + imageTag
-            });
-          }
         }
+
+        const op = operations.find(o => o.id === selectedBookingId);
+        if (!op) return;
+        return db.updateOperation({
+          ...op,
+          containerNumber: scannedContainer.toUpperCase(),
+          gensetNumber: unitNum,
+          driverName: manualBooking.driverName,
+          driverPhone: manualBooking.driverPhone,
+          status: 'IN PROGRESS',
+          clipOnDate: timestamp,
+          gaz: manualGaz,
+          notes: (op.notes || '').includes('[IMAGE_DATA:') ? op.notes : (op.notes || '') + imageTag
+        });
       });
-      addNotification(isAr ? 'تم التصريح بالخروج' : 'GATE AUTHORIZED');
+
+      await Promise.all(jobs);
+      addNotification(isAr ? 'تم التصريح بالخروج بعد تأكيد الحفظ' : 'GATE AUTHORIZED — SAVED');
     }
+
     resetForm();
     setShowDoubleConfirm(false);
   };
