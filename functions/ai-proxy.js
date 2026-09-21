@@ -7,6 +7,7 @@
 
 const TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+const TEXT_FALLBACK_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
 
 // Open models are less reliable than Claude/GPT at strictly following
 // "return only JSON" instructions — strip code fences and grab the first
@@ -44,7 +45,7 @@ export async function onRequestPost(context) {
       case 'translateBusinessEntities': {
         const { names } = payload;
         if (!names || names.length === 0) return json({});
-        const result = await env.AI.run(TEXT_MODEL, {
+        const result = await runTextModel(env, {
           messages: [
             { role: 'system', content: 'You translate logistics business entity names (trucking companies, shippers, clients) into professional Arabic. Respond with ONLY a raw JSON object — no markdown, no code fences, no commentary — where each key is the original name and each value is its Arabic translation.' },
             { role: 'user', content: `Names: ${names.join(', ')}` },
@@ -56,12 +57,12 @@ export async function onRequestPost(context) {
 
       case 'runThinkingAudit': {
         const { prompt } = payload;
-        const result = await env.AI.run(TEXT_MODEL, {
+        const result = await runTextModel(env, {
           messages: [
             { role: 'system', content: 'You are a sharp financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis. If the user prompt requests Arabic, you MUST respond entirely in professional Arabic: translate all headings, labels, statuses, port names, entity descriptions and explanatory text. Never output English UI labels. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Do not invent data.' },
             { role: 'user', content: prompt },
           ],
-          max_tokens: 3000,
+          max_tokens: Math.min(Math.max(payload?.maxTokens || 1600, 200), 3000),
         });
         return json({ text: result.response || '' });
       }
@@ -87,7 +88,7 @@ export async function onRequestPost(context) {
 
       case 'mapSpreadsheetToSchema': {
         const { csvData } = payload;
-        const result = await env.AI.run(TEXT_MODEL, {
+        const result = await runTextModel(env, {
           messages: [
             { role: 'system', content: `You are a logistics data mapper. Convert the given CSV/text data into a JSON array. Identify columns even if their names differ slightly from expected. For every entity field (customerName, beneficiaryName, trucker), also provide its Arabic translation in a field suffixed with 'Ar'.
 
@@ -105,7 +106,28 @@ Respond with ONLY the raw JSON array — no markdown, no code fences, no comment
         return json({ error: 'Unknown action' }, 400);
     }
   } catch (err) {
-    return json({ error: 'AI request failed: ' + (err?.message || String(err)) }, 500);
+    console.error('NILE AI proxy error', err);
+    return json({
+      error: 'AI request failed',
+      detail: err?.message || String(err),
+      model: TEXT_MODEL,
+      fallbackModel: TEXT_FALLBACK_MODEL,
+    }, 500);
+  }
+}
+
+async function runTextModel(env, options) {
+  try {
+    return await env.AI.run(TEXT_MODEL, options);
+  } catch (primaryError) {
+    console.error('Primary Workers AI model failed, trying fallback', primaryError);
+    try {
+      return await env.AI.run(TEXT_FALLBACK_MODEL, options);
+    } catch (fallbackError) {
+      throw new Error(
+        `Primary model failed: ${primaryError?.message || primaryError}; fallback model failed: ${fallbackError?.message || fallbackError}`
+      );
+    }
   }
 }
 
