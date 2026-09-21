@@ -357,6 +357,17 @@
             color-scheme: light;
         }
 
+        /* Brand utility classes are theme-aware while preserving semantic status colors. */
+        body[class*="theme-"] [class~="text-[#001F3F]"] { color: var(--text-primary) !important; }
+        body[class*="theme-"] [class~="bg-slate-50"] { background-color: var(--card-bg) !important; }
+        body[class*="theme-"] [class~="bg-slate-100"] { background-color: var(--input-bg) !important; }
+        body[class*="theme-"] [class~="border-slate-100"],
+        body[class*="theme-"] [class~="border-slate-200"] { border-color: var(--border-primary) !important; }
+
+        @media (max-width: 1023px) {
+            main { padding-bottom: 76px; }
+        }
+
         /* Scrollbars */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-primary); }
