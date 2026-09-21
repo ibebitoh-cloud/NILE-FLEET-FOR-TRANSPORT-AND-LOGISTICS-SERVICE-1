@@ -896,6 +896,20 @@ const MasterView: React.FC = () => {
         );
         return;
       }
+      const freshOps = db.getOperations();
+      const missingBookings = Array.from(new Set(
+        toInject.map(o => o.bookingNumber).filter(bk =>
+          !freshOps.some(o => o.bookingNumber === bk)
+        )
+      ));
+      if (missingBookings.length > 0) {
+        alert(isAr
+          ? `❌ تم الإدخال لكن السجلات غير ظاهرة بعد إعادة القراءة. الحجوزات المفقودة: ${missingBookings.join(', ')}\\nالسبب: ${db.getLastDbError() || 'مشكلة في صلاحيات أو قراءة قاعدة البيانات.'}`
+          : `❌ INSERT COMPLETED BUT RECORDS ARE NOT VISIBLE AFTER DATABASE RELOAD. Missing bookings: ${missingBookings.join(', ')}\\nReason: ${db.getLastDbError() || 'Database permissions/RLS or read-path issue.'}`
+        );
+        return;
+      }
+      setOperations([...freshOps]);
       setShowAddModal(false);
       setStagedOps([{ customerName: '', bookingNumber: '', gensetNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, trucker: '', beneficiaryName: '', quantity: 1 }]);
       setRawPasteBuffer('');
