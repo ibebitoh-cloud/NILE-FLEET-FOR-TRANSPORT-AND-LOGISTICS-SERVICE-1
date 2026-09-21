@@ -1,17 +1,33 @@
-// Cloudflare Pages Function: proxies all Gemini AI calls so the API key
-// never ships to the browser. Reachable at /ai-proxy once deployed.
-// The key is read from a server-side environment variable (GEMINI_API_KEY,
-// set in Cloudflare Pages → Settings → Environment variables) — never
-// prefixed with VITE_, so it's never bundled into client-side JS.
+// Cloudflare Pages Function: runs all AI features on Cloudflare Workers AI —
+// free, open-source models (Llama 3.3 for text, Llama 3.2 Vision for images).
+// No external API key, no billing account: the model runs directly on
+// Cloudflare's infrastructure via the "AI" binding (Settings -> Functions ->
+// Bindings -> add "AI" -> variable name AI). Free tier: 10,000 Neurons/day,
+// resets daily, no credit card required.
 
-import { GoogleGenAI, Type } from '@google/genai';
+const TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+
+// Open models are less reliable than Claude/GPT at strictly following
+// "return only JSON" instructions — strip code fences and grab the first
+// {...} or [...] block to make parsing robust.
+function parseJsonLoose(text) {
+  let cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  const firstBrace = Math.min(
+    ...[cleaned.indexOf('{'), cleaned.indexOf('[')].filter(i => i !== -1)
+  );
+  const lastBrace = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
+  if (firstBrace !== Infinity && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+  return JSON.parse(cleaned);
+}
 
 export async function onRequestPost(context) {
   const { request, env } = context;
 
-  const apiKey = env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return json({ error: 'Server missing GEMINI_API_KEY' }, 500);
+  if (!env.AI) {
+    return json({ error: 'Workers AI binding not configured. Add an "AI" binding in Cloudflare -> Settings -> Functions -> Bindings.' }, 500);
   }
 
   let body;
@@ -22,86 +38,67 @@ export async function onRequestPost(context) {
   }
 
   const { action, payload } = body;
-  const ai = new GoogleGenAI({ apiKey });
 
   try {
     switch (action) {
       case 'translateBusinessEntities': {
         const { names } = payload;
         if (!names || names.length === 0) return json({});
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: `Translate the following logistics entity names (Trucking companies, Shippers, Clients) to professional Arabic.
-          Return a JSON object where keys are the original names and values are the Arabic translations.
-          Names: ${names.join(', ')}`,
-          config: { responseMimeType: 'application/json' },
+        const result = await env.AI.run(TEXT_MODEL, {
+          messages: [
+            { role: 'system', content: 'You translate logistics business entity names (trucking companies, shippers, clients) into professional Arabic. Respond with ONLY a raw JSON object — no markdown, no code fences, no commentary — where each key is the original name and each value is its Arabic translation.' },
+            { role: 'user', content: `Names: ${names.join(', ')}` },
+          ],
+          max_tokens: 1500,
         });
-        return json(JSON.parse(response.text || '{}'));
+        return json(parseJsonLoose(result.response || ''));
       }
 
       case 'runThinkingAudit': {
-        const { prompt, model, thinkingBudget } = payload;
-        const response = await ai.models.generateContent({
-          model: model || 'gemini-3-flash-preview',
-          contents: prompt,
-          config: { thinkingConfig: { thinkingBudget: thinkingBudget ?? 0 }, temperature: 0.2 },
+        const { prompt } = payload;
+        const result = await env.AI.run(TEXT_MODEL, {
+          messages: [
+            { role: 'system', content: 'You are a sharp, concise financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis.' },
+            { role: 'user', content: prompt },
+          ],
+          max_tokens: 3000,
         });
-        return json({ text: response.text });
+        return json({ text: result.response || '' });
       }
 
       case 'scanImageForContainer': {
         const { base64Data } = payload;
-        const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: {
-            parts: [
-              { inlineData: { data: cleanBase64, mimeType: 'image/jpeg' } },
-              { text: "Extract the Container BIC code (4 letters + 7 digits). Return ONLY the code or 'NOT_FOUND'." },
-            ],
-          },
-          config: { temperature: 0.1 },
+        const dataUri = base64Data.startsWith('data:') ? base64Data : `data:image/jpeg;base64,${base64Data}`;
+        const result = await env.AI.run(VISION_MODEL, {
+          messages: [
+            { role: 'system', content: "Extract the shipping container BIC code (4 letters followed by 7 digits, e.g. MEDU9907021) from the image. Respond with ONLY the code itself, nothing else. If no valid code is visible, respond with exactly: NOT_FOUND" },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Extract the container code.' },
+                { type: 'image_url', image_url: { url: dataUri } },
+              ],
+            },
+          ],
+          max_tokens: 50,
         });
-        return json({ text: response.text?.trim() || 'NOT_FOUND' });
+        return json({ text: (result.response || '').trim() || 'NOT_FOUND' });
       }
 
       case 'mapSpreadsheetToSchema': {
         const { csvData } = payload;
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: `
-            Role: Logistics Data Mapper. Convert CSV/Text to JSON.
-            Instructions: Identify columns even if names are slightly different.
-            Important: For every entity (customerName, beneficiaryName, trucker), provide its Arabic translation in a field suffixed with 'Ar'.
-            Required Fields: customerName, customerNameAr, bookingNumber, containerNumber, gensetNumber, clipOnPort, clipOffPort, rate, operationDate, trucker, truckerAr, beneficiaryName, beneficiaryNameAr.
-            Data: ${csvData}
-          `,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  customerName: { type: Type.STRING },
-                  customerNameAr: { type: Type.STRING },
-                  bookingNumber: { type: Type.STRING },
-                  containerNumber: { type: Type.STRING },
-                  gensetNumber: { type: Type.STRING },
-                  clipOnPort: { type: Type.STRING },
-                  clipOffPort: { type: Type.STRING },
-                  rate: { type: Type.STRING },
-                  operationDate: { type: Type.STRING },
-                  trucker: { type: Type.STRING },
-                  truckerAr: { type: Type.STRING },
-                  beneficiaryName: { type: Type.STRING },
-                  beneficiaryNameAr: { type: Type.STRING },
-                },
-              },
-            },
-          },
+        const result = await env.AI.run(TEXT_MODEL, {
+          messages: [
+            { role: 'system', content: `You are a logistics data mapper. Convert the given CSV/text data into a JSON array. Identify columns even if their names differ slightly from expected. For every entity field (customerName, beneficiaryName, trucker), also provide its Arabic translation in a field suffixed with 'Ar'.
+
+Each array item must have exactly these fields: customerName, customerNameAr, bookingNumber, containerNumber, gensetNumber, clipOnPort, clipOffPort, rate, operationDate, trucker, truckerAr, beneficiaryName, beneficiaryNameAr.
+
+Respond with ONLY the raw JSON array — no markdown, no code fences, no commentary.` },
+            { role: 'user', content: csvData },
+          ],
+          max_tokens: 4000,
         });
-        return json(JSON.parse(response.text || '[]'));
+        return json(parseJsonLoose(result.response || ''));
       }
 
       default:
