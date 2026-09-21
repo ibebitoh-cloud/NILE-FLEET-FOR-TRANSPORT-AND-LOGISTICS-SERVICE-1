@@ -57,13 +57,7 @@ const Intelligence: React.FC = () => {
     }, 1200);
 
     try {
-      const prompt = `LANGUAGE: ${isAr ? 'ARABIC ONLY' : 'ENGLISH'}. When Arabic is requested, every heading, label, status, port name, entity name, explanation and recommendation MUST be Arabic. Keep booking/container/genset numbers, dates and numeric values unchanged. Do not invent missing data. Total operations: ${ops.length}. Active operations: ${ops.filter(o => o.status === 'IN PROGRESS').length}. Expense totals EGP: food=${expenseTotals.food}, transport=${expenseTotals.transport}, procurement=${expenseTotals.procurement}, rent=${expenseTotals.rent}, fuelBalance=${expenseTotals.fuel}. Gas by port: ${JSON.stringify(gasByPort)}. Gas by genset: ${JSON.stringify(gasByUnit)}. Oktan estimate: ${JSON.stringify(oktan)}. Operations data: ${JSON.stringify(ops)}. Analyze all supplied data for anomalies, duplicate active genset assignments, port/stock/fuel/cost issues and practical actions. Clearly separate facts from recommendations.`
-        System: Nile Fleet Strategic Hub. 
-        Context: ${ops.length} Total Ops. Active Trips: ${ops.filter(o => o.status === 'IN PROGRESS').length}.
-        Expense Ratio: Food(${expenseTotals.food}), Transport(${expenseTotals.transport}).
-        Task: Identify one anomaly in port fuel consumption or expense overhead. 
-        Language: ${isAr ? 'Arabic' : 'English'}.
-      `;
+      const prompt = `You are the NILE FLEET Command Intel operational and financial auditor. LANGUAGE: ${isAr ? 'ARABIC ONLY' : 'ENGLISH'}. If Arabic is requested, your ENTIRE response must be professional Arabic: translate every heading, label, status, port name, entity name, section title, explanation, finding and recommendation. Do not leave English UI/business prose in the response. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Never invent or translate codes, identifiers or numeric data. Use ONLY the supplied data. Total operations: ${ops.length}. Active operations: ${ops.filter(o => o.status === 'IN PROGRESS').length}. Expense totals EGP: food=${expenseTotals.food}, transport=${expenseTotals.transport}, procurement=${expenseTotals.procurement}, rent=${expenseTotals.rent}, fuelBalance=${expenseTotals.fuel}. Gas by port: ${JSON.stringify(gasByPort)}. Gas by genset: ${JSON.stringify(gasByUnit)}. Oktan estimate: ${JSON.stringify(oktan)}. Full operations data: ${JSON.stringify(ops)}. Analyze ALL supplied data for anomalies, duplicate active genset assignments, port/stock/fuel/cost issues and practical actions. Clearly separate factual findings from recommendations. If a value is missing, say it is missing rather than guessing.`;
 
       const result = await runThinkingAudit(prompt);
       setAdvice(result || (isAr ? 'لم يتم العثور على بيانات تشغيلية كافية.' : 'No telemetry data resolved.'));
@@ -103,16 +97,16 @@ const Intelligence: React.FC = () => {
                   <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase leading-none">ذكاء القيادة</h1>
                   <div className="flex items-center gap-3 mt-2">
                      <span className={`w-1.5 h-1.5 rounded-full ${apiKeySet ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'}`}></span>
-                     <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.4em]">Node Connectivity: {apiKeySet ? 'STABLE' : 'LINK LOST'}</p>
+                     <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.4em]">{isAr ? `اتصال المحرك: ${apiKeySet ? 'مستقر' : 'منقطع'}` : `Node Connectivity: ${apiKeySet ? 'STABLE' : 'LINK LOST'}`}</p>
                   </div>
                </div>
             </div>
 
             <div className="flex bg-black/40 rounded-2xl border border-white/10 overflow-hidden">
-               <NavButton id="PORT" label="الموانئ" />
-               <NavButton id="UNIT" label="أصول الأسطول" />
-               <NavButton id="SUPPLIER" label="سجل الوقود" />
-               <NavButton id="COSTS" label="Operations" />
+               <NavButton id="PORT" label={isAr ? "الموانئ" : "PORTS"} />
+               <NavButton id="UNIT" label={isAr ? "أصول الأسطول" : "FLEET ASSETS"} />
+               <NavButton id="SUPPLIER" label={isAr ? "سجل الوقود" : "FUEL LEDGER"} />
+               <NavButton id="COSTS" label={isAr ? "العمليات" : "OPERATIONS"} />
             </div>
          </div>
       </div>
@@ -127,11 +121,11 @@ const Intelligence: React.FC = () => {
                 <div key={port} className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-xl relative group overflow-hidden">
                    <div className="absolute top-0 right-0 p-4 opacity-5 italic font-black text-6xl select-none group-hover:opacity-10 transition-opacity">{port}</div>
                    <div className="relative z-10">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Terminal Node</p>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{isAr ? 'المحطة' : 'Terminal Node'}</p>
                       <h4 className="text-2xl font-black text-[#001F3F] dark:text-white italic tracking-tighter">{port} HUB</h4>
                       <div className="mt-8 space-y-2">
                          <div className="flex justify-between items-end text-[10px] font-black uppercase text-blue-600">
-                            <span>Fuel Burn Rate</span>
+                            <span>{isAr ? 'معدل استهلاك الوقود' : 'Fuel Burn Rate'}</span>
                             <span>{fuel} Liters</span>
                          </div>
                          <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -169,7 +163,7 @@ const Intelligence: React.FC = () => {
                         <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-[#C2A378]" style={{width: '65%'}}></div></div>
                      </div>
                      <div className="space-y-6">
-                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">حد استهلاك الوقود</span><span className="text-2xl font-black">{oktan.daysRemaining} Cycles</span></div>
+                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">حد استهلاك الوقود</span><span className="text-2xl font-black">{oktan.daysRemaining} {isAr ? 'دورات' : 'Cycles'}</span></div>
                         <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{width: '80%'}}></div></div>
                      </div>
                   </div>
