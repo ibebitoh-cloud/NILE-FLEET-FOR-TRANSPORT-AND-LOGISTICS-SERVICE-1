@@ -39,6 +39,81 @@ const Intelligence: React.FC = () => {
   const oktan = db.getOktanEstimate();
   const ops = db.getOperations();
 
+  const analytics = useMemo(() => {
+    const today = new Date();
+    const activeOps = ops.filter(o => o.status === 'IN PROGRESS');
+    const completedOps = ops.filter(o => o.status === 'DONE');
+    const underOperate = ops.filter(o => o.status === 'UNDER OPERATE');
+    const holdOps = ops.filter(o => o.status === 'HOLD');
+    const cancelledOps = ops.filter(o => o.status === 'CANCEL');
+    const totalRevenue = completedOps.reduce((s, o) => s + (parseFloat(String(o.rate).replace(/,/g, '')) || 0) + (parseFloat(String(o.vat).replace(/,/g, '')) || 0), 0);
+    const activeRevenue = activeOps.reduce((s, o) => s + (parseFloat(String(o.rate).replace(/,/g, '')) || 0) + (parseFloat(String(o.vat).replace(/,/g, '')) || 0), 0);
+    const invoiced = db.getInvoices();
+    const unpaidInvoices = invoiced.filter(i => i.status === 'UNPAID');
+    const overdueInvoices = unpaidInvoices.filter(i => i.dueDate && new Date(i.dueDate) < today);
+    const outstanding = unpaidInvoices.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+
+    const duplicateMap: Record<string, Operation[]> = {};
+    activeOps.forEach(o => {
+      const key = o.gensetNumber?.trim().toUpperCase();
+      if (key) (duplicateMap[key] ||= []).push(o);
+    });
+    const duplicateUnits = Object.entries(duplicateMap).filter(([, rows]) => rows.length > 1);
+
+    const missingData = {
+      container: ops.filter(o => !o.containerNumber?.trim()).length,
+      genset: ops.filter(o => !o.gensetNumber?.trim()).length,
+      rate: ops.filter(o => !String(o.rate || '').trim()).length,
+      trucker: ops.filter(o => !o.trucker?.trim()).length,
+      clipOff: ops.filter(o => o.status === 'DONE' && !o.clipOffDate).length
+    };
+
+    const portStats = Object.entries(gasByPort).map(([port, fuel]) => {
+      const portActive = activeOps.filter(o => o.clipOnPort === port).length;
+      const portDone = completedOps.filter(o => o.clipOnPort === port).length;
+      const portStock = db.getStock().filter(g => g.location === port && g.status === 'IN_STOCK').length;
+      return { port, fuel, active: portActive, done: portDone, stock: portStock };
+    }).sort((a, b) => b.active - a.active);
+
+    const customerMap: Record<string, { customer: string; ops: number; done: number; revenue: number; outstanding: number }> = {};
+    ops.forEach(o => {
+      const key = o.customerName || 'UNKNOWN';
+      const row = customerMap[key] ||= { customer: key, ops: 0, done: 0, revenue: 0, outstanding: 0 };
+      row.ops++;
+      if (o.status === 'DONE') {
+        row.done++;
+        row.revenue += (parseFloat(String(o.rate).replace(/,/g, '')) || 0) + (parseFloat(String(o.vat).replace(/,/g, '')) || 0);
+      }
+    });
+    unpaidInvoices.forEach(i => {
+      const row = customerMap[i.customerName] ||= { customer: i.customerName, ops: 0, done: 0, revenue: 0, outstanding: 0 };
+      row.outstanding += Number(i.amount) || 0;
+    });
+
+    const maintenance = db.getMaintenanceLogs();
+    const dueMaintenance = db.getStock().filter(g => g.nextMaintenanceDue && new Date(g.nextMaintenanceDue) <= today && g.status !== 'RETIRED').length;
+    const maintenanceInProgress = maintenance.filter(m => m.status === 'IN_PROGRESS').length;
+    const pendingReservations = db.getReservations().filter(r => r.status === 'PENDING' || r.status === 'APPROVED').length;
+    const fleet = db.getStock();
+    const fleetTotal = fleet.length;
+    const fleetInStock = fleet.filter(g => g.status === 'IN_STOCK').length;
+    const fleetActive = fleet.filter(g => g.status === 'CLIPPED_ON').length;
+    const fleetMaintenance = fleet.filter(g => g.status === 'MAINTENANCE').length;
+    const fleetRetired = fleet.filter(g => g.status === 'RETIRED').length;
+
+    return {
+      activeOps, completedOps, underOperate, holdOps, cancelledOps,
+      totalRevenue, activeRevenue, unpaidInvoices, overdueInvoices, outstanding,
+      duplicateUnits, missingData, portStats,
+      topCustomers: Object.values(customerMap).sort((a, b) => b.revenue - a.revenue).slice(0, 8),
+      dueMaintenance, maintenanceInProgress, pendingReservations,
+      fleetTotal, fleetInStock, fleetActive, fleetMaintenance, fleetRetired,
+      completionRate: ops.length ? (completedOps.length / ops.length) * 100 : 0,
+      cancellationRate: ops.length ? (cancelledOps.length / ops.length) * 100 : 0,
+      averageRevenuePerDone: completedOps.length ? totalRevenue / completedOps.length : 0
+    };
+  }, [ops, gasByPort]);
+
   const expenseTotals = useMemo(() => ({
     procurement: db.getProcurements().reduce((s, p) => s + p.amount, 0),
     food: db.getFoodExpenses().reduce((s, f) => s + f.amount, 0),
@@ -57,7 +132,59 @@ const Intelligence: React.FC = () => {
     }, 1200);
 
     try {
-      const prompt = `You are the NILE FLEET Command Intel operational and financial auditor. LANGUAGE: ${isAr ? 'ARABIC ONLY' : 'ENGLISH'}. If Arabic is requested, your ENTIRE response must be professional Arabic: translate every heading, label, status, port name, entity name, section title, explanation, finding and recommendation. Do not leave English UI/business prose in the response. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Never invent or translate codes, identifiers or numeric data. Use ONLY the supplied data. Total operations: ${ops.length}. Active operations: ${ops.filter(o => o.status === 'IN PROGRESS').length}. Expense totals EGP: food=${expenseTotals.food}, transport=${expenseTotals.transport}, procurement=${expenseTotals.procurement}, rent=${expenseTotals.rent}, fuelBalance=${expenseTotals.fuel}. Gas by port: ${JSON.stringify(gasByPort)}. Gas by genset: ${JSON.stringify(gasByUnit)}. Oktan estimate: ${JSON.stringify(oktan)}. Full operations data: ${JSON.stringify(ops)}. Analyze ALL supplied data for anomalies, duplicate active genset assignments, port/stock/fuel/cost issues and practical actions. Clearly separate factual findings from recommendations. If a value is missing, say it is missing rather than guessing.`;
+      const prompt = `You are the NILE FLEET Command Intel operational, financial and fleet-control auditor. LANGUAGE: ${isAr ? 'ARABIC ONLY' : 'ENGLISH'}.
+If Arabic is requested, respond ENTIRELY in professional Arabic. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly.
+Use ONLY the supplied data. Never invent data.
+
+Analyze:
+1) Operations: active, done, under-operate, hold, cancelled, completion and cancellation rates.
+2) Genset control: fleet total, stock, clipped-on, maintenance, retired, duplicate IN PROGRESS assignments.
+3) Port performance: active operations, completed operations, stock position and fuel consumption by port.
+4) Revenue and billing: completed revenue, active exposure, unpaid/overdue invoices, average revenue per completed operation.
+5) Customer concentration: customers generating revenue and customers carrying outstanding balances.
+6) Maintenance: units due for service, maintenance in progress, maintenance history signals.
+7) Reservations pipeline: pending/approved demand that may require future gensets.
+8) Data quality: missing container, genset, rate, trucker and completed-operation clip-off dates.
+9) Fuel: total by port and genset, gas balance, estimated coverage; flag abnormal concentrations but do not invent thresholds.
+10) Management actions: identify concrete operational risks and what should be checked next.
+
+Return a compact management report with: CRITICAL ALERTS, FINANCIAL, FLEET, PORTS, CUSTOMERS, MAINTENANCE, DATA QUALITY, ACTIONS.
+Clearly separate facts from recommendations. ${JSON.stringify({
+  summary: {
+    totalOperations: ops.length,
+    active: analytics.activeOps.length,
+    done: analytics.completedOps.length,
+    underOperate: analytics.underOperate.length,
+    hold: analytics.holdOps.length,
+    cancelled: analytics.cancelledOps.length,
+    completionRate: analytics.completionRate,
+    cancellationRate: analytics.cancellationRate
+  },
+  fleet: {
+    total: analytics.fleetTotal,
+    inStock: analytics.fleetInStock,
+    clippedOn: analytics.fleetActive,
+    maintenance: analytics.fleetMaintenance,
+    retired: analytics.fleetRetired
+  },
+  revenue: {
+    completedRevenue: analytics.totalRevenue,
+    activeExposure: analytics.activeRevenue,
+    averagePerDone: analytics.averageRevenuePerDone,
+    outstandingInvoices: analytics.outstanding,
+    unpaidInvoiceCount: analytics.unpaidInvoices.length,
+    overdueInvoiceCount: analytics.overdueInvoices.length
+  },
+  duplicateActiveGensets: analytics.duplicateUnits,
+  ports: analytics.portStats,
+  topCustomers: analytics.topCustomers,
+  maintenance: { due: analytics.dueMaintenance, inProgress: analytics.maintenanceInProgress },
+  reservationsPendingOrApproved: analytics.pendingReservations,
+  dataQuality: analytics.missingData,
+  gasByPort,
+  gasByGenset: gasByUnit,
+  oktan
+})}`;`;
 
       const result = await runThinkingAudit(prompt);
       setAdvice(result || (isAr ? 'لم يتم العثور على بيانات تشغيلية كافية.' : 'No telemetry data resolved.'));
@@ -113,6 +240,61 @@ const Intelligence: React.FC = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
         
+        {/* Management Analytics */}
+        <div className="xl:col-span-12 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+          {[
+            { label: isAr ? 'إجمالي التشغيل' : 'OPERATIONS', value: ops.length, icon: '📋' },
+            { label: isAr ? 'نشط الآن' : 'ACTIVE NOW', value: analytics.activeOps.length, icon: '⚡' },
+            { label: isAr ? 'إنجاز' : 'COMPLETED', value: analytics.completedOps.length, icon: '✅' },
+            { label: isAr ? 'الأسطول' : 'FLEET', value: analytics.fleetTotal, icon: '🔧' },
+            { label: isAr ? 'متاح بالمخزون' : 'IN STOCK', value: analytics.fleetInStock, icon: '📦' },
+            { label: isAr ? 'فواتير متأخرة' : 'OVERDUE', value: analytics.overdueInvoices.length, icon: '⏰' },
+            { label: isAr ? 'صيانة مستحقة' : 'SERVICE DUE', value: analytics.dueMaintenance, icon: '🛠️' },
+            { label: isAr ? 'تعارضات نشطة' : 'ACTIVE DUPLICATES', value: analytics.duplicateUnits.length, icon: '🚨' }
+          ].map(card => (
+            <div key={card.label} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/5 p-4 shadow-lg">
+              <div className="flex justify-between items-start"><span className="text-lg">{card.icon}</span><span className="text-[8px] font-black text-slate-400 uppercase">{card.label}</span></div>
+              <div className="text-2xl font-black text-[#001F3F] dark:text-white mt-3">{card.value.toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="xl:col-span-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-6 border border-slate-100 dark:border-white/5 shadow-xl">
+            <h3 className="font-black text-[#001F3F] dark:text-white mb-5">{isAr ? 'مخاطر تحتاج مراجعة' : 'MANAGEMENT ALERTS'}</h3>
+            <div className="space-y-3 text-[10px] font-bold">
+              {analytics.duplicateUnits.length > 0 && <div className="p-3 rounded-xl bg-rose-500/10 text-rose-600">🚨 {isAr ? 'توجد تعيينات مزدوجة نشطة لنفس المولد' : 'Duplicate active genset assignments detected'}</div>}
+              {analytics.overdueInvoices.length > 0 && <div className="p-3 rounded-xl bg-amber-500/10 text-amber-600">💰 {analytics.overdueInvoices.length} {isAr ? 'فاتورة متأخرة عن السداد' : 'overdue invoices'}</div>}
+              {analytics.dueMaintenance > 0 && <div className="p-3 rounded-xl bg-orange-500/10 text-orange-600">🛠️ {analytics.dueMaintenance} {isAr ? 'وحدة مستحقة للصيانة' : 'gensets due for maintenance'}</div>}
+              {analytics.pendingReservations > 0 && <div className="p-3 rounded-xl bg-blue-500/10 text-blue-600">📅 {analytics.pendingReservations} {isAr ? 'حجز قيد الطلب/الموافقة' : 'pending/approved reservations'}</div>}
+              {Object.values(analytics.missingData).some(v => v > 0) && <div className="p-3 rounded-xl bg-slate-500/10 text-slate-600">🧹 {isAr ? 'يوجد نقص في بعض بيانات التشغيل' : 'Some operation records have missing fields'}</div>}
+              {analytics.duplicateUnits.length === 0 && analytics.overdueInvoices.length === 0 && analytics.dueMaintenance === 0 && analytics.pendingReservations === 0 && !Object.values(analytics.missingData).some(v => v > 0) && <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-600">✓ {isAr ? 'لا توجد تنبيهات من البيانات الحالية' : 'No current management alerts from available data'}</div>}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-6 border border-slate-100 dark:border-white/5 shadow-xl">
+            <h3 className="font-black text-[#001F3F] dark:text-white mb-5">{isAr ? 'الحالة المالية' : 'FINANCIAL SNAPSHOT'}</h3>
+            <div className="space-y-4 text-xs">
+              <div className="flex justify-between"><span className="text-slate-400">{isAr ? 'إيراد العمليات المكتملة' : 'Completed revenue'}</span><b>EGP {analytics.totalRevenue.toLocaleString()}</b></div>
+              <div className="flex justify-between"><span className="text-slate-400">{isAr ? 'قيمة التشغيل النشط' : 'Active exposure'}</span><b>EGP {analytics.activeRevenue.toLocaleString()}</b></div>
+              <div className="flex justify-between"><span className="text-slate-400">{isAr ? 'المستحق من الفواتير' : 'Invoice outstanding'}</span><b className="text-amber-600">EGP {analytics.outstanding.toLocaleString()}</b></div>
+              <div className="flex justify-between"><span className="text-slate-400">{isAr ? 'متوسط إيراد العملية المكتملة' : 'Avg. completed operation'}</span><b>EGP {Math.round(analytics.averageRevenuePerDone).toLocaleString()}</b></div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-6 border border-slate-100 dark:border-white/5 shadow-xl">
+            <h3 className="font-black text-[#001F3F] dark:text-white mb-5">{isAr ? 'جودة البيانات' : 'DATA QUALITY'}</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {Object.entries(analytics.missingData).map(([key, value]) => (
+                <div key={key} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950">
+                  <div className="text-[8px] font-black text-slate-400 uppercase">{key}</div>
+                  <div className={`text-lg font-black ${value ? 'text-rose-600' : 'text-emerald-600'}`}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* Telemetry Display */}
         <div className="xl:col-span-8 space-y-8">
           {activeView === 'PORT' && (
