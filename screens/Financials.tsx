@@ -248,17 +248,26 @@ const Financials: React.FC = () => {
     return { totalExposure, unbilledTotal, unpaidInvoicesTotal, userInvoices };
   }, [selectedUser, operations, invoices]);
 
-  const handleReceivePayment = () => {
+  const handleReceivePayment = async () => {
     if (!selectedUser || !paymentAmount) return;
-    db.addPayment({
+    const amount = parseFloat(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert(isAr ? 'أدخل مبلغاً صحيحاً أكبر من صفر.' : 'Enter a valid payment amount greater than zero.');
+      return;
+    }
+    const saved = await db.addPayment({
       id: `PAY-${Date.now()}`,
       customerId: selectedUser.id,
       customerName: selectedUser.companyName || selectedUser.name,
-      amount: parseFloat(paymentAmount),
+      amount,
       date: new Date().toISOString().split('T')[0],
       reference: paymentRef || 'Bulk Deposit',
       type: 'CASH'
     }, autoSettleSelection ? Array.from(selectedInvIds) : []);
+    if (!saved) {
+      alert(isAr ? `فشل حفظ الدفعة: ${db.getLastDbError() || ''}` : `Payment save failed: ${db.getLastDbError() || ''}`);
+      return;
+    }
     setPaymentAmount(''); setPaymentRef(''); setSelectedInvIds(new Set());
     setShowPaymentModal(false); refreshData();
   };
