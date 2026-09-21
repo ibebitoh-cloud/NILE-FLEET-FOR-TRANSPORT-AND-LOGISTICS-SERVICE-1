@@ -5,12 +5,11 @@ import { LanguageContext, ThemeContext } from '../App';
 import { translations } from '../translations';
 import { Operation } from '../types';
 import { runThinkingAudit, getSafeApiKey } from '../services/aiService';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
 
 const Intelligence: React.FC = () => {
   const { lang } = useContext(LanguageContext);
   const { theme } = useContext(ThemeContext);
-  const isDark = theme === 'black' || theme === 'midnight';
+  const isDark = ['black', 'midnight', 'nile', 'carbon', 'royal', 'crimson'].includes(theme);
   const t = translations[lang];
   const isAr = lang === 'ar';
   
@@ -19,17 +18,7 @@ const Intelligence: React.FC = () => {
   const [thinkingPhase, setThinkingPhase] = useState(0);
   const [advice, setAdvice] = useState<string>('');
   const [linkError, setLinkError] = useState(false);
-  const [apiKeySet, setApiKeySet] = useState(!!getSafeApiKey());
-
-  useEffect(() => {
-    const checkStatus = async () => {
-      if (window.aistudio?.hasSelectedApiKey) {
-        const has = await window.aistudio.hasSelectedApiKey();
-        setApiKeySet(has || !!process.env.API_KEY);
-      }
-    };
-    checkStatus();
-  }, []);
+  const apiKeySet = true; // DALI 1.0 uses the server-side Cloudflare AI binding; no browser key is required.
 
   const phases = isAr 
     ? ["مسح قياسات الميناء...", "عزل إشارات التكلفة...", "تحليل سجلات الأسطول...", "توليد الرؤى الاستراتيجية..."]
@@ -113,7 +102,7 @@ const Intelligence: React.FC = () => {
       cancellationRate: ops.length ? (cancelledOps.length / ops.length) * 100 : 0,
       averageRevenuePerDone: completedOps.length ? totalRevenue / completedOps.length : 0
     };
-  }, [ops, gasByPort]);
+  }, [ops, gasByPort, gasByUnit]);
 
   const expenseTotals = useMemo(() => ({
     procurement: db.getProcurements().reduce((s, p) => s + p.amount, 0),
@@ -203,252 +192,409 @@ ${JSON.stringify(viewData)}`;
     </button>
   );
 
+  const activeConfig = {
+    PORT: {
+      icon: '⚓',
+      en: 'PORT CONTROL',
+      ar: 'تحكم الموانئ',
+      subtitleEn: 'Live activity, stock position and fuel by port',
+      subtitleAr: 'التشغيل والمخزون والوقود حسب كل ميناء'
+    },
+    UNIT: {
+      icon: '⚙️',
+      en: 'FLEET ASSETS',
+      ar: 'أصول الأسطول',
+      subtitleEn: 'Genset availability, utilization and conflicts',
+      subtitleAr: 'توافر المولدات والتشغيل والتعارضات'
+    },
+    SUPPLIER: {
+      icon: '⛽',
+      en: 'FUEL LEDGER',
+      ar: 'سجل الوقود',
+      subtitleEn: 'Fuel consumption, balance and coverage',
+      subtitleAr: 'الاستهلاك والرصيد والتغطية'
+    },
+    COSTS: {
+      icon: '📋',
+      en: 'OPERATIONS',
+      ar: 'العمليات',
+      subtitleEn: 'Status, throughput, values and data quality',
+      subtitleAr: 'الحالات والحجم والقيم وجودة البيانات'
+    }
+  }[activeView];
+
+  const money = (n: number) => `EGP ${Math.round(Number(n) || 0).toLocaleString()}`;
+  const pct = (n: number) => `${Math.round(Number(n) || 0)}%`;
+  const safeFuel = (n: any) => Number(n) || 0;
+
+  const kpis = activeView === 'PORT'
+    ? [
+        { label: isAr ? 'الموانئ النشطة' : 'ACTIVE PORTS', value: analytics.portStats.filter(p => p.active > 0).length, icon: '⚓' },
+        { label: isAr ? 'تشغيل نشط' : 'ACTIVE OPS', value: analytics.activeOps.length, icon: '⚡' },
+        { label: isAr ? 'مكتمل' : 'COMPLETED', value: analytics.completedOps.length, icon: '✓' },
+        { label: isAr ? 'وقود مسجل' : 'FUEL LOGGED', value: `${Object.values(gasByPort).reduce((s, v) => s + safeFuel(v), 0).toLocaleString()} L`, icon: '⛽' }
+      ]
+    : activeView === 'UNIT'
+    ? [
+        { label: isAr ? 'إجمالي المولدات' : 'TOTAL GENSET', value: analytics.fleetTotal, icon: '⚙️' },
+        { label: isAr ? 'في المخزون' : 'IN STOCK', value: analytics.fleetInStock, icon: '📦' },
+        { label: isAr ? 'على التشغيل' : 'CLIPPED ON', value: analytics.fleetActive, icon: '🔌' },
+        { label: isAr ? 'تعارضات نشطة' : 'ACTIVE CONFLICTS', value: analytics.duplicateUnits.length, icon: '🚨' }
+      ]
+    : activeView === 'SUPPLIER'
+    ? [
+        { label: isAr ? 'رصيد الوقود' : 'FUEL BALANCE', value: money(oktan.balance), icon: '⛽' },
+        { label: isAr ? 'التغطية' : 'COVERAGE', value: `${oktan.daysRemaining || 0} ${isAr ? 'يوم' : 'days'}`, icon: '📅' },
+        { label: isAr ? 'استهلاك مسجل' : 'LOGGED CONSUMPTION', value: `${Object.values(gasByPort).reduce((s, v) => s + safeFuel(v), 0).toLocaleString()} L`, icon: '🔥' },
+        { label: isAr ? 'المولدات المسجلة' : 'UNITS WITH FUEL', value: gasByUnit.length, icon: '⚙️' }
+      ]
+    : [
+        { label: isAr ? 'إجمالي العمليات' : 'TOTAL OPS', value: ops.length, icon: '📋' },
+        { label: isAr ? 'نشط الآن' : 'ACTIVE NOW', value: analytics.activeOps.length, icon: '⚡' },
+        { label: isAr ? 'نسبة الإنجاز' : 'COMPLETION', value: pct(analytics.completionRate), icon: '✓' },
+        { label: isAr ? 'بيانات ناقصة' : 'MISSING DATA', value: Object.values(analytics.missingData).reduce((s, v) => s + v, 0), icon: '🧹' }
+      ];
+
+  const portRows = analytics.portStats;
+  const unitRows = [...gasByUnit].sort((a, b) => safeFuel(b.gas) - safeFuel(a.gas)).slice(0, 20);
+  const fuelRows = [...gasByUnit].sort((a, b) => safeFuel(b.gas) - safeFuel(a.gas)).slice(0, 12);
+
+  const navLabel = (id: typeof activeView) => {
+    const labels = {
+      PORT: isAr ? 'الموانئ' : 'PORTS',
+      UNIT: isAr ? 'أصول الأسطول' : 'FLEET ASSETS',
+      SUPPLIER: isAr ? 'سجل الوقود' : 'FUEL LEDGER',
+      COSTS: isAr ? 'العمليات' : 'OPERATIONS'
+    };
+    return labels[id];
+  };
+
+  const cardClass = isDark
+    ? 'bg-slate-900/80 border-white/10'
+    : 'bg-white border-slate-200';
+  const mutedClass = isDark ? 'text-slate-400' : 'text-slate-500';
+  const primaryClass = isDark ? 'text-white' : 'text-[#001F3F]';
+
   return (
-    <div className={`min-h-screen space-y-8 animate-in fade-in duration-700 pb-32 text-start ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
-      
-      {/* Cinematic HUD Header */}
-      <div className="bg-[#001F3F] p-8 rounded-b-[3rem] border-x border-b border-white/10 shadow-2xl relative overflow-hidden -mt-8 mx-[-2rem]">
-         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
-         <div className="flex flex-col lg:flex-row justify-between items-center gap-8 relative z-10">
-            <div className="flex items-center gap-6">
-               <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-2xl transition-all duration-500 ${apiKeySet ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-rose-500/20 text-rose-400 border border-rose-500/50 animate-pulse'}`}>
-                  {apiKeySet ? '🛰️' : '📡'}
-               </div>
-               <div>
-                  <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase leading-none">{isAr ? 'ذكاء القيادة' : 'COMMAND INTELLIGENCE'}</h1>
-                  <div className="flex items-center gap-3 mt-2">
-                     <span className={`w-1.5 h-1.5 rounded-full ${apiKeySet ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'}`}></span>
-                     <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.4em]">{isAr ? `اتصال المحرك: ${apiKeySet ? 'مستقر' : 'منقطع'}` : `Node Connectivity: ${apiKeySet ? 'STABLE' : 'LINK LOST'}`}</p>
-                  </div>
-               </div>
-            </div>
-
-            <div className="flex bg-black/40 rounded-2xl border border-white/10 overflow-hidden">
-               <NavButton id="PORT" label={isAr ? "الموانئ" : "PORTS"} />
-               <NavButton id="UNIT" label={isAr ? "أصول الأسطول" : "FLEET ASSETS"} />
-               <NavButton id="SUPPLIER" label={isAr ? "سجل الوقود" : "FUEL LEDGER"} />
-               <NavButton id="COSTS" label={isAr ? "العمليات" : "OPERATIONS"} />
-            </div>
-         </div>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        
-        {/* Management Analytics */}
-        <div className="xl:col-span-12 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-          {[
-            { label: isAr ? 'إجمالي التشغيل' : 'OPERATIONS', value: ops.length, icon: '📋' },
-            { label: isAr ? 'نشط الآن' : 'ACTIVE NOW', value: analytics.activeOps.length, icon: '⚡' },
-            { label: isAr ? 'إنجاز' : 'COMPLETED', value: analytics.completedOps.length, icon: '✅' },
-            { label: isAr ? 'الأسطول' : 'FLEET', value: analytics.fleetTotal, icon: '🔧' },
-            { label: isAr ? 'متاح بالمخزون' : 'IN STOCK', value: analytics.fleetInStock, icon: '📦' },
-            { label: isAr ? 'فواتير متأخرة' : 'OVERDUE', value: analytics.overdueInvoices.length, icon: '⏰' },
-            { label: isAr ? 'صيانة مستحقة' : 'SERVICE DUE', value: analytics.dueMaintenance, icon: '🛠️' },
-            { label: isAr ? 'تعارضات نشطة' : 'ACTIVE DUPLICATES', value: analytics.duplicateUnits.length, icon: '🚨' }
-          ].map(card => (
-            <div key={card.label} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/5 p-4 shadow-lg">
-              <div className="flex justify-between items-start"><span className="text-lg">{card.icon}</span><span className="text-[8px] font-black text-slate-400 uppercase">{card.label}</span></div>
-              <div className="text-2xl font-black text-[#001F3F] dark:text-white mt-3">{card.value.toLocaleString()}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="xl:col-span-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-6 border border-slate-100 dark:border-white/5 shadow-xl">
-            <h3 className="font-black text-[#001F3F] dark:text-white mb-5">{isAr ? 'مخاطر تحتاج مراجعة' : 'MANAGEMENT ALERTS'}</h3>
-            <div className="space-y-3 text-[10px] font-bold">
-              {analytics.duplicateUnits.length > 0 && <div className="p-3 rounded-xl bg-rose-500/10 text-rose-600">🚨 {isAr ? 'توجد تعيينات مزدوجة نشطة لنفس المولد' : 'Duplicate active genset assignments detected'}</div>}
-              {analytics.overdueInvoices.length > 0 && <div className="p-3 rounded-xl bg-amber-500/10 text-amber-600">💰 {analytics.overdueInvoices.length} {isAr ? 'فاتورة متأخرة عن السداد' : 'overdue invoices'}</div>}
-              {analytics.dueMaintenance > 0 && <div className="p-3 rounded-xl bg-orange-500/10 text-orange-600">🛠️ {analytics.dueMaintenance} {isAr ? 'وحدة مستحقة للصيانة' : 'gensets due for maintenance'}</div>}
-              {analytics.pendingReservations > 0 && <div className="p-3 rounded-xl bg-blue-500/10 text-blue-600">📅 {analytics.pendingReservations} {isAr ? 'حجز قيد الطلب/الموافقة' : 'pending/approved reservations'}</div>}
-              {Object.values(analytics.missingData).some(v => v > 0) && <div className="p-3 rounded-xl bg-slate-500/10 text-slate-600">🧹 {isAr ? 'يوجد نقص في بعض بيانات التشغيل' : 'Some operation records have missing fields'}</div>}
-              {analytics.duplicateUnits.length === 0 && analytics.overdueInvoices.length === 0 && analytics.dueMaintenance === 0 && analytics.pendingReservations === 0 && !Object.values(analytics.missingData).some(v => v > 0) && <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-600">✓ {isAr ? 'لا توجد تنبيهات من البيانات الحالية' : 'No current management alerts from available data'}</div>}
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-6 border border-slate-100 dark:border-white/5 shadow-xl">
-            <h3 className="font-black text-[#001F3F] dark:text-white mb-5">{isAr ? 'الحالة المالية' : 'FINANCIAL SNAPSHOT'}</h3>
-            <div className="space-y-4 text-xs">
-              <div className="flex justify-between"><span className="text-slate-400">{isAr ? 'إيراد العمليات المكتملة' : 'Completed revenue'}</span><b>EGP {analytics.totalRevenue.toLocaleString()}</b></div>
-              <div className="flex justify-between"><span className="text-slate-400">{isAr ? 'قيمة التشغيل النشط' : 'Active exposure'}</span><b>EGP {analytics.activeRevenue.toLocaleString()}</b></div>
-              <div className="flex justify-between"><span className="text-slate-400">{isAr ? 'المستحق من الفواتير' : 'Invoice outstanding'}</span><b className="text-amber-600">EGP {analytics.outstanding.toLocaleString()}</b></div>
-              <div className="flex justify-between"><span className="text-slate-400">{isAr ? 'متوسط إيراد العملية المكتملة' : 'Avg. completed operation'}</span><b>EGP {Math.round(analytics.averageRevenuePerDone).toLocaleString()}</b></div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-6 border border-slate-100 dark:border-white/5 shadow-xl">
-            <h3 className="font-black text-[#001F3F] dark:text-white mb-5">{isAr ? 'جودة البيانات' : 'DATA QUALITY'}</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {Object.entries(analytics.missingData).map(([key, value]) => (
-                <div key={key} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950">
-                  <div className="text-[8px] font-black text-slate-400 uppercase">{key}</div>
-                  <div className={`text-lg font-black ${value ? 'text-rose-600' : 'text-emerald-600'}`}>{value}</div>
+    <div className={`min-h-screen pb-32 text-start ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
+      <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#001F3F] shadow-2xl">
+        <div className="absolute -top-28 -right-28 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl"></div>
+        <div className="absolute -bottom-32 -left-24 h-72 w-72 rounded-full bg-[#C2A378]/10 blur-3xl"></div>
+        <div className="relative z-10 p-6 md:p-8">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-400/10 text-2xl">
+                🛰️
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl md:text-3xl font-black italic tracking-tight text-white uppercase">
+                    {isAr ? 'ذكاء الأسطول' : 'FLEET INTELLIGENCE'}
+                  </h1>
+                  <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-emerald-300">
+                    DALI 1.0
+                  </span>
                 </div>
+                <div className="mt-2 flex items-center gap-2 text-[8px] font-black uppercase tracking-[0.25em] text-emerald-300">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+                  {isAr ? 'بيانات مباشرة • جاهز للتحليل' : 'LIVE DATA • READY FOR ANALYSIS'}
+                </div>
+                <p className="mt-3 max-w-2xl text-[10px] font-bold leading-relaxed text-slate-300">
+                  {isAr ? activeConfig.subtitleAr : activeConfig.subtitleEn}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 rounded-2xl border border-white/10 bg-black/20 p-1">
+              {(['PORT', 'UNIT', 'SUPPLIER', 'COSTS'] as const).map(id => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => { setActiveView(id); setAdvice(''); setLinkError(false); }}
+                  className={`min-w-[90px] rounded-xl px-3 py-3 transition-all ${activeView === id ? 'bg-[#C2A378] text-[#001F3F] shadow-lg' : 'text-slate-300 hover:bg-white/10'}`}
+                >
+                  <div className="text-sm">{id === activeView ? activeConfig.icon : ({PORT:'⚓',UNIT:'⚙️',SUPPLIER:'⛽',COSTS:'📋'} as any)[id]}</div>
+                  <div className="mt-1 text-[8px] font-black uppercase tracking-widest">{navLabel(id)}</div>
+                </button>
               ))}
             </div>
           </div>
         </div>
+      </section>
 
-        {/* Telemetry Display */}
-        <div className="xl:col-span-8 space-y-8">
+      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpis.map(k => (
+          <div key={k.label} className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-xl">{k.icon}</span>
+              <span className={`text-[8px] font-black uppercase tracking-widest text-end ${mutedClass}`}>{k.label}</span>
+            </div>
+            <div className={`mt-3 text-xl md:text-2xl font-black ${primaryClass}`}>{k.value}</div>
+          </div>
+        ))}
+      </section>
+
+      <section className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-5">
+        <div className="xl:col-span-8 space-y-5">
           {activeView === 'PORT' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {Object.entries(gasByPort).map(([port, fuel]) => (
-                <div key={port} className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-xl relative group overflow-hidden">
-                   <div className="absolute top-0 right-0 p-4 opacity-5 italic font-black text-6xl select-none group-hover:opacity-10 transition-opacity">{port}</div>
-                   <div className="relative z-10">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{isAr ? 'المحطة' : 'Terminal Node'}</p>
-                      <h4 className="text-2xl font-black text-[#001F3F] dark:text-white italic tracking-tighter">{port} HUB</h4>
-                      <div className="mt-8 space-y-2">
-                         <div className="flex justify-between items-end text-[10px] font-black uppercase text-blue-600">
-                            <span>{isAr ? 'معدل استهلاك الوقود' : 'Fuel Burn Rate'}</span>
-                            <span>{fuel} Liters</span>
-                         </div>
-                         <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-600 transition-all duration-1000" style={{ width: `${Math.min(100, (fuel/500)*100)}%` }}></div>
-                         </div>
-                      </div>
-                   </div>
+            <>
+              <div className={`rounded-[2rem] border p-5 md:p-6 shadow-sm ${cardClass}`}>
+                <div className="mb-5 flex items-end justify-between gap-3">
+                  <div>
+                    <h2 className={`text-lg font-black uppercase tracking-tight ${primaryClass}`}>{isAr ? 'خريطة الموانئ الحية' : 'LIVE PORT MATRIX'}</h2>
+                    <p className={`mt-1 text-[9px] font-bold uppercase tracking-widest ${mutedClass}`}>{isAr ? 'تشغيل • مكتمل • مخزون • وقود' : 'ACTIVE • COMPLETED • STOCK • FUEL'}</p>
+                  </div>
+                  <span className="rounded-full bg-blue-500/10 px-3 py-1 text-[9px] font-black text-blue-500">{portRows.length} {isAr ? 'موانئ' : 'PORTS'}</span>
                 </div>
-              ))}
-            </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[620px] text-[10px]">
+                    <thead className={`border-b ${isDark ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
+                      <tr>
+                        <th className="px-3 py-3 text-start font-black uppercase">{isAr ? 'الميناء' : 'PORT'}</th>
+                        <th className="px-3 py-3 text-end font-black uppercase">{isAr ? 'نشط' : 'ACTIVE'}</th>
+                        <th className="px-3 py-3 text-end font-black uppercase">{isAr ? 'مكتمل' : 'DONE'}</th>
+                        <th className="px-3 py-3 text-end font-black uppercase">{isAr ? 'المخزون' : 'STOCK'}</th>
+                        <th className="px-3 py-3 text-end font-black uppercase">{isAr ? 'الوقود' : 'FUEL'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {portRows.map(row => (
+                        <tr key={row.port} className={`border-b ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
+                          <td className={`px-3 py-3 font-black ${primaryClass}`}>{row.port}</td>
+                          <td className="px-3 py-3 text-end font-black text-blue-500">{row.active}</td>
+                          <td className="px-3 py-3 text-end font-black text-emerald-500">{row.done}</td>
+                          <td className="px-3 py-3 text-end font-black text-amber-500">{row.stock}</td>
+                          <td className="px-3 py-3 text-end font-black text-[#C2A378]">{safeFuel(row.fuel).toLocaleString()} L</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className={`rounded-[2rem] border p-5 shadow-sm ${cardClass}`}>
+                <h3 className={`mb-4 text-sm font-black uppercase ${primaryClass}`}>{isAr ? 'تنبيهات الميناء' : 'PORT SIGNALS'}</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {portRows.map(row => (
+                    <div key={row.port} className={`rounded-xl border p-3 ${isDark ? 'border-white/5 bg-black/20' : 'border-slate-100 bg-slate-50'}`}>
+                      <div className="flex justify-between gap-3">
+                        <span className={`font-black ${primaryClass}`}>{row.port}</span>
+                        <span className="text-[9px] font-black text-blue-500">{row.active} {isAr ? 'نشط' : 'ACTIVE'}</span>
+                      </div>
+                      <div className={`mt-2 text-[9px] font-bold ${mutedClass}`}>
+                        {row.stock === 0 ? (isAr ? 'لا يوجد مخزون متاح حالياً' : 'No genset stock currently available') :
+                         row.active === 0 ? (isAr ? 'لا توجد عمليات نشطة حالياً' : 'No active operations currently') :
+                         (isAr ? 'تشغيل نشط متاح للميناء' : 'Active operation load is present')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
 
           {activeView === 'UNIT' && (
-            <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-2xl">
-               <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-8">{isAr ? 'توزيع تشغيل الأصول' : 'ASSET UTILIZATION'}</h3>
-               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  {gasByUnit.slice(0, 16).map(u => (
-                    <div key={u.unit} className="p-4 bg-slate-50 dark:bg-slate-950 border border-transparent hover:border-[#C2A378] rounded-2xl transition-all">
-                       <p className="text-[8px] font-black text-slate-400 uppercase mb-1">{u.unit}</p>
-                       <p className="text-sm font-black text-blue-600">{u.gas} L</p>
+            <>
+              <div className={`rounded-[2rem] border p-5 md:p-6 shadow-sm ${cardClass}`}>
+                <div className="flex items-center justify-between gap-3 mb-5">
+                  <div>
+                    <h2 className={`text-lg font-black uppercase ${primaryClass}`}>{isAr ? 'تشغيل أصول الأسطول' : 'FLEET ASSET CONTROL'}</h2>
+                    <p className={`mt-1 text-[9px] font-bold uppercase tracking-widest ${mutedClass}`}>{isAr ? 'حسب استهلاك الوقود المسجل' : 'SORTED BY LOGGED FUEL USAGE'}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    ['IN STOCK', analytics.fleetInStock, '📦'],
+                    ['CLIPPED ON', analytics.fleetActive, '🔌'],
+                    ['MAINTENANCE', analytics.fleetMaintenance, '🛠️'],
+                    ['RETIRED', analytics.fleetRetired, '⛔']
+                  ].map(([label, value, icon]) => (
+                    <div key={String(label)} className={`rounded-xl p-3 ${isDark ? 'bg-black/20' : 'bg-slate-50'}`}>
+                      <div className="text-sm">{icon}</div>
+                      <div className={`mt-2 text-xl font-black ${primaryClass}`}>{value}</div>
+                      <div className={`text-[8px] font-black uppercase tracking-widest ${mutedClass}`}>{isAr ? ({'IN STOCK':'في المخزون','CLIPPED ON':'على التشغيل','MAINTENANCE':'صيانة','RETIRED':'متقاعد'} as any)[label] : label}</div>
                     </div>
                   ))}
-               </div>
-            </div>
+                </div>
+              </div>
+              <div className={`rounded-[2rem] border p-5 shadow-sm ${cardClass}`}>
+                <h3 className={`mb-4 text-sm font-black uppercase ${primaryClass}`}>{isAr ? 'أعلى استهلاك حسب المولد' : 'TOP GENSET FUEL USAGE'}</h3>
+                <div className="space-y-2">
+                  {unitRows.length === 0 && <p className={`text-[10px] font-bold ${mutedClass}`}>{isAr ? 'لا توجد بيانات وقود مسجلة.' : 'No fuel data recorded.'}</p>}
+                  {unitRows.map((u, i) => (
+                    <div key={u.unit || i} className={`flex items-center gap-3 rounded-xl border p-3 ${isDark ? 'border-white/5 bg-black/20' : 'border-slate-100 bg-slate-50'}`}>
+                      <span className="w-7 text-[9px] font-black text-slate-400">#{i + 1}</span>
+                      <span className={`flex-1 font-black ${primaryClass}`}>{u.unit}</span>
+                      <span className="font-black text-[#C2A378]">{safeFuel(u.gas).toLocaleString()} L</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {analytics.duplicateUnits.length > 0 && (
+                <div className="rounded-[2rem] border border-rose-500/30 bg-rose-500/5 p-5">
+                  <h3 className="text-sm font-black uppercase text-rose-500">{isAr ? 'تعارضات التعيين النشطة' : 'ACTIVE ASSIGNMENT CONFLICTS'}</h3>
+                  <div className="mt-3 space-y-2">
+                    {analytics.duplicateUnits.map(([unit, rows]) => (
+                      <div key={unit} className="rounded-xl border border-rose-500/20 p-3 text-[9px]">
+                        <div className="font-black text-rose-500">{unit} • {rows.length} {isAr ? 'عمليات نشطة' : 'ACTIVE OPS'}</div>
+                        <div className={`mt-1 font-bold ${mutedClass}`}>{rows.map(r => r.bookingNumber).filter(Boolean).join(' • ')}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {activeView === 'SUPPLIER' && (
-            <div className="bg-[#001F3F] p-12 rounded-[4rem] text-white relative overflow-hidden border border-white/10 shadow-2xl">
-               <div className="absolute bottom-0 right-0 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl -mb-40 -mr-40"></div>
-               <div className="relative z-10">
-                  <h3 className="text-4xl font-black text-[#C2A378] uppercase italic tracking-tighter mb-12">{isAr ? 'مصفوفة لوجستيات الوقود' : 'FUEL LOGISTICS MATRIX'}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                     <div className="space-y-6">
-                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">{isAr ? 'رصيد السجل' : 'LEDGER BALANCE'}</span><span className="text-2xl font-black">EGP {oktan.balance.toLocaleString()}</span></div>
-                        <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-[#C2A378]" style={{width: '65%'}}></div></div>
-                     </div>
-                     <div className="space-y-6">
-                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">{isAr ? 'حد استهلاك الوقود' : 'FUEL COVERAGE'}</span><span className="text-2xl font-black">{oktan.daysRemaining} {isAr ? 'دورات' : 'Cycles'}</span></div>
-                        <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{width: '80%'}}></div></div>
-                     </div>
+            <>
+              <div className={`rounded-[2rem] border p-5 md:p-6 shadow-sm ${cardClass}`}>
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h2 className={`text-lg font-black uppercase ${primaryClass}`}>{isAr ? 'مراقبة الوقود' : 'FUEL CONTROL BOARD'}</h2>
+                    <p className={`mt-1 text-[9px] font-bold uppercase tracking-widest ${mutedClass}`}>{isAr ? 'الاستهلاك الفعلي المسجل من السجلات' : 'ACTUAL LOGGED CONSUMPTION'}</p>
                   </div>
-               </div>
-            </div>
+                  <span className="text-2xl">⛽</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {Object.entries(gasByPort).map(([port, fuel]) => {
+                    const total = Math.max(...Object.values(gasByPort).map(safeFuel), 1);
+                    const width = Math.min(100, (safeFuel(fuel) / total) * 100);
+                    return (
+                      <div key={port} className={`rounded-2xl border p-4 ${isDark ? 'border-white/5 bg-black/20' : 'border-slate-100 bg-slate-50'}`}>
+                        <div className="flex justify-between gap-3 text-[9px] font-black uppercase">
+                          <span className={primaryClass}>{port}</span>
+                          <span className="text-[#C2A378]">{safeFuel(fuel).toLocaleString()} L</span>
+                        </div>
+                        <div className={`mt-3 h-2 overflow-hidden rounded-full ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
+                          <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${width}%` }}></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className={`rounded-[2rem] border p-5 shadow-sm ${cardClass}`}>
+                <h3 className={`text-sm font-black uppercase ${primaryClass}`}>{isAr ? 'أعلى استهلاك للمولدات' : 'TOP UNIT CONSUMPTION'}</h3>
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {fuelRows.map(u => (
+                    <div key={u.unit} className={`flex justify-between rounded-xl p-3 ${isDark ? 'bg-black/20' : 'bg-slate-50'}`}>
+                      <span className={`font-black text-[10px] ${primaryClass}`}>{u.unit}</span>
+                      <span className="font-black text-[10px] text-[#C2A378]">{safeFuel(u.gas).toLocaleString()} L</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
 
           {activeView === 'COSTS' && (
-             <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-2xl">
-                <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-10">{isAr ? 'توزيع المصروفات' : 'EXPENSE DISTRIBUTION'}</h3>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                   <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                         <PieChart>
-                            <Pie data={[
-                               { name: 'Personnel', value: expenseTotals.food, color: '#3b82f6' },
-                               { name: 'Transport', value: expenseTotals.transport, color: '#10b981' },
-                               { name: 'Infrastructure', value: expenseTotals.rent, color: '#f59e0b' }
-                            ]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={10} dataKey="value">
-                               {(entry, idx) => <Cell key={idx} fill={(entry as any).color} stroke="none" />}
-                            </Pie>
-                            <Tooltip contentStyle={{ borderRadius: '20px', background: '#001F3F', border: 'none', color: '#fff' }} />
-                         </PieChart>
-                      </ResponsiveContainer>
-                   </div>
-                   <div className="space-y-4">
-                      {[
-                        { label: 'بدلات الموظفين', value: expenseTotals.food, color: 'bg-blue-500' },
-                        { label: 'أسطول النقل', value: expenseTotals.transport, color: 'bg-emerald-500' },
-                        { label: 'دخول الميناء', value: expenseTotals.rent, color: 'bg-amber-500' }
-                      ].map(item => (
-                        <div key={item.label} className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl">
-                           <div className="flex items-center gap-3">
-                              <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
-                              <span className="text-[10px] font-black uppercase text-slate-500">{item.label}</span>
-                           </div>
-                           <span className="font-black text-xs">EGP {item.value.toLocaleString()}</span>
-                        </div>
-                      ))}
-                   </div>
+            <>
+              <div className={`rounded-[2rem] border p-5 md:p-6 shadow-sm ${cardClass}`}>
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h2 className={`text-lg font-black uppercase ${primaryClass}`}>{isAr ? 'لوحة العمليات' : 'OPERATIONS CONTROL BOARD'}</h2>
+                    <p className={`mt-1 text-[9px] font-bold uppercase tracking-widest ${mutedClass}`}>{isAr ? 'الحجم والحالات والقيمة وجودة البيانات' : 'VOLUME • STATUS • VALUE • DATA QUALITY'}</p>
+                  </div>
+                  <span className="text-2xl">📋</span>
                 </div>
-             </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    [isAr ? 'تحت التشغيل' : 'UNDER OPERATE', analytics.underOperate.length],
+                    [isAr ? 'قيد التنفيذ' : 'IN PROGRESS', analytics.activeOps.length],
+                    [isAr ? 'مكتمل' : 'DONE', analytics.completedOps.length],
+                    [isAr ? 'ملغى' : 'CANCEL', analytics.cancelledOps.length]
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className={`rounded-xl p-4 text-center ${isDark ? 'bg-black/20' : 'bg-slate-50'}`}>
+                      <div className={`text-2xl font-black ${primaryClass}`}>{value}</div>
+                      <div className={`mt-1 text-[8px] font-black uppercase ${mutedClass}`}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className={`rounded-xl border p-4 ${isDark ? 'border-white/5' : 'border-slate-100'}`}><span className={`text-[8px] font-black uppercase ${mutedClass}`}>{isAr ? 'إيراد مكتمل' : 'COMPLETED REVENUE'}</span><div className={`mt-2 text-lg font-black ${primaryClass}`}>{money(analytics.totalRevenue)}</div></div>
+                  <div className={`rounded-xl border p-4 ${isDark ? 'border-white/5' : 'border-slate-100'}`}><span className={`text-[8px] font-black uppercase ${mutedClass}`}>{isAr ? 'قيمة نشطة' : 'ACTIVE EXPOSURE'}</span><div className={`mt-2 text-lg font-black ${primaryClass}`}>{money(analytics.activeRevenue)}</div></div>
+                  <div className={`rounded-xl border p-4 ${isDark ? 'border-white/5' : 'border-slate-100'}`}><span className={`text-[8px] font-black uppercase ${mutedClass}`}>{isAr ? 'المستحق بالفواتير' : 'INVOICE OUTSTANDING'}</span><div className="mt-2 text-lg font-black text-amber-500">{money(analytics.outstanding)}</div></div>
+                </div>
+              </div>
+              <div className={`rounded-[2rem] border p-5 shadow-sm ${cardClass}`}>
+                <h3 className={`mb-4 text-sm font-black uppercase ${primaryClass}`}>{isAr ? 'جودة بيانات العمليات' : 'OPERATION DATA QUALITY'}</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  {[
+                    [isAr ? 'حاوية' : 'CONTAINER', analytics.missingData.container],
+                    [isAr ? 'مولد' : 'GENSET', analytics.missingData.genset],
+                    [isAr ? 'سعر' : 'RATE', analytics.missingData.rate],
+                    [isAr ? 'سائق/ناقل' : 'TRUCKER', analytics.missingData.trucker],
+                    [isAr ? 'خروج' : 'CLIP-OFF', analytics.missingData.clipOff]
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className={`rounded-xl p-3 text-center ${Number(value) ? 'bg-rose-500/10' : isDark ? 'bg-black/20' : 'bg-emerald-50'}`}>
+                      <div className={`text-xl font-black ${Number(value) ? 'text-rose-500' : 'text-emerald-500'}`}>{value}</div>
+                      <div className={`mt-1 text-[8px] font-black uppercase ${mutedClass}`}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </div>
 
-        {/* Tactical AI Advisor Panel */}
-        <div className="xl:col-span-4">
-           <div className="bg-[#001F3F] rounded-[3.5rem] p-8 shadow-2xl border border-white/5 overflow-hidden sticky top-24 min-h-[600px] flex flex-col">
-              <div className="flex items-center gap-4 mb-8">
-                 <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-xl shadow-lg shadow-blue-500/20">🧠</div>
-                 <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest text-white italic">{isAr ? 'المستشار الذكي' : 'INTELLIGENCE ADVISOR'}</h4>
-                    <p className="text-[7px] font-black text-blue-400 uppercase tracking-[0.4em]">{isAr ? 'محرك التحليل التشغيلي' : 'TARGETED ANALYSIS ENGINE'}</p>
-                 </div>
+        <aside className="xl:col-span-4">
+          <div className="sticky top-5 rounded-[2rem] bg-[#001F3F] p-5 md:p-6 shadow-2xl border border-white/10">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🧠</span>
+                  <h2 className="text-sm font-black uppercase tracking-widest text-white">{isAr ? 'DALI 1.0' : 'DALI 1.0'}</h2>
+                </div>
+                <p className="mt-1 text-[8px] font-black uppercase tracking-[0.2em] text-blue-300">{isAr ? activeConfig.ar : activeConfig.en}</p>
               </div>
+              <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[7px] font-black uppercase text-emerald-300">READY</span>
+            </div>
 
-              <div className="flex-1 bg-black/40 rounded-3xl p-6 border border-white/5 overflow-y-auto custom-scrollbar relative">
-                 {isThinking ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center gap-6">
-                       <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-                       <div>
-                          <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] mb-2">{phases[thinkingPhase]}</p>
-                          <p className="text-[8px] font-bold text-slate-600 uppercase">{isAr ? 'جاري مزامنة البيانات...' : 'SYNCING LIVE DATA...'}</p>
-                       </div>
-                    </div>
-                 ) : linkError ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center gap-4 animate-in zoom-in-95">
-                       <span className="text-4xl grayscale">📡</span>
-                       <h5 className="text-rose-600 font-black uppercase tracking-tighter">فشل اتصال المحرك</h5>
-                       <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed px-6">{advice}</p>
-                       <button onClick={runStrategicAdvisor} className="mt-4 px-6 py-2 bg-white/5 border border-white/10 rounded-xl text-[8px] font-black uppercase tracking-widest text-white hover:bg-white/10">إعادة المحاولة</button>
-                    </div>
-                 ) : advice ? (
-                    <div className="prose prose-sm dark:prose-invert text-[11px] font-bold leading-relaxed text-slate-300 font-mono whitespace-pre-wrap animate-in fade-in">
-                       {advice}
-                    </div>
-                 ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center opacity-20 py-20 grayscale">
-                       <span className="text-6xl mb-6">🛰️</span>
-                       <p className="text-[9px] font-black uppercase tracking-[0.5em] text-white">مراقبة النظام نشطة</p>
-                    </div>
-                 )}
-              </div>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4 min-h-[420px] max-h-[560px] overflow-y-auto">
+              {isThinking ? (
+                <div className="flex min-h-[380px] items-center justify-center text-center">
+                  <div>
+                    <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-400/20 border-t-blue-400"></div>
+                    <p className="mt-4 text-[9px] font-black uppercase tracking-widest text-blue-300">{phases[thinkingPhase]}</p>
+                    <p className="mt-2 text-[8px] font-bold text-slate-500">{isAr ? 'جاري تحليل هذا القسم فقط...' : 'Analyzing this section only...'}</p>
+                  </div>
+                </div>
+              ) : linkError ? (
+                <div className="flex min-h-[380px] flex-col items-center justify-center text-center">
+                  <span className="text-4xl">📡</span>
+                  <p className="mt-3 text-[10px] font-black uppercase text-rose-400">{isAr ? 'فشل اتصال DALI 1.0' : 'DALI 1.0 CONNECTION FAILED'}</p>
+                  <p className="mt-2 max-w-xs text-[9px] font-bold leading-relaxed text-slate-400">{advice}</p>
+                  <button type="button" onClick={runStrategicAdvisor} className="mt-5 rounded-xl bg-white/10 px-5 py-2.5 text-[8px] font-black uppercase tracking-widest text-white hover:bg-white/15">
+                    {isAr ? 'إعادة المحاولة' : 'RETRY'}
+                  </button>
+                </div>
+              ) : advice ? (
+                <div className="whitespace-pre-wrap text-[11px] font-bold leading-7 text-slate-200">{advice}</div>
+              ) : (
+                <div className="flex min-h-[380px] flex-col items-center justify-center text-center">
+                  <span className="text-5xl opacity-30">{activeConfig.icon}</span>
+                  <p className="mt-4 text-[10px] font-black uppercase tracking-[0.25em] text-slate-300">{isAr ? activeConfig.ar : activeConfig.en}</p>
+                  <p className="mt-2 max-w-xs text-[8px] font-bold leading-relaxed text-slate-500">{isAr ? 'اضغط تحليل القسم للحصول على قراءة مركزة لهذا القسم فقط.' : 'Run analysis to get a focused reading of this section only.'}</p>
+                </div>
+              )}
+            </div>
 
-              <div className="mt-8 space-y-4">
-                 {!apiKeySet ? (
-                    <button 
-                       onClick={async () => { if (window.aistudio?.openSelectKey) await window.aistudio.openSelectKey(); setApiKeySet(true); }}
-                       className="w-full bg-blue-600 hover:bg-blue-500 text-white py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.4em] shadow-xl transition-all"
-                    >
-                       تشغيل محرك الذكاء الاصطناعي
-                    </button>
-                 ) : (
-                    <button 
-                       onClick={runStrategicAdvisor}
-                       disabled={isThinking}
-                       className="w-full bg-white text-[#001F3F] py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.4em] shadow-xl hover:bg-slate-100 disabled:opacity-30 transition-all group"
-                    >
-                       <span className="group-hover:scale-105 transition-transform block">{isAr ? 'تحليل هذا القسم فقط' : 'ANALYZE THIS SECTION ONLY'}</span>
-                    </button>
-                 )}
-                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
-                    <span className="text-[8px] font-black text-slate-500 uppercase">{'DALI 1.0'}</span>
-                    <span className="text-[9px] font-black text-blue-500 italic uppercase">DALI 1.0 — Llama</span>
-                 </div>
-              </div>
-           </div>
-        </div>
-      </div>
+            <button
+              type="button"
+              onClick={runStrategicAdvisor}
+              disabled={isThinking}
+              className="mt-4 w-full rounded-2xl bg-[#C2A378] py-4 text-[9px] font-black uppercase tracking-[0.3em] text-[#001F3F] shadow-lg transition-all hover:brightness-105 disabled:opacity-40"
+            >
+              {isThinking ? (isAr ? 'جاري التحليل...' : 'ANALYZING...') : (isAr ? `حلل ${activeConfig.ar}` : `ANALYZE ${activeConfig.en}`)}
+            </button>
+
+            <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
+              <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">{isAr ? 'مصدر البيانات' : 'DATA SOURCE'}</span>
+              <span className="text-[8px] font-black text-emerald-300">NILE FLEET • LIVE</span>
+            </div>
+          </div>
+        </aside>
+      </section>
     </div>
   );
 };
