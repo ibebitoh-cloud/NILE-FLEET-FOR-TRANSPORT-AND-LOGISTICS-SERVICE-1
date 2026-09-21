@@ -73,12 +73,15 @@ async function query<T>(table: string, options?: { filter?: Record<string, any>;
 function prepareOperationsDbRow(row: any): any {
   const today = new Date().toISOString().slice(0, 10);
   const opDate = normalizeDateForDb(row.operationDate, today);
+  const clipOffDate = normalizeDateForDb(row.clipOffDate, '');
   return {
     ...row,
     operationDate: opDate,
     dateReceived: normalizeDateForDb(row.dateReceived, opDate),
     clipOnDate: normalizeDateForDb(row.clipOnDate, opDate),
-    clipOffDate: normalizeDateForDb(row.clipOffDate, '')
+    // PostgreSQL DATE columns reject an empty string. An operation that has
+    // not been clipped off yet must be stored as NULL, not "".
+    clipOffDate: clipOffDate || null
   };
 }
 
