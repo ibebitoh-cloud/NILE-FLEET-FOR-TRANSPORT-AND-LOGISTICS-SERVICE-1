@@ -151,10 +151,10 @@ const CustomerService: React.FC = () => {
                         <span className="text-xl">💬</span>
                         <span className="text-[8px] font-black uppercase">WhatsApp</span>
                      </a>
-                     <button className="bg-blue-600 text-white py-4 rounded-2xl flex flex-col items-center justify-center gap-1 hover:bg-blue-700 transition-all shadow-lg">
+                     <a href={`tel:${c.whatsapp}`} className="bg-blue-600 text-white py-4 rounded-2xl flex flex-col items-center justify-center gap-1 hover:bg-blue-700 transition-all shadow-lg">
                         <span className="text-xl">📞</span>
                         <span className="text-[8px] font-black uppercase">Voice Link</span>
-                     </button>
+                     </a>
                   </div>
                </div>
              ))}
