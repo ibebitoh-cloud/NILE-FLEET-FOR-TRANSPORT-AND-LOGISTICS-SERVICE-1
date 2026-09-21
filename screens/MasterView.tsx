@@ -722,7 +722,11 @@ const MasterView: React.FC = () => {
   useEffect(() => {
     const sync = () => refresh();
     window.addEventListener('db-undo-success', sync);
-    return () => window.removeEventListener('db-undo-success', sync);
+    window.addEventListener('db-change', sync);
+    return () => {
+      window.removeEventListener('db-undo-success', sync);
+      window.removeEventListener('db-change', sync);
+    };
   }, []);
 
   useEffect(() => {
@@ -843,7 +847,7 @@ const MasterView: React.FC = () => {
     setStagedOps(copy);
   };
 
-  const handleFinalInject = () => {
+  const handleFinalInject = async () => {
     const toInject: Operation[] = [];
     stagedOps.forEach(s => {
       if (!s.customerName || !s.bookingNumber) return;
@@ -876,7 +880,22 @@ const MasterView: React.FC = () => {
     });
     
     if (toInject.length > 0) {
-      db.addOperationsBulk(toInject);
+      const saved = await db.addOperationsBulk(toInject);
+      if (!saved) {
+        alert(isAr
+          ? `❌ فشل حفظ ${toInject.length} عملية في قاعدة البيانات.\n${db.getLastDbError() || 'خطأ غير معروف'}`
+          : `❌ DATABASE SAVE FAILED for ${toInject.length} operations.\n${db.getLastDbError() || 'Unknown database error'}`
+        );
+        return;
+      }
+      const reloaded = await db.reloadOperations();
+      if (!reloaded) {
+        alert(isAr
+          ? `⚠️ تم الحفظ لكن تعذر إعادة قراءة العمليات من قاعدة البيانات.\n${db.getLastDbError() || ''}`
+          : `⚠️ SAVED, BUT OPERATIONS COULD NOT BE RELOADED FROM DATABASE.\n${db.getLastDbError() || ''}`
+        );
+        return;
+      }
       setShowAddModal(false);
       setStagedOps([{ customerName: '', bookingNumber: '', gensetNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, trucker: '', beneficiaryName: '', quantity: 1 }]);
       setRawPasteBuffer('');
