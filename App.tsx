@@ -25,7 +25,7 @@ import Layout from './components/Layout';
 import { User, UserRole } from './types';
 import { db } from './services/supabaseDb';
 import { loginWithPassword, logout as supabaseLogout, getCurrentSessionUser } from './services/authService';
-import { discoveryQueue, registerDynamicTranslations } from './translations';
+import { discoveryQueue, registerDynamicTranslations, translateUiText } from './translations';
 import { translateBusinessEntities, getSafeApiKey } from './services/aiService';
 
 type Language = 'en' | 'ar';
@@ -245,6 +245,43 @@ const App: React.FC = () => {
 
     return () => clearInterval(observer);
   }, [lang]);
+
+  // GLOBAL UI TRANSLATION FALLBACK: catches hard-coded English labels across screens.
+  // React components that already use t()/translateEntity() remain untouched.
+  useEffect(() => {
+    if (lang !== 'ar') return;
+
+    const translateDom = () => {
+      const root = document.body;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        const text = node as Text;
+        if (text.parentElement && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(text.parentElement.tagName)) {
+          nodes.push(text);
+        }
+      }
+      nodes.forEach(text => {
+        const translated = translateUiText(text.nodeValue || '', 'ar');
+        if (translated !== text.nodeValue) text.nodeValue = translated;
+      });
+
+      root.querySelectorAll<HTMLElement>('[placeholder],[title],[aria-label]').forEach(el => {
+        for (const attr of ['placeholder', 'title', 'aria-label']) {
+          const value = el.getAttribute(attr);
+          if (!value) continue;
+          const translated = translateUiText(value, 'ar');
+          if (translated !== value) el.setAttribute(attr, translated);
+        }
+      });
+    };
+
+    translateDom();
+    const observer = new MutationObserver(() => translateDom());
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [lang, langUpdateKey]);
 
   // Handle refresh events from translations.ts
   useEffect(() => {
