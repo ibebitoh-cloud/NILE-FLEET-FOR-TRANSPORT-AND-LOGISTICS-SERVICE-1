@@ -574,3 +574,114 @@ export const translations = {
     authorizeInjection: "اعتماد حقن البيانات"
   }
 };
+
+
+/**
+ * Global UI translation fallback.
+ * This covers hard-coded labels that are not using t()/translateEntity().
+ * It translates exact UI strings only; operational/customer/container data is
+ * intentionally left alone unless it is already handled by translateEntity().
+ */
+const uiExtraTranslations: Record<string, string> = {
+  "Setup Driver": "إعداد برنامج التشغيل",
+  "Records": "السجلات",
+  "Booking Node": "بيانات الحجز",
+  "Operator / Shipper": "المشغل / الشاحن",
+  "Genset / Container": "المولد / الحاوية",
+  "Operating Date": "تاريخ التشغيل",
+  "Unassigned": "غير مُعين",
+  "Authorize Exit": "اعتماد الخروج",
+  "Transfer Units": "نقل الوحدات",
+  "Reset Gate Form": "إعادة تعيين نموذج البوابة",
+  "Verify Action": "التحقق من الإجراء",
+  "Source Hub": "المركز المصدر",
+  "Target Hub": "المركز المستهدف",
+  "Gensets to be processed:": "المولدات المطلوب معالجتها:",
+  "Final Commit": "الاعتماد النهائي",
+  "Cancel and Return": "إلغاء والعودة",
+  "No active deployments found at this hub.": "لا توجد عمليات نشطة في هذا المركز.",
+  "Warning": "تحذير",
+  "Close": "إغلاق",
+  "Cancel": "إلغاء",
+  "Save": "حفظ",
+  "Edit": "تعديل",
+  "Delete": "حذف",
+  "Add": "إضافة",
+  "Search": "بحث",
+  "Loading": "جارٍ التحميل",
+  "Submit": "إرسال",
+  "Confirm": "تأكيد",
+  "Back": "رجوع",
+  "Next": "التالي",
+  "Previous": "السابق",
+  "Refresh": "تحديث",
+  "Export": "تصدير",
+  "Import": "استيراد",
+  "Print": "طباعة",
+  "Download": "تحميل",
+  "Upload": "رفع",
+  "View": "عرض",
+  "Details": "التفاصيل",
+  "Actions": "الإجراءات",
+  "Status": "الحالة",
+  "Date": "التاريخ",
+  "Customer": "العميل",
+  "Client": "العميل",
+  "Driver": "السائق",
+  "Genset": "المولد",
+  "Container": "الحاوية",
+  "Booking": "الحجز",
+  "Port": "الميناء",
+  "From": "من",
+  "To": "إلى",
+  "Dest": "الوجهة",
+  "Pending": "معلق",
+  "Pending Gate": "بانتظار البوابة",
+  "On Trip": "في رحلة",
+  "No Photo": "لا توجد صورة",
+  "EVIDENCE PHOTO": "صورة إثبات",
+  "UNITS RETURNING / ARRIVING": "الوحدات العائدة / القادمة",
+  "UNITS DEPARTED / EN ROUTE": "الوحدات المغادرة / في الطريق",
+  "UPCOMING SCHEDULED OPS": "العمليات المجدولة القادمة",
+  "EXPORT NEXT SCHEDULE EXCEL": "تصدير الجدولة القادمة إلى إكسيل",
+  "LOADED": "تم التحميل",
+  "Commercial Partner": "الشريك التجاري",
+  "Operational Route": "مسار التشغيل",
+  "No upcoming scheduled units for": "لا توجد وحدات مجدولة قادمة لـ",
+  "PROCESS DISPATCH NOW": "معالجة الخروج الآن",
+  "AUTHORIZE SYNC": "اعتماد المزامنة",
+  "COMMIT RETURN": "اعتماد الإرجاع",
+  "RELEASE TO STOCK": "إتاحة للمخزون",
+  "ABORT": "إلغاء",
+  "VERIFY SYNC": "التحقق من المزامنة",
+  "REF ID": "رقم المرجع",
+  "CONT ID": "رقم الحاوية",
+  "POWER UNIT": "وحدة الطاقة",
+  "SYSTEM COMMIT": "اعتماد النظام",
+  "This unit will be removed from stock and assigned to this container immediately.": "سيتم إخراج هذه الوحدة من المخزون وتخصيصها لهذه الحاوية فوراً.",
+  "GATE AUTHORIZED — SAVED": "تم اعتماد البوابة — تم الحفظ",
+  "SAVE IS ALLOWED": "الحفظ مسموح",
+  "No outgoing active units": "لا توجد وحدات نشطة خارجة",
+  "No incoming units tracked": "لا توجد وحدات قادمة مسجلة",
+  "Thumb": "صورة مصغرة",
+  "Large Evidence": "صورة الإثبات",
+  "EXISTING BK": "حجز موجود",
+  "Warning": "تحذير"
+};
+
+export const translateUiText = (value: string, lang: 'en' | 'ar'): string => {
+  if (lang === 'en' || !value) return value;
+  const raw = value.trim();
+  if (!raw) return value;
+  if (uiExtraTranslations[raw]) return value.replace(raw, uiExtraTranslations[raw]);
+
+  // Use every exact EN -> AR pair already defined in the central dictionary.
+  const en = translations.en as Record<string, string>;
+  const ar = translations.ar as Record<string, string>;
+  for (const key of Object.keys(en)) {
+    if (en[key] === raw && ar[key] && ar[key] !== en[key]) {
+      return value.replace(raw, ar[key]);
+    }
+  }
+  return value;
+};
