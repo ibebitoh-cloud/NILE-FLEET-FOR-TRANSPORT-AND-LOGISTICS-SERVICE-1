@@ -57,7 +57,7 @@ const Intelligence: React.FC = () => {
     }, 1200);
 
     try {
-      const prompt = `
+      const prompt = `LANGUAGE: ${isAr ? 'ARABIC ONLY' : 'ENGLISH'}. When Arabic is requested, every heading, label, status, port name, entity name, explanation and recommendation MUST be Arabic. Keep booking/container/genset numbers, dates and numeric values unchanged. Do not invent missing data. Total operations: ${ops.length}. Active operations: ${ops.filter(o => o.status === 'IN PROGRESS').length}. Expense totals EGP: food=${expenseTotals.food}, transport=${expenseTotals.transport}, procurement=${expenseTotals.procurement}, rent=${expenseTotals.rent}, fuelBalance=${expenseTotals.fuel}. Gas by port: ${JSON.stringify(gasByPort)}. Gas by genset: ${JSON.stringify(gasByUnit)}. Oktan estimate: ${JSON.stringify(oktan)}. Operations data: ${JSON.stringify(ops)}. Analyze all supplied data for anomalies, duplicate active genset assignments, port/stock/fuel/cost issues and practical actions. Clearly separate facts from recommendations.`
         System: Nile Fleet Strategic Hub. 
         Context: ${ops.length} Total Ops. Active Trips: ${ops.filter(o => o.status === 'IN PROGRESS').length}.
         Expense Ratio: Food(${expenseTotals.food}), Transport(${expenseTotals.transport}).
@@ -66,10 +66,10 @@ const Intelligence: React.FC = () => {
       `;
 
       const result = await runThinkingAudit(prompt);
-      setAdvice(result || 'No telemetry data resolved.');
+      setAdvice(result || (isAr ? 'لم يتم العثور على بيانات تشغيلية كافية.' : 'No telemetry data resolved.'));
     } catch (err) {
       setLinkError(true);
-      setAdvice('NETWORK INTEGRITY COMPROMISED. RE-LINK NODE.');
+      setAdvice(isAr ? 'تعذر الاتصال بمحرك الذكاء الاصطناعي. أعد المحاولة.' : 'NETWORK INTEGRITY COMPROMISED. RE-LINK NODE.');
     } finally {
       clearInterval(phaseInterval);
       setIsThinking(false);
@@ -100,7 +100,7 @@ const Intelligence: React.FC = () => {
                   {apiKeySet ? '🛰️' : '📡'}
                </div>
                <div>
-                  <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase leading-none">Command Intel</h1>
+                  <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase leading-none">ذكاء القيادة</h1>
                   <div className="flex items-center gap-3 mt-2">
                      <span className={`w-1.5 h-1.5 rounded-full ${apiKeySet ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'}`}></span>
                      <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.4em]">Node Connectivity: {apiKeySet ? 'STABLE' : 'LINK LOST'}</p>
@@ -109,9 +109,9 @@ const Intelligence: React.FC = () => {
             </div>
 
             <div className="flex bg-black/40 rounded-2xl border border-white/10 overflow-hidden">
-               <NavButton id="PORT" label="Terminal Hubs" />
-               <NavButton id="UNIT" label="Fleet Assets" />
-               <NavButton id="SUPPLIER" label="Fuel Ledger" />
+               <NavButton id="PORT" label="الموانئ" />
+               <NavButton id="UNIT" label="أصول الأسطول" />
+               <NavButton id="SUPPLIER" label="سجل الوقود" />
                <NavButton id="COSTS" label="Operations" />
             </div>
          </div>
@@ -146,7 +146,7 @@ const Intelligence: React.FC = () => {
 
           {activeView === 'UNIT' && (
             <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-2xl">
-               <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-8">Asset Deployment Spectrum</h3>
+               <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-8">توزيع تشغيل الأصول</h3>
                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {gasByUnit.slice(0, 16).map(u => (
                     <div key={u.unit} className="p-4 bg-slate-50 dark:bg-slate-950 border border-transparent hover:border-[#C2A378] rounded-2xl transition-all">
@@ -162,14 +162,14 @@ const Intelligence: React.FC = () => {
             <div className="bg-[#001F3F] p-12 rounded-[4rem] text-white relative overflow-hidden border border-white/10 shadow-2xl">
                <div className="absolute bottom-0 right-0 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl -mb-40 -mr-40"></div>
                <div className="relative z-10">
-                  <h3 className="text-4xl font-black text-[#C2A378] uppercase italic tracking-tighter mb-12">Fuel Logistics Matrix</h3>
+                  <h3 className="text-4xl font-black text-[#C2A378] uppercase italic tracking-tighter mb-12">مصفوفة لوجستيات الوقود</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                      <div className="space-y-6">
-                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">Ledger Balance</span><span className="text-2xl font-black">EGP {oktan.balance.toLocaleString()}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">رصيد السجل</span><span className="text-2xl font-black">EGP {oktan.balance.toLocaleString()}</span></div>
                         <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-[#C2A378]" style={{width: '65%'}}></div></div>
                      </div>
                      <div className="space-y-6">
-                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">Burn Tolerance</span><span className="text-2xl font-black">{oktan.daysRemaining} Cycles</span></div>
+                        <div className="flex justify-between items-end"><span className="text-[10px] font-black uppercase text-slate-400">حد استهلاك الوقود</span><span className="text-2xl font-black">{oktan.daysRemaining} Cycles</span></div>
                         <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{width: '80%'}}></div></div>
                      </div>
                   </div>
@@ -179,7 +179,7 @@ const Intelligence: React.FC = () => {
 
           {activeView === 'COSTS' && (
              <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-2xl">
-                <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-10">Outflow Distribution</h3>
+                <h3 className="text-xl font-black text-[#001F3F] dark:text-white uppercase italic tracking-tighter mb-10">توزيع المصروفات</h3>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
                    <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
@@ -197,9 +197,9 @@ const Intelligence: React.FC = () => {
                    </div>
                    <div className="space-y-4">
                       {[
-                        { label: 'Staff Allowances', value: expenseTotals.food, color: 'bg-blue-500' },
-                        { label: 'Logistics Fleet', value: expenseTotals.transport, color: 'bg-emerald-500' },
-                        { label: 'Terminal Access', value: expenseTotals.rent, color: 'bg-amber-500' }
+                        { label: 'بدلات الموظفين', value: expenseTotals.food, color: 'bg-blue-500' },
+                        { label: 'أسطول النقل', value: expenseTotals.transport, color: 'bg-emerald-500' },
+                        { label: 'دخول الميناء', value: expenseTotals.rent, color: 'bg-amber-500' }
                       ].map(item => (
                         <div key={item.label} className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl">
                            <div className="flex items-center gap-3">
@@ -221,8 +221,8 @@ const Intelligence: React.FC = () => {
               <div className="flex items-center gap-4 mb-8">
                  <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-xl shadow-lg shadow-blue-500/20">🧠</div>
                  <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest text-white italic">Neural Advisor</h4>
-                    <p className="text-[7px] font-black text-blue-400 uppercase tracking-[0.4em]">Tactical Logic Engine</p>
+                    <h4 className="text-sm font-black uppercase tracking-widest text-white italic">المستشار الذكي</h4>
+                    <p className="text-[7px] font-black text-blue-400 uppercase tracking-[0.4em]">محرك التحليل التشغيلي</p>
                  </div>
               </div>
 
@@ -232,15 +232,15 @@ const Intelligence: React.FC = () => {
                        <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
                        <div>
                           <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] mb-2">{phases[thinkingPhase]}</p>
-                          <p className="text-[8px] font-bold text-slate-600 uppercase">Synchronizing Fleet Ledger...</p>
+                          <p className="text-[8px] font-bold text-slate-600 uppercase">جاري مزامنة سجل الأسطول...</p>
                        </div>
                     </div>
                  ) : linkError ? (
                     <div className="flex flex-col items-center justify-center h-full text-center gap-4 animate-in zoom-in-95">
                        <span className="text-4xl grayscale">📡</span>
-                       <h5 className="text-rose-600 font-black uppercase tracking-tighter">Signal Link Failure</h5>
+                       <h5 className="text-rose-600 font-black uppercase tracking-tighter">فشل اتصال المحرك</h5>
                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed px-6">{advice}</p>
-                       <button onClick={runStrategicAdvisor} className="mt-4 px-6 py-2 bg-white/5 border border-white/10 rounded-xl text-[8px] font-black uppercase tracking-widest text-white hover:bg-white/10">Retry Connection</button>
+                       <button onClick={runStrategicAdvisor} className="mt-4 px-6 py-2 bg-white/5 border border-white/10 rounded-xl text-[8px] font-black uppercase tracking-widest text-white hover:bg-white/10">إعادة المحاولة</button>
                     </div>
                  ) : advice ? (
                     <div className="prose prose-sm dark:prose-invert text-[11px] font-bold leading-relaxed text-slate-300 font-mono whitespace-pre-wrap animate-in fade-in">
@@ -249,7 +249,7 @@ const Intelligence: React.FC = () => {
                  ) : (
                     <div className="flex flex-col items-center justify-center h-full text-center opacity-20 py-20 grayscale">
                        <span className="text-6xl mb-6">🛰️</span>
-                       <p className="text-[9px] font-black uppercase tracking-[0.5em] text-white">System Monitoring Active</p>
+                       <p className="text-[9px] font-black uppercase tracking-[0.5em] text-white">مراقبة النظام نشطة</p>
                     </div>
                  )}
               </div>
@@ -260,7 +260,7 @@ const Intelligence: React.FC = () => {
                        onClick={async () => { if (window.aistudio?.openSelectKey) await window.aistudio.openSelectKey(); setApiKeySet(true); }}
                        className="w-full bg-blue-600 hover:bg-blue-500 text-white py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.4em] shadow-xl transition-all"
                     >
-                       Initialize AI Core
+                       تشغيل محرك الذكاء الاصطناعي
                     </button>
                  ) : (
                     <button 
@@ -268,12 +268,12 @@ const Intelligence: React.FC = () => {
                        disabled={isThinking}
                        className="w-full bg-white text-[#001F3F] py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.4em] shadow-xl hover:bg-slate-100 disabled:opacity-30 transition-all group"
                     >
-                       <span className="group-hover:scale-105 transition-transform block">Request Strategic Audit</span>
+                       <span className="group-hover:scale-105 transition-transform block">طلب تدقيق تشغيلي</span>
                     </button>
                  )}
                  <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
-                    <span className="text-[8px] font-black text-slate-500 uppercase">Engine Node</span>
-                    <span className="text-[9px] font-black text-blue-500 italic uppercase">Gemini Flash-V3</span>
+                    <span className="text-[8px] font-black text-slate-500 uppercase">محرك الذكاء الاصطناعي</span>
+                    <span className="text-[9px] font-black text-blue-500 italic uppercase">NILE AI — Llama</span>
                  </div>
               </div>
            </div>
