@@ -58,7 +58,7 @@ export async function onRequestPost(context) {
         const { prompt } = payload;
         const result = await env.AI.run(TEXT_MODEL, {
           messages: [
-            { role: 'system', content: 'You are a sharp, concise financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis.' },
+            { role: 'system', content: 'You are a sharp financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis. If the user prompt requests Arabic, you MUST respond entirely in professional Arabic: translate all headings, labels, statuses, port names, entity descriptions and explanatory text. Never output English UI labels. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Do not invent data.' },
             { role: 'user', content: prompt },
           ],
           max_tokens: 3000,
