@@ -21,7 +21,7 @@ const Analytics: React.FC = () => {
   const metrics = useMemo(() => {
     const totalRevenue = invoices.reduce((sum, inv) => sum + inv.amount, 0);
     const activeUnits = operations.filter(o => o.status === 'IN PROGRESS').length;
-    const utilizationRate = (activeUnits / stock.length) * 100;
+    const utilizationRate = stock.length > 0 ? (activeUnits / stock.length) * 100 : 0;
     const avgRate = totalRevenue / (invoices.length || 1);
 
     return { totalRevenue, utilizationRate, activeUnits, avgRate };
@@ -36,7 +36,7 @@ const Analytics: React.FC = () => {
       const baseHealth = 100;
       const trips_degradation = trips * 1.5;
       const health = Math.max(40, baseHealth - trips_degradation);
-      const fuelEfficiency = 2.1 + (Math.random() * 0.8);
+      const totalFuel = unitOps.reduce((sum, op) => sum + (parseFloat(String(op.gaz || '0').replace(/,/g, '')) || 0), 0);\n      const fuelEfficiency = trips > 0 ? totalFuel / trips : 0;
       const maintenanceDays = Math.max(0, 30 - (trips % 5) * 6);
 
       return {
@@ -53,15 +53,20 @@ const Analytics: React.FC = () => {
   }, [stock, operations]);
 
   const topPerformer = unitPerformanceData[0];
-  const rentalTrends = [
-    { day: 'Mon', revenue: 45000, volume: 12 },
-    { day: 'Tue', revenue: 52000, volume: 15 },
-    { day: 'Wed', revenue: 38000, volume: 10 },
-    { day: 'Thu', revenue: 65000, volume: 18 },
-    { day: 'Fri', revenue: 48000, volume: 14 },
-    { day: 'Sat', revenue: 30000, volume: 8 },
-    { day: 'Sun', revenue: 25000, volume: 6 },
-  ];
+  const rentalTrends = useMemo(() => {
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - (6 - i));
+      return d;
+    });
+    return days.map(d => {
+      const key = d.toISOString().slice(0, 10);
+      const dayOps = operations.filter(o => o.operationDate === key);
+      const revenue = dayOps.reduce((sum, o) => sum + (parseFloat(String(o.rate).replace(/,/g, '')) || 0) + (parseFloat(String(o.vat).replace(/,/g, '')) || 0), 0);
+      return { day: d.toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { weekday: 'short' }), revenue, volume: dayOps.length };
+    });
+  }, [operations, lang]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20 text-start transition-colors duration-300">
@@ -97,8 +102,8 @@ const Analytics: React.FC = () => {
         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
           <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-slate-50 group-hover:bg-slate-100 rounded-full transition-colors duration-500"></div>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 relative z-10">{t.revenue}</p>
-          <h4 className="text-3xl font-black text-[#001F3F] relative z-10">£{metrics.totalRevenue.toLocaleString()}</h4>
-          <p className="text-[8px] font-bold text-emerald-600 mt-2">↑ 12% vs last month</p>
+          <h4 className="text-3xl font-black text-[#001F3F] relative z-10">EGP {metrics.totalRevenue.toLocaleString()}</h4>
+          <p className="text-[8px] font-bold text-slate-400 mt-2">{lang === 'ar' ? 'حسب الفواتير المسجلة' : 'Based on recorded invoices'}</p>
         </div>
 
         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
@@ -111,7 +116,7 @@ const Analytics: React.FC = () => {
         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
           <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-amber-50 group-hover:bg-amber-100 rounded-full transition-colors duration-500"></div>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 relative z-10">{lang === 'ar' ? 'قيمة الرحلة' : 'Avg Trip Value'}</p>
-          <h4 className="text-3xl font-black text-[#C2A378] relative z-10">£{metrics.avgRate.toFixed(0)}</h4>
+          <h4 className="text-3xl font-black text-[#C2A378] relative z-10">EGP {metrics.avgRate.toFixed(0)}</h4>
           <p className="text-[8px] font-bold text-slate-400 mt-2">Per booking unit</p>
         </div>
       </div>
@@ -132,7 +137,7 @@ const Analytics: React.FC = () => {
                   <th className="pb-4 px-2">{t.unit}</th>
                   <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'الموقع' : 'Hub'}</th>
                   <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'الرحلات' : 'Trips'}</th>
-                  <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'الاستهلاك' : 'Fuel L/h'}</th>
+                  <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'وقود/رحلة' : 'Fuel / Trip'}</th>
                   <th className="pb-4 px-2 text-center">{t.healthScore}</th>
                   <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'الصيانة' : 'Service In'}</th>
                   <th className="pb-4 px-2 text-right">{t.revenue}</th>
@@ -170,7 +175,7 @@ const Analytics: React.FC = () => {
                          {data.maintenanceDays}d
                        </span>
                     </td>
-                    <td className="py-4 px-2 text-right font-black text-slate-900 text-xs">£{data.revenue.toLocaleString()}</td>
+                    <td className="py-4 px-2 text-right font-black text-slate-900 text-xs">EGP {data.revenue.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -193,23 +198,23 @@ const Analytics: React.FC = () => {
                   <div className="flex justify-between items-end border-b border-blue-800/50 pb-4">
                     <div>
                       <h4 className="text-3xl font-black italic tracking-tighter text-[#C2A378]">{topPerformer.unit}</h4>
-                      <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mt-1">Leading Revenue Generator</p>
+                      <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mt-1">{lang === 'ar' ? 'أعلى أصل حسب الإيراد المسجل' : 'Top asset by recorded revenue'}</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-blue-900/30 p-4 rounded-2xl border border-blue-800/50">
-                       <p className="text-[8px] font-black text-blue-300 uppercase mb-1">Lifetime Trips</p>
+                       <p className="text-[8px] font-black text-blue-300 uppercase mb-1">{lang === 'ar' ? 'إجمالي الرحلات' : 'Recorded Trips'}</p>
                        <p className="text-lg font-black">{topPerformer.trips}</p>
                     </div>
                     <div className="bg-blue-900/30 p-4 rounded-2xl border border-blue-800/50">
-                       <p className="text-[8px] font-black text-blue-300 uppercase mb-1">Avg Fuel/h</p>
+                       <p className="text-[8px] font-black text-blue-300 uppercase mb-1">{lang === 'ar' ? 'وقود/رحلة' : 'Fuel / Trip'}</p>
                        <p className="text-lg font-black">{topPerformer.fuel}L</p>
                     </div>
                   </div>
                 </div>
               )}
             </div>
-            <button className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all mt-6 shadow-lg shadow-blue-900/20">
+            <button onClick={() => window.print()} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all mt-6 shadow-lg shadow-blue-900/20">
                Generate Full Fleet PDF
             </button>
           </div>
