@@ -7,6 +7,7 @@
 
 const TEXT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+const VISION_FALLBACK_MODEL = '@cf/qwen/qwen3.8-27b';
 const TEXT_FALLBACK_MODEL = '@cf/zai-org/glm-4.7-flash';
 
 // Open models are less reliable than Claude/GPT at strictly following
@@ -70,7 +71,7 @@ export async function onRequestPost(context) {
       case 'scanImageForContainer': {
         const { base64Data } = payload;
         const dataUri = base64Data.startsWith('data:') ? base64Data : `data:image/jpeg;base64,${base64Data}`;
-        const result = await env.AI.run(VISION_MODEL, {
+        const visionInput = {
           messages: [
             { role: 'system', content: "Read the shipping container number visible in the image. A valid BIC container number is exactly 4 letters followed by 7 digits, for example MEDU9907021. Return ONLY the 11-character code in uppercase. Ignore truck numbers, booking numbers, logos and other text. If the container number is not clearly readable, return NOT_FOUND." },
             { role: 'user', content: 'Extract the container number from this image.' },
@@ -78,8 +79,17 @@ export async function onRequestPost(context) {
           image: dataUri,
           max_tokens: 32,
           temperature: 0,
-        });
-        return json({ text: (result.response || '').trim() || 'NOT_FOUND' });
+        };
+        let result;
+        try {
+          result = await env.AI.run(VISION_MODEL, visionInput);
+        } catch (primaryError) {
+          console.error('Primary container vision model failed:', primaryError);
+          result = await env.AI.run(VISION_FALLBACK_MODEL, visionInput);
+        }
+        const raw = String(result?.response || '').toUpperCase().trim();
+        const match = raw.match(/[A-Z]{4}[0-9]{7}/);
+        return json({ text: match ? match[0] : 'NOT_FOUND' });
       }
 
       case 'mapSpreadsheetToSchema': {
