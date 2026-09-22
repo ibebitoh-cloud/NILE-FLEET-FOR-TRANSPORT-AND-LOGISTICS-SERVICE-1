@@ -72,16 +72,12 @@ export async function onRequestPost(context) {
         const dataUri = base64Data.startsWith('data:') ? base64Data : `data:image/jpeg;base64,${base64Data}`;
         const result = await env.AI.run(VISION_MODEL, {
           messages: [
-            { role: 'system', content: "Extract the shipping container BIC code (4 letters followed by 7 digits, e.g. MEDU9907021) from the image. Respond with ONLY the code itself, nothing else. If no valid code is visible, respond with exactly: NOT_FOUND" },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Extract the container code.' },
-                { type: 'image_url', image_url: { url: dataUri } },
-              ],
-            },
+            { role: 'system', content: "Read the shipping container number visible in the image. A valid BIC container number is exactly 4 letters followed by 7 digits, for example MEDU9907021. Return ONLY the 11-character code in uppercase. Ignore truck numbers, booking numbers, logos and other text. If the container number is not clearly readable, return NOT_FOUND." },
+            { role: 'user', content: 'Extract the container number from this image.' },
           ],
-          max_tokens: 50,
+          image: dataUri,
+          max_tokens: 32,
+          temperature: 0,
         });
         return json({ text: (result.response || '').trim() || 'NOT_FOUND' });
       }
