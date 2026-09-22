@@ -177,6 +177,13 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         return;
       }
 
+      // A short standalone number is also a genset search. This prevents
+      // questions such as "464" from unnecessarily going through the LLM.
+      if (/^\\d{1,6}$/.test(q.trim())) {
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(q.trim()) }]);
+        return;
+      }
+
       // "SEARCH 422", "FIND 422", and "WHERE IS 422" are treated as genset IDs
       // when the identifier is short/numeric, so they never fall through to the LLM.
       if (searchMatch) {
