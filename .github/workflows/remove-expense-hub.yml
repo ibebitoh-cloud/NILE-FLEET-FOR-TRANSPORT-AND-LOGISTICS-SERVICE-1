@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   remove-expense-hub:
-    if: "!contains(github.event.head_commit.message, 'remove Expense Hub from NILE 1')"
+    if: "!contains(github.event.head_commit.message, 'Expense Hub cleanup')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,27 +22,22 @@ jobs:
           from pathlib import Path
           import re
 
-          # Remove the dedicated module from the application shell.
           p = Path('App.tsx')
           s = p.read_text()
           s = s.replace("import ExpenseHub from './screens/ExpenseHub';\n", '')
           s = re.sub(r"\n\s*case 'expense-hub': return <ExpenseHub[^;]*;", '', s)
           p.write_text(s)
 
-          # Remove the navigation item from every menu definition in Layout.
           p = Path('components/Layout.tsx')
           s = p.read_text()
           s = re.sub(r"\n\s*\{ id: 'expense-hub', label: t\.expenseHub, icon: '🧾' \},", '', s)
           p.write_text(s)
 
-          # Remove the dedicated page. Expense records/data services are intentionally
-          # left untouched so existing financial data is not destroyed.
           page = Path('screens/ExpenseHub.tsx')
           if page.exists():
               page.unlink()
           PY
 
-          # Remove stale permission references only; do not remove expense data APIs.
           python3 - <<'PY'
           from pathlib import Path
           import re
