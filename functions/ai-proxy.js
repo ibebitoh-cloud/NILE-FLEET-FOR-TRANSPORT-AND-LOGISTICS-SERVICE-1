@@ -1,9 +1,5 @@
 // Cloudflare Pages Function: runs all AI features on Cloudflare Workers AI.
 // DALI uses Qwen3 for fast text reasoning and Qwen3.8 for multimodal container OCR.
-// No external API key, no billing account: the model runs directly on
-// Cloudflare's infrastructure via the "AI" binding (Settings -> Functions ->
-// Bindings -> add "AI" -> variable name AI). Free tier: 10,000 Neurons/day,
-// resets daily, no credit card required.
 
 const TEXT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 const VISION_MODEL = '@cf/qwen/qwen3.8-27b';
@@ -14,7 +10,7 @@ const TEXT_FALLBACK_MODEL = '@cf/zai-org/glm-4.7-flash';
 // "return only JSON" instructions — strip code fences and grab the first
 // {...} or [...] block to make parsing robust.
 function parseJsonLoose(text) {
-  let cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  let cleaned = text.replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\`\`\`\s*$/i, '').trim();
   const firstBrace = Math.min(
     ...[cleaned.indexOf('{'), cleaned.indexOf('[')].filter(i => i !== -1)
   );
@@ -27,6 +23,18 @@ function parseJsonLoose(text) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+
+  // Health check: opening /ai-proxy in a browser now tells us whether the
+  // Worker is actually deployed with the Workers AI binding.
+  if (request.method === 'GET') {
+    return json({
+      ok: !!env.AI,
+      service: 'DALI 1.0',
+      textModel: TEXT_MODEL,
+      visionModel: VISION_MODEL,
+      message: env.AI ? 'Workers AI binding is connected.' : 'Workers AI binding is missing.'
+    }, env.AI ? 200 : 500);
+  }
 
   if (!env.AI) {
     return json({ error: 'Workers AI binding not configured. Add an "AI" binding in Cloudflare -> Settings -> Functions -> Bindings.' }, 500);
@@ -57,19 +65,26 @@ export async function onRequestPost(context) {
       }
 
       case 'runThinkingAudit': {
-        const { prompt } = payload;
+        const { prompt } = payload || {};
+        if (!prompt?.trim()) return json({ error: 'Empty AI prompt' }, 400);
         const result = await runTextModel(env, {
           messages: [
-            { role: 'system', content: 'You are a sharp financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis. If the user prompt requests Arabic, you MUST respond entirely in professional Arabic: translate all headings, labels, statuses, port names, entity descriptions and explanatory text. Never output English UI labels. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Do not invent data.' },
+            { role: 'system', content: 'You are DALI 1.0, a sharp financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis. If the user prompt requests Arabic, respond entirely in professional Arabic. Never output English UI labels when Arabic is requested. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Do not invent data.' },
             { role: 'user', content: prompt },
           ],
           max_tokens: Math.min(Math.max(payload?.maxTokens || 1600, 200), 3000),
+          temperature: 0.2,
         });
-        return json({ text: result.response || '' });
+        const text = String(result?.response || '').trim();
+        if (!text) {
+          throw new Error('Workers AI returned no text from the primary/fallback model.');
+        }
+        return json({ text });
       }
 
       case 'scanImageForContainer': {
-        const { base64Data } = payload;
+        const { base64Data } = payload || {};
+        if (!base64Data) return json({ error: 'No image data supplied' }, 400);
         const dataUri = base64Data.startsWith('data:') ? base64Data : `data:image/jpeg;base64,${base64Data}`;
         const visionInput = {
           messages: [
