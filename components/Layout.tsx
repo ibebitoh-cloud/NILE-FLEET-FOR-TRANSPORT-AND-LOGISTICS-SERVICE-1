@@ -13,7 +13,7 @@
       const countWords = /HOW MANY|HOW MUCH|NUMBER OF|كام|عدد|كم/.test(q);
 
       const normalizeId = (value: unknown) => String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const numericId = (value: unknown) => normalizeId(value).replace(/\\D/g, '');
+      const numericId = (value: unknown) => normalizeId(value).replace(/\D/g, '');
       const gensetAliases = (value: unknown) => {
         const raw = normalizeId(value);
         const digits = numericId(value);
