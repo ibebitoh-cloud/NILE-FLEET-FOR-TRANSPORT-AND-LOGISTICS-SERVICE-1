@@ -666,7 +666,6 @@ const uiExtraTranslations: Record<string, string> = {
   "Thumb": "صورة مصغرة",
   "Large Evidence": "صورة الإثبات",
   "EXISTING BK": "حجز موجود",
-  "Warning": "تحذير"
 };
 
 export const translateUiText = (value: string, lang: 'en' | 'ar'): string => {
