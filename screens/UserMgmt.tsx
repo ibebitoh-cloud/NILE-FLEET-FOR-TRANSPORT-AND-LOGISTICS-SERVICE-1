@@ -54,7 +54,7 @@ const UserMgmt: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'INTERNAL' | 'CUSTOMER' | 'SERVICE'>('ALL');
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [modalTab, setModalTab] = useState<'PROFILE' | 'PORTS' | 'SCREENS' | 'PERMISSIONS' | 'SECURITY'>('PROFILE');
+  const [modalTab, setModalTab] = useState<'PROFILE' | 'SCREENS' | 'PERMISSIONS' | 'SECURITY'>('PROFILE');
   const [showAvatarStudio, setShowAvatarStudio] = useState(false);
   const profilePhotoInputRef = React.useRef<HTMLInputElement>(null);
   const [showMatrixModal, setShowMatrixModal] = useState(false);
@@ -789,13 +789,6 @@ const UserMgmt: React.FC = () => {
                </button>
                <button 
                  type="button" 
-                 onClick={() => setModalTab('PORTS')} 
-                 className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${modalTab === 'PORTS' ? 'bg-[#001F3F] text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}`}
-               >
-                 ⚓ Port Hub Access ({editingUser.assignedPorts?.length || 0})
-               </button>
-               <button 
-                 type="button" 
                  onClick={() => setModalTab('SCREENS')} 
                  className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${modalTab === 'SCREENS' ? 'bg-[#001F3F] text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}`}
                >
@@ -984,61 +977,6 @@ const UserMgmt: React.FC = () => {
                           <input type="text" className={inputClass} value={editingUser.wipePassword || ''} onChange={e => setEditingUser({...editingUser, wipePassword: e.target.value})} placeholder="e.g. wipe999" />
                         </div>
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB 2: PORT HUB AUTHORIZATION */}
-                {modalTab === 'PORTS' && (
-                  <div className="space-y-6 animate-in fade-in duration-300">
-                    <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
-                      <div>
-                        <h4 className="text-sm font-black text-slate-800 dark:text-white uppercase">Assigned Port Hubs</h4>
-                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">Select ports this user has authorization to operate in and manage operations for.</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button 
-                          type="button" 
-                          onClick={() => setEditingUser({ ...editingUser, assignedPorts: [...ALL_LOCATIONS] })}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-blue-700"
-                        >
-                          Select All Ports
-                        </button>
-                        <button 
-                          type="button" 
-                          onClick={() => setEditingUser({ ...editingUser, assignedPorts: [] })}
-                          className="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[9px] font-black uppercase tracking-wider"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {ALL_LOCATIONS.map(loc => {
-                        const isAssigned = editingUser.assignedPorts?.includes(loc);
-                        return (
-                          <div 
-                            key={loc} 
-                            onClick={() => togglePortAccess(loc)}
-                            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${
-                              isAssigned 
-                                ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm' 
-                                : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-slate-400'
-                            }`}
-                          >
-                             <div>
-                               <p className="font-black text-sm uppercase tracking-wider">{loc} HUB</p>
-                               <p className="text-[9px] font-bold text-slate-400 mt-0.5">
-                                 {loc === Location.DAM ? 'Damietta Terminal' : loc === Location.ALEX ? 'Alexandria Terminal' : loc === Location.GOUDA ? 'Gouda Inland Depot' : loc === Location.SOKHNA ? 'Sokhna Hub' : loc === Location.SCCT ? 'SCCT Terminal' : loc === Location.PSD ? 'Port Said Depot' : 'Mallaoui Depot'}
-                               </p>
-                             </div>
-                             <span className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs ${isAssigned ? 'bg-blue-600 text-white' : 'border border-slate-300'}`}>
-                               {isAssigned ? '✓' : ''}
-                             </span>
-                          </div>
-                        );
-                      })}
                     </div>
                   </div>
                 )}
