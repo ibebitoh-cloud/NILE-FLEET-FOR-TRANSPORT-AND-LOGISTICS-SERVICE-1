@@ -246,6 +246,7 @@ export interface Operation {
   clipOffDate: string;
   clipOnPort: Location;
   clipOffPort: Location;
+  destination?: string;
   trucker: string;
   bookingNumber: string;
   beneficiaryName: string;
