@@ -42,6 +42,7 @@ export const scanImageForContainer = async (base64Data: string) => {
     const { text } = await callAi('scanImageForContainer', { base64Data });
     return text || 'NOT_FOUND';
   } catch (e) {
+    console.error('DALI container scan failed', e);
     return 'ERROR';
   }
 };
