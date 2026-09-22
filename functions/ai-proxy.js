@@ -1,18 +1,16 @@
-// Cloudflare Pages Function: runs all AI features on Cloudflare Workers AI —
-// free, open-source models (Llama 3.3 for text, Llama 3.2 Vision for images).
-// No external API key, no billing account: the model runs directly on
-// Cloudflare's infrastructure via the "AI" binding (Settings -> Functions ->
-// Bindings -> add "AI" -> variable name AI). Free tier: 10,000 Neurons/day,
-// resets daily, no credit card required.
+// Cloudflare Pages Function: runs all AI features on Cloudflare Workers AI.
+// DALI uses Qwen3 for fast text reasoning and Qwen3.8 for multimodal container OCR.
 
-const TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+const TEXT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
+const VISION_MODEL = '@cf/qwen/qwen3.8-27b';
+const VISION_FALLBACK_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+const TEXT_FALLBACK_MODEL = '@cf/zai-org/glm-4.7-flash';
 
 // Open models are less reliable than Claude/GPT at strictly following
 // "return only JSON" instructions — strip code fences and grab the first
 // {...} or [...] block to make parsing robust.
 function parseJsonLoose(text) {
-  let cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  let cleaned = text.replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\`\`\`\s*$/i, '').trim();
   const firstBrace = Math.min(
     ...[cleaned.indexOf('{'), cleaned.indexOf('[')].filter(i => i !== -1)
   );
@@ -25,6 +23,18 @@ function parseJsonLoose(text) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+
+  // Health check: opening /ai-proxy in a browser now tells us whether the
+  // Worker is actually deployed with the Workers AI binding.
+  if (request.method === 'GET') {
+    return json({
+      ok: !!env.AI,
+      service: 'DALI 1.0',
+      textModel: TEXT_MODEL,
+      visionModel: VISION_MODEL,
+      message: env.AI ? 'Workers AI binding is connected.' : 'Workers AI binding is missing.'
+    }, env.AI ? 200 : 500);
+  }
 
   if (!env.AI) {
     return json({ error: 'Workers AI binding not configured. Add an "AI" binding in Cloudflare -> Settings -> Functions -> Bindings.' }, 500);
@@ -44,50 +54,62 @@ export async function onRequestPost(context) {
       case 'translateBusinessEntities': {
         const { names } = payload;
         if (!names || names.length === 0) return json({});
-        const result = await env.AI.run(TEXT_MODEL, {
+        const result = await runTextModel(env, {
           messages: [
             { role: 'system', content: 'You translate logistics business entity names (trucking companies, shippers, clients) into professional Arabic. Respond with ONLY a raw JSON object — no markdown, no code fences, no commentary — where each key is the original name and each value is its Arabic translation.' },
             { role: 'user', content: `Names: ${names.join(', ')}` },
           ],
           max_tokens: 1500,
         });
-        return json(parseJsonLoose(result.response || ''));
+        return json(parseJsonLoose(extractText(result)));
       }
 
       case 'runThinkingAudit': {
-        const { prompt } = payload;
-        const result = await env.AI.run(TEXT_MODEL, {
+        const { prompt } = payload || {};
+        if (!prompt?.trim()) return json({ error: 'Empty AI prompt' }, 400);
+        const result = await runTextModel(env, {
           messages: [
-            { role: 'system', content: 'You are a sharp, concise financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis.' },
+            { role: 'system', content: 'You are DALI 1.0, a sharp financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis. If the user prompt requests Arabic, respond entirely in professional Arabic. Never output English UI labels when Arabic is requested. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Do not invent data.' },
             { role: 'user', content: prompt },
           ],
-          max_tokens: 3000,
+          max_tokens: Math.min(Math.max(payload?.maxTokens || 1600, 200), 3000),
+          temperature: 0.2,
         });
-        return json({ text: result.response || '' });
+        const text = extractText(result);
+        if (!text) {
+          throw new Error('Workers AI returned no text from the primary/fallback model.');
+        }
+        return json({ text });
       }
 
       case 'scanImageForContainer': {
-        const { base64Data } = payload;
+        const { base64Data } = payload || {};
+        if (!base64Data) return json({ error: 'No image data supplied' }, 400);
         const dataUri = base64Data.startsWith('data:') ? base64Data : `data:image/jpeg;base64,${base64Data}`;
-        const result = await env.AI.run(VISION_MODEL, {
+        const visionInput = {
           messages: [
-            { role: 'system', content: "Extract the shipping container BIC code (4 letters followed by 7 digits, e.g. MEDU9907021) from the image. Respond with ONLY the code itself, nothing else. If no valid code is visible, respond with exactly: NOT_FOUND" },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Extract the container code.' },
-                { type: 'image_url', image_url: { url: dataUri } },
-              ],
-            },
+            { role: 'system', content: "Read the shipping container number visible in the image. A valid BIC container number is exactly 4 letters followed by 7 digits, for example MEDU9907021. Return ONLY the 11-character code in uppercase. Ignore truck numbers, booking numbers, logos and other text. If the container number is not clearly readable, return NOT_FOUND." },
+            { role: 'user', content: 'Extract the container number from this image.' },
           ],
-          max_tokens: 50,
-        });
-        return json({ text: (result.response || '').trim() || 'NOT_FOUND' });
+          image: dataUri,
+          max_tokens: 32,
+          temperature: 0,
+        };
+        let result;
+        try {
+          result = await env.AI.run(VISION_MODEL, visionInput);
+        } catch (primaryError) {
+          console.error('Primary container vision model failed:', primaryError);
+          result = await env.AI.run(VISION_FALLBACK_MODEL, visionInput);
+        }
+        const raw = String(result?.response || '').toUpperCase().trim();
+        const match = raw.match(/[A-Z]{4}[0-9]{7}/);
+        return json({ text: match ? match[0] : 'NOT_FOUND' });
       }
 
       case 'mapSpreadsheetToSchema': {
         const { csvData } = payload;
-        const result = await env.AI.run(TEXT_MODEL, {
+        const result = await runTextModel(env, {
           messages: [
             { role: 'system', content: `You are a logistics data mapper. Convert the given CSV/text data into a JSON array. Identify columns even if their names differ slightly from expected. For every entity field (customerName, beneficiaryName, trucker), also provide its Arabic translation in a field suffixed with 'Ar'.
 
@@ -105,7 +127,56 @@ Respond with ONLY the raw JSON array — no markdown, no code fences, no comment
         return json({ error: 'Unknown action' }, 400);
     }
   } catch (err) {
-    return json({ error: 'AI request failed: ' + (err?.message || String(err)) }, 500);
+    console.error('NILE AI proxy error', err);
+    return json({
+      error: 'AI request failed',
+      detail: err?.message || String(err),
+      model: TEXT_MODEL,
+      fallbackModel: TEXT_FALLBACK_MODEL,
+    }, 500);
+  }
+}
+
+function extractText(result) {
+  if (typeof result === 'string') return result.trim();
+  if (!result || typeof result !== 'object') return '';
+  if (typeof result.response === 'string') return result.response.trim();
+  if (typeof result.output_text === 'string') return result.output_text.trim();
+  if (typeof result.text === 'string') return result.text.trim();
+  if (typeof result.reasoning === 'string' && result.reasoning.trim()) return result.reasoning.trim();
+  if (Array.isArray(result.choices)) {
+    const choice = result.choices[0];
+    const content = choice?.message?.content ?? choice?.text;
+    if (typeof content === 'string') return content.trim();
+  }
+  return '';
+}
+
+async function runTextModel(env, options) {
+  const modelOptions = {
+    ...options,
+    chat_template_kwargs: {
+      ...(options.chat_template_kwargs || {}),
+      enable_thinking: false,
+    },
+  };
+
+  try {
+    const result = await env.AI.run(TEXT_MODEL, modelOptions);
+    if (extractText(result)) return result;
+    console.error('Primary Workers AI model returned an empty text response:', result);
+  } catch (primaryError) {
+    console.error('Primary Workers AI model failed, trying fallback', primaryError);
+  }
+
+  try {
+    const result = await env.AI.run(TEXT_FALLBACK_MODEL, modelOptions);
+    if (extractText(result)) return result;
+    throw new Error('Workers AI fallback returned an empty text response.');
+  } catch (fallbackError) {
+    throw new Error(
+      `Qwen3 returned no usable text; fallback model failed: ${fallbackError?.message || fallbackError}`
+    );
   }
 }
 

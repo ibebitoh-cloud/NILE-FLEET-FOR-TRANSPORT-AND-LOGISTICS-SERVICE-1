@@ -4,6 +4,7 @@ import { User, UserRole, SystemNotification } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations } from '../translations';
 import { db } from '../services/supabaseDb';
+import { runThinkingAudit } from '../services/aiService';
 
 interface LayoutProps {
   user: User;
@@ -29,6 +30,12 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
   const [isPortGateSubmenuCollapsed, setIsPortGateSubmenuCollapsed] = useState<boolean>(() => sessionStorage.getItem('portGateSubmenuCollapsed') === 'true');
   const [activeInvoicesTab, setActiveInvoicesTab] = useState<'ALL' | 'NEED_ISSUE' | 'PAST_DUE'>(() => (sessionStorage.getItem('invoicesTab') as any) || 'ALL');
   const [isInvoicesSubmenuCollapsed, setIsInvoicesSubmenuCollapsed] = useState<boolean>(() => sessionStorage.getItem('invoicesSubmenuCollapsed') === 'true');
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+  const [aiChatInput, setAiChatInput] = useState('');
+  const [aiChatMessages, setAiChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
+  const [aiChatLoading, setAiChatLoading] = useState(false);
+  const [themeIslandOpen, setThemeIslandOpen] = useState(false);
+  const themeIslandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -46,12 +53,14 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     
     const updateNotifs = () => setNotifications(db.getActiveNotifications(user));
     window.addEventListener('db-undo-success', updateNotifs);
+    window.addEventListener('db-change', updateNotifs);
     return () => {
       document.removeEventListener('fullscreenchange', handleFsChange);
       document.removeEventListener('webkitfullscreenchange', handleFsChange);
       document.removeEventListener('mozfullscreenchange', handleFsChange);
       document.removeEventListener('MSFullscreenChange', handleFsChange);
       window.removeEventListener('db-undo-success', updateNotifs);
+      window.removeEventListener('db-change', updateNotifs);
     };
   }, [user]);
 
@@ -81,6 +90,175 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     };
   }, []);
 
+  const askNileAi = async () => {
+    const question = aiChatInput.trim();
+    if (!question || aiChatLoading) return;
+    setAiChatInput('');
+    setAiChatMessages(prev => [...prev, { role: 'user', text: question }]);
+    setAiChatLoading(true);
+
+    try {
+      const operations = db.getOperations();
+      const gensets = db.getStock();
+      const invoices = db.getInvoices();
+      const maintenance = db.getMaintenanceLogs();
+      const q = question.toUpperCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
+
+      // FAST PATH: factual operational questions never go through the LLM.
+      const idMatch = q.match(/(?:GENSET|GENSETS|مولد|مولدات|GENSET\s*ID)\s*#?\s*([A-Z0-9-]+)/i);
+      const bookingMatch = q.match(/(?:BOOKING|BOOKING NO|BOOKING NUMBER|حجز)\s*#?\s*([A-Z0-9-]+)/i);
+      const containerMatch = q.match(/(?:CONTAINER|CONT|حاويه|حاوية)\s*#?\s*([A-Z0-9]{4,12})/i);
+      const searchMatch = q.match(/(?:SEARCH|FIND|WHERE IS|LOCATE|LOOK FOR|ابحث|فين|اين|أين)\s*#?\s*([A-Z0-9-]+)/i);
+      const countWords = /HOW MANY|HOW MUCH|NUMBER OF|كام|عدد|كم/.test(q);
+
+      const normalizeId = (value: unknown) => String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const numericId = (value: unknown) => normalizeId(value).replace(/\D/g, '');
+      const gensetAliases = (value: unknown) => {
+        const raw = normalizeId(value);
+        const digits = numericId(value);
+        const aliases = new Set<string>();
+        if (raw) aliases.add(raw);
+        if (digits) {
+          aliases.add(digits);
+          aliases.add(digits.slice(-4).padStart(4, '0'));
+          aliases.add(digits.slice(-4));
+        }
+        return aliases;
+      };
+      const gensetMatches = (value: string, g: any) => {
+        const queryAliases = gensetAliases(value);
+        const recordValues = [g?.gensetNumber, g?.unitNumber, g?.id, g?.assetNumber];
+        return recordValues.some(v => {
+          const aliases = gensetAliases(v);
+          return [...queryAliases].some(a => aliases.has(a));
+        });
+      };
+      const operationGensetMatches = (value: string, o: any) => gensetMatches(value, o);
+      const dateValue = (x: any) => String(x?.clipOnDate || x?.operationDate || x?.dateReceived || '');
+      const fmtOp = (op: any) => {
+        const port = op.clipOnPort || op.clipOffPort || '—';
+        return isAr
+          ? `الحالة: ${op.status || 'غير محدد'}\nالميناء: ${port}\nالحجز: ${op.bookingNumber || '—'}\nالحاوية: ${op.containerNumber || '—'}`
+          : `Status: ${op.status || '—'}\nPort: ${port}\nBooking: ${op.bookingNumber || '—'}\nContainer: ${op.containerNumber || '—'}`;
+      };
+
+      // Genset lookup searches BOTH the fleet table's unitNumber and operation history.
+      // The original genset number is never changed; the last 4 digits are only an alias.
+      const lookupGenset = (id: string) => {
+        const stockHits = gensets.filter(g => gensetMatches(id, g));
+        const opHits = operations
+          .filter(o => operationGensetMatches(id, o))
+          .sort((a, b) => dateValue(b).localeCompare(dateValue(a)));
+        const maintenanceHits = maintenance
+          .filter(m => gensetMatches(id, m))
+          .sort((a, b) => String(b.serviceDate || '').localeCompare(String(a.serviceDate || '')));
+        return { stockHits, opHits, maintenanceHits };
+      };
+
+      const answerGenset = (id: string) => {
+        const { stockHits, opHits, maintenanceHits } = lookupGenset(id);
+        const stock = stockHits[0];
+        const latestOp = opHits[0];
+        const latestMaintenance = maintenanceHits[0];
+        if (!stock && !latestOp && !latestMaintenance) {
+          return isAr ? `المولد ${id} غير موجود في بيانات الأسطول أو السجل التشغيلي.` : `GENSET ${id} was not found in fleet, operations, or maintenance records.`;
+        }
+        const stockNumber = stock?.unitNumber || stock?.gensetNumber || id;
+        const location = stock?.location || latestOp?.clipOnPort || latestOp?.clipOffPort || latestMaintenance?.location || '—';
+        const status = stock?.status || latestOp?.status || latestMaintenance?.status || '—';
+        if (isAr) {
+          return `المولد ${stockNumber}\nالحالة: ${status}\nالموقع: ${location}${latestOp ? `\nالحجز: ${latestOp.bookingNumber || '—'}\nالحاوية: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nآخر صيانة: ${latestMaintenance.serviceDate || '—'}` : ''}`;
+        }
+        return `GENSET ${stockNumber}\nStatus: ${status}\nLocation: ${location}${latestOp ? `\nBooking: ${latestOp.bookingNumber || '—'}\nContainer: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nLast maintenance: ${latestMaintenance.serviceDate || '—'}` : ''}`;
+      };
+
+      if (idMatch) {
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(idMatch[1]) }]);
+        return;
+      }
+
+      // A short standalone number is also a genset search. This prevents
+      // questions such as "464" from unnecessarily going through the LLM.
+      if (/^\\d{1,6}$/.test(q.trim())) {
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(q.trim()) }]);
+        return;
+      }
+
+      // "SEARCH 422", "FIND 422", and "WHERE IS 422" are treated as genset IDs
+      // when the identifier is short/numeric, so they never fall through to the LLM.
+      if (searchMatch) {
+        const value = searchMatch[1];
+        if (/^\d{1,6}$/.test(value)) {
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(value) }]);
+          return;
+        }
+      }
+
+      if (bookingMatch || containerMatch) {
+        const value = (bookingMatch?.[1] || containerMatch?.[1] || '').toUpperCase();
+        const hits = operations.filter(o =>
+          String(o.bookingNumber || '').toUpperCase() === value ||
+          String(o.containerNumber || '').toUpperCase() === value
+        );
+        const answer = hits.length
+          ? hits.slice(0, 5).map(fmtOp).join('\n\n')
+          : (isAr ? `لم أجد ${value} في العمليات المسجلة.` : `No recorded operation was found for ${value}.`);
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+        return;
+      }
+
+      // Fast count/status questions.
+      if (countWords && /GENSET|مولد|STOCK|مخزون|MAINTENANCE|صيانة|PREORDER|UNDER OPERATE|تحت التشغيل/.test(q)) {
+        const portMatch = q.match(/DAM|ALEX|GOUDA|SOKHNA|SCCT|PSD|MAL/);
+        let list = gensets;
+        if (portMatch) list = list.filter(g => String(g.location || '').toUpperCase() === portMatch[0]);
+        const maintenanceCount = list.filter(g => g.status === 'MAINTENANCE').length;
+        const stockCount = list.filter(g => g.status === 'IN_STOCK').length;
+        const answer = isAr
+          ? `العدد: ${list.length}\nالمخزون: ${stockCount}\nالصيانة: ${maintenanceCount}${portMatch ? `\nالميناء: ${portMatch[0]}` : ''}`
+          : `Total: ${list.length}\nIn stock: ${stockCount}\nMaintenance: ${maintenanceCount}${portMatch ? `\nPort: ${portMatch[0]}` : ''}`;
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+        return;
+      }
+
+      // Fast customer/operation lookup: factual questions stay local and never wait for AI.
+      const customerQuery = q.match(/(?:HOW MANY|COUNT|NUMBER OF|كام|عدد|كم).*?(?:OPERATIONS?|JOBS?|عمليه|عمليات).*?(?:FOR|ل|لل)?\s*([A-Z][A-Z0-9 .&_-]{2,})$/i);
+      if (customerQuery) {
+        const needle = customerQuery[1].trim().toUpperCase();
+        const hits = operations.filter(o => String(o.customerName || '').toUpperCase().includes(needle));
+        const answer = isAr ? `عدد العمليات لـ ${needle}: ${hits.length}` : `Operations for ${needle}: ${hits.length}`;
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+        return;
+      }
+
+      // Only genuine analysis/reasoning reaches DALI. Keep the model payload tiny.
+      const statusCounts = operations.reduce((m: Record<string, number>, o) => { m[o.status] = (m[o.status] || 0) + 1; return m; }, {});
+      const portCounts = operations.reduce((m: Record<string, number>, o) => { const p = o.clipOnPort || '—'; m[p] = (m[p] || 0) + 1; return m; }, {});
+      const context = {
+        question,
+        totals: { operations: operations.length, invoices: invoices.length, gensets: gensets.length, maintenance: maintenance.length },
+        statusCounts,
+        portCounts,
+        recentOperations: operations.slice(0, 40).map(o => ({ bookingNumber:o.bookingNumber, containerNumber:o.containerNumber, gensetNumber:o.gensetNumber, customerName:o.customerName, status:o.status, clipOnPort:o.clipOnPort, clipOffPort:o.clipOffPort, operationDate:o.operationDate, rate:o.rate, vat:o.vat })),
+        invoiceTotals: invoices.reduce((m: any, i: any) => { const amount=Number(i.amount)||0; m.billed+=amount; if(i.status==='PAID') m.paid+=amount; return m; }, { billed:0, paid:0 }),
+        gensetStatusCounts: gensets.reduce((m: Record<string, number>, g) => { m[g.status] = (m[g.status] || 0) + 1; return m; }, {}),
+        maintenanceCount: maintenance.length
+      };
+      const prompt = `You are DALI 1.0, Nile Fleet's fast operations assistant. Answer ONLY the question from LIVE DATA. Never invent. Maximum 3 short lines. If the question is factual and data is missing, say so. Arabic question: Arabic answer. Preserve IDs/numbers exactly.\nQ:${question}\nDATA:${JSON.stringify(context)}`;
+      const answer = await runThinkingAudit(prompt, 420);
+      setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من DALI 1.0.' : 'No response from DALI 1.0.') }]);
+    } catch (e) {
+      console.error('DALI chat error', e);
+      const detail = e instanceof Error ? e.message : String(e);
+      setAiChatMessages(prev => [...prev, {
+        role: 'ai',
+        text: isAr ? `خطأ DALI: ${detail}` : `DALI ERROR: ${detail}`
+      }]);
+    } finally {
+      setAiChatLoading(false);
+    }
+  };
+
   const handlePortGateTabClick = (tab: 'GATE' | 'TRANSIT' | 'UPCOMING') => {
     sessionStorage.setItem('portGateTab', tab);
     setActivePortGateTab(tab);
@@ -94,6 +272,18 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     setActiveScreen('booking-invoices');
     window.dispatchEvent(new CustomEvent('invoices-tab-change', { detail: tab }));
   };
+
+  const toggleTheme = () => {
+    const nextTheme = isDark ? 'white' : 'black';
+    setTheme(nextTheme);
+    setThemeIslandOpen(true);
+    if (themeIslandTimerRef.current) clearTimeout(themeIslandTimerRef.current);
+    themeIslandTimerRef.current = setTimeout(() => setThemeIslandOpen(false), 1800);
+  };
+
+  useEffect(() => () => {
+    if (themeIslandTimerRef.current) clearTimeout(themeIslandTimerRef.current);
+  }, []);
 
   const toggleFullscreen = async () => {
     try {
@@ -153,7 +343,6 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     { id: 'user-mgmt', label: t.userMgmt, icon: '👤' },
     { id: 'customer-prices', label: t.customerPrices, icon: '💰' },
     { id: 'financials', label: t.financials, icon: '🏦' },
-    { id: 'expense-hub', label: t.expenseHub, icon: '🧾' },
     { id: 'support', label: t.support, icon: '🎧' },
     { id: 'system-log', label: t.systemLog, icon: '🕒' },
     { id: 'cust-reservations', label: t.reservations, icon: '📅' },
@@ -176,7 +365,6 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     { id: 'user-mgmt', label: t.userMgmt, icon: '👤' },
     { id: 'customer-prices', label: t.customerPrices, icon: '💰' },
     { id: 'financials', label: t.financials, icon: '🏦' },
-    { id: 'expense-hub', label: t.expenseHub, icon: '🧾' },
     { id: 'support', label: t.support, icon: '🎧' },
     { id: 'system-log', label: t.systemLog, icon: '🕒' },
   ] : (isGate ? [
@@ -456,6 +644,30 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         </div>
       )}
 
+      {/* DALI 1.0 floating dashboard assistant */}
+      <div className="fixed bottom-6 right-6 z-[100] no-print">
+        {isAiChatOpen && (
+          <div className={`absolute bottom-16 right-0 w-[min(92vw,420px)] h-[min(70vh,620px)] rounded-[2rem] overflow-hidden border shadow-2xl flex flex-col ${isTerminal ? 'bg-[#001224] border-white/10' : 'bg-white border-slate-200'}`}>
+            <div className="px-5 py-4 bg-gradient-to-r from-[#001F3F] to-[#073b6d] text-white flex items-center justify-between">
+              <div><p className="text-[8px] font-black tracking-[0.3em] text-[#C2A378]">DALI 1.0</p><p className="text-sm font-black">{isAr ? 'DALI 1.0' : 'DALI 1.0'}</p></div>
+              <button onClick={() => setIsAiChatOpen(false)} className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {aiChatMessages.length === 0 && <div className={`rounded-2xl p-4 text-xs leading-6 ${isTerminal ? 'bg-white/5 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>{isAr ? 'اسألني عن العمليات، المخزون، الحجوزات، الفواتير، الوقود، أو أي سؤال عام.' : 'Ask me about operations, stock, bookings, invoices, fuel, logistics, or any general question.'}</div>}
+              {aiChatMessages.map((m, i) => <div key={i} className={`rounded-2xl p-3 text-xs leading-6 whitespace-pre-wrap ${m.role === 'user' ? 'bg-blue-600 text-white ml-8' : (isTerminal ? 'bg-white/5 text-slate-200 mr-4' : 'bg-slate-100 text-slate-700 mr-4')}`}>{m.text}</div>)}
+              {aiChatLoading && <div className="text-[9px] font-black uppercase tracking-widest text-blue-500 animate-pulse">{isAr ? 'جاري التفكير...' : 'DALI 1.0 IS THINKING...'}</div>}
+            </div>
+            <div className={`p-3 border-t ${isTerminal ? 'border-white/10' : 'border-slate-200'}`}>
+              <div className="flex gap-2">
+                <textarea value={aiChatInput} onChange={e => setAiChatInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askNileAi(); } }} placeholder={isAr ? 'اكتب سؤالك...' : 'Ask DALI 1.0 anything...'} className={`flex-1 resize-none rounded-xl border px-3 py-2 text-xs outline-none min-h-[44px] ${isTerminal ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
+                <button onClick={askNileAi} disabled={aiChatLoading || !aiChatInput.trim()} className="self-end w-11 h-11 rounded-xl bg-[#001F3F] text-white disabled:opacity-40">➤</button>
+              </div>
+            </div>
+          </div>
+        )}
+        <button onClick={() => setIsAiChatOpen(v => !v)} className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#001F3F] to-[#0a4b82] text-white shadow-2xl border border-white/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center text-2xl" title={isAr ? 'مساعد DALI 1.0' : 'DALI 1.0 Assistant'}>✦</button>
+      </div>
+
       {/* MAIN CONTENT */}
       <main ref={mainContentRef} className={`flex-1 overflow-y-auto custom-scrollbar relative flex flex-col transition-colors duration-500 ${forceBanners.length > 0 ? 'mt-8' : ''}`} style={{ backgroundColor: 'var(--bg-primary)' }}>
         <header className="h-14 border-b flex items-center px-4 lg:px-6 justify-between sticky top-0 z-[40] shadow-sm backdrop-blur-md transition-colors no-print" style={{ backgroundColor: 'var(--rail-bg)', borderBottomColor: 'var(--border-primary)' }}>
@@ -470,6 +682,14 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
               title={isMuted ? (isAr ? 'إلغاء كتم التنبيهات' : 'Unmute Notifications') : (isAr ? 'كتم التنبيهات' : 'Mute Notifications')}
             >
                <span className="text-base">{isMuted ? '🔇' : '🔊'}</span>
+            </button>
+            <button
+              onClick={toggleTheme}
+              className={`relative p-1.5 rounded-lg border transition-all overflow-hidden ${isTerminal ? 'border-[#C2A37844] bg-white/5 text-[#C2A378]' : 'border-slate-200 bg-white'}`}
+              title={isDark ? (isAr ? 'الوضع الفاتح' : 'Light Mode') : (isAr ? 'الوضع الداكن' : 'Dark Mode')}
+              aria-label={isDark ? 'Light Mode' : 'Dark Mode'}
+            >
+              <span className={`block text-base leading-none transition-all duration-500 ${isDark ? 'rotate-0' : 'rotate-180'}`}>{isDark ? '☀️' : '🌙'}</span>
             </button>
             <button onClick={() => setActiveScreen('notifications')} className={`p-1.5 rounded-lg border relative transition-all ${isTerminal ? 'border-[#C2A37844] bg-white/5 text-[#C2A378]' : 'border-slate-200 bg-white'}`}>
                <span className="text-base">🔔</span>
@@ -496,6 +716,14 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
               <span className="text-lg">☰</span>
             </button>
           </div>
+          {themeIslandOpen && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[60] pointer-events-none">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#001F3F] dark:bg-white text-white dark:text-[#001F3F] shadow-2xl border border-[#C2A37866] animate-in fade-in zoom-in-95 duration-300">
+                <span className="text-sm animate-spin">{isDark ? '☀️' : '🌙'}</span>
+                <span className="text-[9px] font-black uppercase tracking-[0.2em]">{isDark ? (isAr ? 'الوضع الداكن' : 'DARK MODE') : (isAr ? 'الوضع الفاتح' : 'LIGHT MODE')}</span>
+              </div>
+            </div>
+          )}
         </header>
 
         <div className="p-4 lg:p-6 flex-1">

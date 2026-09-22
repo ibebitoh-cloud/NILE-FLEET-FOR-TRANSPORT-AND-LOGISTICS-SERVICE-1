@@ -163,10 +163,17 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
 
   const [operations, setOperations] = useState<Operation[]>(db.getOperations());
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => { const timer = setTimeout(() => setDebouncedSearch(searchTerm), 150); return () => clearTimeout(timer); }, [searchTerm]);
   const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
   const [activeQuickFilter, setActiveQuickFilter] = useState<QuickFilter>('ALL');
   const [editingOp, setEditingOp] = useState<Operation | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+
+  const selectedPort = highlightId && Object.values(Location).includes(highlightId as Location)
+    ? highlightId as Location
+    : null;
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -174,7 +181,7 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
 
   const filteredOps = useMemo(() => {
     return operations.filter(op => {
-      const search = searchTerm.toLowerCase().trim();
+      const search = debouncedSearch.toLowerCase().trim();
       const matchesSearch = (op.bookingNumber || '').toLowerCase().includes(search) || 
                             (op.customerName || '').toLowerCase().includes(search) || 
                             (op.containerNumber || '').toLowerCase().includes(search);
@@ -185,9 +192,10 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
       if (activeQuickFilter === 'OPERATE') matchesFilter = op.status === 'UNDER OPERATE';
       if (activeQuickFilter === 'REVIEW') matchesFilter = !op.reviewedByManager;
       
-      return matchesSearch && matchesFilter;
+      const matchesPort = !selectedPort || op.clipOnPort === selectedPort || op.clipOffPort === selectedPort;
+      return matchesSearch && matchesFilter && matchesPort;
     });
-  }, [operations, searchTerm, activeQuickFilter]);
+  }, [operations, debouncedSearch, activeQuickFilter, selectedPort]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, Operation[]> = {};
@@ -199,7 +207,7 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
       bk,
       items,
       rep: items[0],
-      total: items.reduce((s, i) => s + parseFloat(i.rate) + parseFloat(i.vat), 0),
+      total: items.reduce((s, i) => s + (Number.parseFloat(i.rate || '0') || 0) + (Number.parseFloat(i.vat || '0') || 0), 0),
       needsReview: items.some(i => !i.reviewedByManager)
     })).sort((a,b) => b.rep.operationDate.localeCompare(a.rep.operationDate));
   }, [filteredOps]);
@@ -234,21 +242,22 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
     return match ? match[1] : null;
   };
 
-  const handleUpdateCell = (op: Operation, field: keyof Operation, val: any) => {
+  const handleUpdateCell = async (op: Operation, field: keyof Operation, val: any) => {
     if (!isAdmin) return;
-    db.updateOperation({ ...op, [field]: val });
-    refresh();
+    const saved = await db.updateOperation({ ...op, [field]: val });
+    if (saved) refresh();
+    else alert(isAr ? `فشل حفظ التعديل. ${db.getLastDbError() || ''}` : `Failed to save change. ${db.getLastDbError() || ''}`);
   };
 
-  const handleConfirmRecord = (opId: string) => {
+  const handleConfirmRecord = async (opId: string) => {
     if (!isAdmin) return;
     if (confirm(isAr ? 'تأكيد صحة بيانات هذه العملية؟' : 'Authorize and verify this manifest entry?')) {
-      db.confirmOperation(opId);
+      await db.confirmOperation(opId);
       refresh();
     }
   };
 
-  const handleForceVerifyAll = () => {
+  const handleForceVerifyAll = async () => {
     if (!isAdmin) return;
     const pendingIds = filteredOps.filter(o => !o.reviewedByManager).map(o => o.id);
     if (pendingIds.length === 0) {
@@ -256,13 +265,17 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
       return;
     }
     if (confirm(isAr ? `تأكيد اعتماد جميع العمليات الـ ${pendingIds.length} المعروضة؟` : `FORCE VERIFY: Authenticate all ${pendingIds.length} visible pending records?`)) {
-      db.confirmOperationsBulk(pendingIds);
+      await db.confirmOperationsBulk(pendingIds);
       refresh();
     }
   };
 
-  const handleSaveForceEdit = (updatedOp: Operation) => {
-    db.updateOperation(updatedOp);
+  const handleSaveForceEdit = async (updatedOp: Operation) => {
+    const saved = await db.updateOperation(updatedOp);
+    if (!saved) {
+      alert(isAr ? `فشل حفظ التعديل. ${db.getLastDbError() || ''}` : `Failed to save change. ${db.getLastDbError() || ''}`);
+      return;
+    }
     setEditingOp(null);
     refresh();
     alert(isAr ? 'تم تحديث البيانات بنجاح' : 'Manifest entry successfully updated.');

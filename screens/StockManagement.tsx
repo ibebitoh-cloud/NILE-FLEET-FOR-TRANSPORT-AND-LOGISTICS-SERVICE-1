@@ -32,7 +32,7 @@ const StockManagement: React.FC = () => {
   const isReadOnly = currentUser.role === UserRole.VIEWER;
   const isAdmin = currentUser.role === UserRole.ADMIN;
 
-  const [activeTab, setActiveTab] = useState<'inventory' | 'maintenance'>('inventory');
+  const [activeTab, setActiveTab] = useState<'visual' | 'inventory' | 'maintenance'>('visual');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStat, setFilterStat] = useState<string>('ALL');
   const [filterLoc, setFilterLoc] = useState<string>('ALL');
@@ -343,6 +343,14 @@ const StockManagement: React.FC = () => {
         <div className="flex items-center gap-2 w-full md:w-auto">
           <div className="bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl flex border border-slate-200 dark:border-slate-700">
             <button
+              onClick={() => setActiveTab('visual')}
+              className={`px-4 py-2 rounded-xl font-black uppercase text-[9px] tracking-wider transition-all flex items-center gap-1.5 ${activeTab === 'visual' ? 'bg-[#001F3F] text-white shadow-md' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
+            >
+              <span>🛰️</span>
+              <span>{isAr ? 'خريطة الأسطول' : 'Fleet View'}</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('inventory')}
               className={`px-4 py-2 rounded-xl font-black uppercase text-[9px] tracking-wider transition-all flex items-center gap-1.5 ${
                 activeTab === 'inventory'
@@ -448,7 +456,90 @@ const StockManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* ================= TAB 1: FLEET INVENTORY ================= */}
+      {/* ================= TAB 2: FLEET INVENTORY ================= */}
+      {/* ================= VISUAL FLEET BOARD ================= */}
+      {activeTab === 'visual' && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="bg-[#001F3F] text-white rounded-3xl p-5 shadow-xl border border-[#C2A378]/30">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">⚡</span>
+                  <h2 className="text-xl font-black uppercase tracking-tight">{isAr ? 'خريطة أسطول المولدات' : 'GENSET FLEET BOARD'}</h2>
+                </div>
+                <p className="text-[9px] text-slate-300 font-bold uppercase tracking-widest mt-1">
+                  {isAr ? 'كل رقم مولد ظاهر حسب الميناء والحالة التشغيلية' : 'Every genset number grouped by port and live operating status'}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-[8px] font-black uppercase">
+                <span className="px-3 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">● {isAr ? 'متاح' : 'IN STOCK'} {metrics.inStock}</span>
+                <span className="px-3 py-2 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30">● {isAr ? 'مؤجر / على رحلة' : 'RENTED / CLIPPED'} {metrics.clippedOn}</span>
+                <span className="px-3 py-2 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-400/30">● {isAr ? 'صيانة' : 'MAINTENANCE'} {metrics.inMaint}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
+            {Object.values(Location).map(port => {
+              const units = stock.filter(s => s.location === port).sort((a,b) => a.unitNumber.localeCompare(b.unitNumber));
+              if (!units.length) return null;
+              const available = units.filter(u => u.status === GensetStatus.IN_STOCK).length;
+              const rented = units.filter(u => u.status === GensetStatus.CLIPPED_ON).length;
+              const maintenance = units.filter(u => u.status === GensetStatus.MAINTENANCE).length;
+              return (
+                <div key={port} className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-sm text-[#001F3F] dark:text-white uppercase">{port}</h3>
+                      <p className="text-[8px] text-slate-400 font-bold uppercase">{units.length} {isAr ? 'مولد' : 'GENSETS'}</p>
+                    </div>
+                    <div className="flex gap-1 text-[7px] font-black">
+                      <span className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700">S {available}</span>
+                      <span className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700">R {rented}</span>
+                      <span className="px-2 py-1 rounded-lg bg-rose-100 text-rose-700">M {maintenance}</span>
+                    </div>
+                  </div>
+                  <div className="p-3 grid grid-cols-4 sm:grid-cols-5 gap-2">
+                    {units.map(unit => {
+                      const statusClass =
+                        unit.status === GensetStatus.IN_STOCK
+                          ? 'bg-emerald-500 text-white border-emerald-600 shadow-emerald-200'
+                          : unit.status === GensetStatus.CLIPPED_ON
+                            ? 'bg-blue-600 text-white border-blue-700 shadow-blue-200'
+                            : unit.status === GensetStatus.MAINTENANCE
+                              ? 'bg-rose-500 text-white border-rose-600 shadow-rose-200'
+                              : 'bg-amber-500 text-white border-amber-600 shadow-amber-200';
+                      const activeOp = ops.find(o => o.gensetNumber?.trim().toUpperCase() === unit.unitNumber?.trim().toUpperCase() && o.status === 'IN PROGRESS');
+                      return (
+                        <button
+                          key={unit.id}
+                          title={activeOp ? `#${activeOp.bookingNumber}` : unit.status}
+                          onClick={() => setEditingGenset({...unit})}
+                          className={`min-h-[58px] rounded-xl border-2 ${statusClass} shadow-md hover:scale-105 transition-transform px-1.5 py-2 flex flex-col items-center justify-center`}
+                        >
+                          <span className="text-[10px] sm:text-[11px] font-black font-mono tracking-tight">{unit.unitNumber}</span>
+                          <span className="text-[6px] font-black uppercase opacity-80 mt-1">
+                            {unit.status === GensetStatus.IN_STOCK ? (isAr ? 'متاح' : 'STOCK') : unit.status === GensetStatus.CLIPPED_ON ? (isAr ? 'مؤجر' : 'RENTED') : unit.status === GensetStatus.MAINTENANCE ? (isAr ? 'صيانة' : 'MAINT') : unit.status}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {stock.length === 0 && (
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-700">
+              <div className="text-4xl mb-3">⚡</div>
+              <p className="font-black uppercase text-slate-500">{isAr ? 'لا توجد مولدات مسجلة' : 'NO GENSETS REGISTERED'}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+
       {activeTab === 'inventory' && (
         <div className="space-y-4">
           {/* Search & Filters */}

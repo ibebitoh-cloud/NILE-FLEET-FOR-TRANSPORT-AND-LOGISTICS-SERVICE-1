@@ -8,7 +8,6 @@ import Reservations from './screens/Reservations';
 import Customers from './screens/Customers';
 import CustomerPrices from './screens/CustomerPrices';
 import Financials from './screens/Financials';
-import ExpenseHub from './screens/ExpenseHub';
 import HistoryLog from './screens/HistoryLog';
 import Intelligence from './screens/Intelligence';
 import Reports from './screens/Reports';
@@ -25,11 +24,11 @@ import Layout from './components/Layout';
 import { User, UserRole } from './types';
 import { db } from './services/supabaseDb';
 import { loginWithPassword, logout as supabaseLogout, getCurrentSessionUser } from './services/authService';
-import { discoveryQueue, registerDynamicTranslations } from './translations';
+import { discoveryQueue, registerDynamicTranslations, translateUiText } from './translations';
 import { translateBusinessEntities, getSafeApiKey } from './services/aiService';
 
 type Language = 'en' | 'ar';
-export type ThemeMode = 'black' | 'white' | 'yellow' | 'navy' | 'forest' | 'sahara' | 'cyber' | 'slate' | 'midnight' | 'rose' | 'emerald-vibrant' | 'ocean' | 'lava' | 'phantom' | 'mint' | 'copper' | 'arctic' | 'toxic' | 'custom';
+export type ThemeMode = 'black' | 'white' | 'yellow' | 'navy' | 'forest' | 'sahara' | 'cyber' | 'slate' | 'midnight' | 'rose' | 'emerald-vibrant' | 'ocean' | 'lava' | 'phantom' | 'mint' | 'copper' | 'arctic' | 'toxic' | 'nile' | 'carbon' | 'royal' | 'sandstorm' | 'corporate' | 'crimson' | 'custom';
 
 interface LanguageContextType {
   lang: Language;
@@ -70,10 +69,8 @@ export const ThemeContext = createContext<ThemeContextType>({
 });
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   
   const [theme, setTheme] = useState<ThemeMode>(() => {
     return (localStorage.getItem('theme') as ThemeMode) || 'rose';
@@ -102,16 +99,36 @@ const App: React.FC = () => {
     localStorage.setItem('app_lang', lang);
   }, [lang]);
 
-  // Bootstrap: load all data from Supabase once on app start
+  // Bootstrap: load live data and verify the real Supabase session.
+  // localStorage is only a UI cache and must never be treated as authentication.
   useEffect(() => {
-    db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err));
+    let cancelled = false;
+    Promise.all([
+      db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err)),
+      getCurrentSessionUser().catch(err => {
+        console.error('Failed to verify Supabase session:', err);
+        return null;
+      })
+    ]).then(([, sessionUser]) => {
+      if (cancelled) return;
+      if (sessionUser) {
+        setUser(sessionUser);
+        localStorage.setItem('user', JSON.stringify(sessionUser));
+        setActiveScreen(sessionUser.role === UserRole.GATE_OPERATOR ? 'port-gate' : (sessionUser.role === UserRole.CUSTOMER ? 'cust-reservations' : 'dashboard'));
+      } else {
+        setUser(null);
+        localStorage.removeItem('user');
+      }
+      setAuthChecked(true);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const getIsDark = (currentTheme: ThemeMode): boolean => {
     if (currentTheme === 'custom') {
       return localStorage.getItem('custom_is_dark') === 'true';
     }
-    const DARK_THEMES = ['black', 'navy', 'forest', 'sahara', 'cyber', 'slate', 'midnight', 'toxic', 'lava', 'copper', 'phantom'];
+    const DARK_THEMES = ['black', 'navy', 'forest', 'sahara', 'cyber', 'slate', 'midnight', 'toxic', 'lava', 'copper', 'phantom', 'nile', 'carbon', 'royal', 'crimson'];
     return DARK_THEMES.includes(currentTheme);
   };
 
@@ -241,10 +258,81 @@ const App: React.FC = () => {
       } finally {
         isProcessing = false;
       }
-    }, 2000);
+    }, 5000);
 
     return () => clearInterval(observer);
   }, [lang]);
+
+  // GLOBAL UI TRANSLATION FALLBACK.
+  // Keep this lightweight: a full DOM walk on every React mutation caused UI lag.
+  useEffect(() => {
+    if (lang !== 'ar') return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let running = false;
+
+    const translateRoot = (root: ParentNode) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        const text = node as Text;
+        const parent = text.parentElement;
+        if (parent && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(parent.tagName)) nodes.push(text);
+      }
+      for (const text of nodes) {
+        const value = text.nodeValue || '';
+        const translated = translateUiText(value, 'ar');
+        if (translated !== value) text.nodeValue = translated;
+      }
+      if (root === document.body) {
+        document.body.querySelectorAll<HTMLElement>('[placeholder],[title],[aria-label]').forEach(el => {
+          for (const attr of ['placeholder', 'title', 'aria-label']) {
+            const value = el.getAttribute(attr);
+            if (!value) continue;
+            const translated = translateUiText(value, 'ar');
+            if (translated !== value) el.setAttribute(attr, translated);
+          }
+        });
+      }
+    };
+
+    translateRoot(document.body);
+
+    const observer = new MutationObserver(mutations => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (running) return;
+        running = true;
+        try {
+          // Only inspect newly inserted subtrees. Do not react to characterData
+          // changes caused by our own translations.
+          const roots = mutations
+            .flatMap(m => Array.from(m.addedNodes))
+            .filter(n => n.nodeType === Node.ELEMENT_NODE || n.nodeType === Node.TEXT_NODE)
+            .slice(0, 20);
+          for (const root of roots) {
+            if (root.nodeType === Node.ELEMENT_NODE) translateRoot(root);
+            else {
+              const text = root as Text;
+              const value = text.nodeValue || '';
+              const translated = translateUiText(value, 'ar');
+              if (translated !== value) text.nodeValue = translated;
+            }
+          }
+        } finally {
+          running = false;
+        }
+      }, 120);
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      if (timer) clearTimeout(timer);
+    };
+  }, [lang, langUpdateKey]);
+
 
   // Handle refresh events from translations.ts
   useEffect(() => {
@@ -297,6 +385,18 @@ const App: React.FC = () => {
     setActiveScreen(screen);
   };
 
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary,#f8fafc)] text-[var(--text-primary,#0f172a)]">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-slate-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-[10px] font-black uppercase tracking-[0.25em]">NILE FLEET</p>
+          <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-1">Verifying session...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <LanguageContext value={{ lang, setLang }}>
@@ -323,7 +423,6 @@ const App: React.FC = () => {
       case 'user-mgmt': return <UserMgmt />;
       case 'customer-prices': return <CustomerPrices />;
       case 'financials': return <Financials key={`fin-${langUpdateKey}`} />;
-      case 'expense-hub': return <ExpenseHub key={`exp-${langUpdateKey}`} />;
       case 'support': return <CustomerService />;
       case 'notifications': return <Notifications />;
       case 'system-log': return <HistoryLog />;

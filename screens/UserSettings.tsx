@@ -332,7 +332,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
     setPurgeAuthPassword('');
   };
 
-  const labelClass = "text-[9px] font-black uppercase text-slate-400 block mb-2 tracking-[0.2em] px-1";
+  const labelClass = "text-[9px] font-black uppercase text-slate-400 block mb-2 tracking-[0.15em] px-1";
   const inputClass = "w-full px-5 py-3 rounded-2xl border-2 outline-none text-xs font-bold transition-all border-slate-100 focus:border-rose-500 text-slate-900 bg-slate-50 dark:border-white/5 dark:focus:border-rose-400 dark:text-white dark:bg-white/5";
   const toggleClass = (checked: boolean) => `relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? 'bg-rose-500' : 'bg-slate-200 dark:bg-slate-700'}`;
   const toggleThumbClass = (checked: boolean) => `pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-5' : 'translate-x-0'}`;
@@ -340,9 +340,40 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
   const brandingSettings = profileData.invoiceSettings as InvoiceSettings;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5 animate-in fade-in duration-500 pb-32 text-start">
-      {/* Profile Summary Header */}
-      <div className="flex flex-col lg:flex-row items-center gap-6 bg-white dark:bg-slate-900 p-8 rounded-[3rem] shadow-sm border border-slate-100 dark:border-white/5 relative overflow-hidden">
+    <div className="max-w-[1500px] mx-auto space-y-6 animate-in fade-in duration-500 pb-32 text-start">
+      {/* Redesigned Settings Command Header */}
+      <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-[#001F3F] via-[#062b52] to-[#07111f] p-6 lg:p-8 text-white shadow-2xl border border-white/10">
+        <div className="absolute -top-32 -right-20 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl"></div>
+        <div className="absolute -bottom-40 left-1/3 h-80 w-80 rounded-full bg-[#C2A378]/10 blur-3xl"></div>
+        <div className="relative z-10 flex flex-col xl:flex-row gap-7 items-stretch xl:items-center">
+          <div className="flex items-center gap-5 min-w-0 xl:min-w-[330px]">
+            <div className="relative group cursor-pointer shrink-0" onClick={() => setShowAvatarStudio(true)}>
+              <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-[1.75rem] overflow-hidden ring-4 ring-white/10 shadow-2xl">
+                <img src={profileData.avatarUrl} alt="User" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all rounded-[1.75rem]">
+                  <span className="text-white text-[8px] font-black uppercase">{isAr ? 'تغيير الصورة' : 'Change'}</span>
+                </div>
+              </div>
+              <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white w-7 h-7 rounded-xl flex items-center justify-center text-sm shadow-xl ring-4 ring-[#062b52]">✓</div>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[8px] font-black tracking-[0.35em] uppercase text-[#C2A378] mb-2">{isAr ? 'إعدادات الحساب' : 'ACCOUNT SETTINGS'}</p>
+              <h1 className="text-2xl lg:text-3xl font-black tracking-tight truncate">{profileData.name}</h1>
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-300 mt-2 truncate">{user.role} • {isAr ? 'مستوى الصلاحية' : 'ACCESS LEVEL'}</p>
+            </div>
+          </div>
+          <div className="hidden xl:block h-20 w-px bg-white/10"></div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1">
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4"><p className="text-[7px] font-black uppercase tracking-widest text-slate-400">{isAr ? 'الحالة' : 'STATUS'}</p><p className="mt-2 text-sm font-black text-emerald-400">● {isAr ? 'نشط' : 'ACTIVE'}</p></div>
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4"><p className="text-[7px] font-black uppercase tracking-widest text-slate-400">{isAr ? 'البريد' : 'EMAIL'}</p><p className="mt-2 text-[9px] font-bold truncate">{profileData.email}</p></div>
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4"><p className="text-[7px] font-black uppercase tracking-widest text-slate-400">{isAr ? 'الوصول' : 'ACCESS'}</p><p className="mt-2 text-[9px] font-black uppercase text-blue-300">{isAdmin || isSuperOwner ? (isAr ? 'إداري' : 'ADMIN') : (isAr ? 'مستخدم' : 'USER')}</p></div>
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4"><p className="text-[7px] font-black uppercase tracking-widest text-slate-400">{isAr ? 'اللغة' : 'LANGUAGE'}</p><p className="mt-2 text-sm font-black">{isAr ? 'العربية' : 'ENGLISH'}</p></div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Settings Navigation */}
+      <div className="flex flex-col lg:flex-row items-center gap-6 bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-lg border border-slate-100 dark:border-white/5 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/5 rounded-full blur-3xl -mr-32 -mt-32"></div>
         <div className="relative group cursor-pointer" onClick={() => setShowAvatarStudio(true)}>
           <div className="w-24 h-24 rounded-2xl border-4 border-rose-100 dark:border-rose-900/30 overflow-hidden relative shadow-lg">
@@ -353,19 +384,22 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
           </div>
           <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white w-7 h-7 rounded-lg flex items-center justify-center text-sm shadow-xl ring-2 ring-white dark:ring-slate-900">✓</div>
         </div>
-        <div className="flex-1 text-center lg:text-start space-y-3">
-          <div>
-            <h1 className="text-2xl font-black italic uppercase tracking-tighter text-slate-900 dark:text-white leading-none">{profileData.name}</h1>
-            <p className="text-[8px] font-black text-rose-500 uppercase tracking-[0.4em] mt-1.5 italic">{user.role} ACCESS LEVEL</p>
+        <div className="flex-1 w-full space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[8px] font-black uppercase tracking-[0.3em] text-blue-600">{isAr ? 'مركز التحكم' : 'SETTINGS CONTROL CENTER'}</p>
+              <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white mt-1">{isAr ? 'تخصيص حسابك وبيئة العمل' : 'Configure your account and workspace'}</h2>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 text-[8px] font-black uppercase"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>{isAr ? 'النظام يعمل' : 'SYSTEM ONLINE'}</div>
           </div>
-          <div className="flex flex-wrap justify-center lg:justify-start gap-1.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
             {[
-              { id: 'IDENTITY', label: 'Identity', icon: '👤' },
-              { id: 'CONTACT', label: 'Logistics', icon: '📍' },
-              { id: 'DISPLAY', label: 'Interface', icon: '🎨' },
-              { id: 'BUSINESS', label: 'Branding', icon: '🏢' },
-              { id: 'LINGUISTICS', label: 'Linguistics', icon: '🗣️' },
-              isSuperOwner ? { id: 'COMMAND', label: 'Command', icon: '☢️' } : null,
+              { id: 'IDENTITY', label: isAr ? 'الهوية' : 'Identity', icon: '👤' },
+              { id: 'CONTACT', label: isAr ? 'بيانات العمل' : 'Logistics', icon: '📍' },
+              { id: 'DISPLAY', label: isAr ? 'المظهر' : 'Interface', icon: '🎨' },
+              { id: 'BUSINESS', label: isAr ? 'الفواتير والشركة' : 'Branding', icon: '🏢' },
+              { id: 'LINGUISTICS', label: isAr ? 'اللغة والذكاء' : 'Linguistics', icon: '🗣️' },
+              isSuperOwner ? { id: 'COMMAND', label: isAr ? 'التحكم الحرج' : 'Command', icon: '☢️' } : null,
             ].filter((tab): tab is { id: string; label: string; icon: string } => {
               if (!tab) return false;
               if (user.role === UserRole.GATE_OPERATOR) {
@@ -376,7 +410,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
               <button 
                 key={tab.id} 
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-sm ${activeTab === tab.id ? 'bg-rose-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600'}`}
+                className={`flex items-center justify-center gap-2 px-3 py-3 rounded-2xl text-[8px] font-black uppercase transition-all border ${activeTab === tab.id ? 'bg-[#001F3F] text-white border-[#001F3F] shadow-lg shadow-blue-900/20' : 'bg-slate-50 dark:bg-slate-800/70 text-slate-400 border-slate-100 dark:border-white/5 hover:border-blue-200 hover:text-blue-600'}`}
               >
                 <span>{tab.icon}</span>
                 {tab.label}
@@ -386,7 +420,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-2xl overflow-hidden min-h-[400px]">
+      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-white/5 shadow-2xl overflow-hidden min-h-[500px]">
         {activeTab === 'IDENTITY' && (
           <form onSubmit={handleProfileUpdate} className="p-8 lg:p-12 space-y-8 animate-in slide-in-from-bottom-4">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-start">
@@ -538,25 +572,28 @@ const UserSettings: React.FC<UserSettingsProps> = ({ user, onUpdate }) => {
                   <h3 className="text-lg font-black uppercase italic tracking-tighter text-[#001F3F] dark:text-white">Interface Personalization</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { id: 'rose', label: 'Classic', bg: 'bg-rose-500' },
-                      { id: 'black', label: 'Terminal', bg: 'bg-slate-900' },
-                      { id: 'navy', label: 'Ocean', bg: 'bg-blue-900' },
-                      { id: 'forest', label: 'Eco', bg: 'bg-emerald-900' },
-                      { id: 'lava', label: 'Magma', bg: 'bg-rose-900' },
-                      { id: 'copper', label: 'Vintage', bg: 'bg-orange-900' },
-                      { id: 'arctic', label: 'Frozen', bg: 'bg-sky-100' },
-                      { id: 'toxic', label: 'Acid', bg: 'bg-lime-400' },
-                      { id: 'emerald-vibrant', label: 'Vibrant Green', bg: 'bg-emerald-500' },
-                      { id: 'phantom', label: 'Stealth', bg: 'bg-zinc-800' },
-                      { id: 'custom', label: 'Custom Palette', bg: 'bg-gradient-to-tr from-rose-500 via-green-500 to-blue-500' }
-                    ].map(t => (
+                      { id: 'rose', label: isAr ? 'كلاسيكي' : 'Classic', bg: 'bg-rose-500' },
+                      { id: 'nile', label: isAr ? 'النيل' : 'Nile Command', bg: 'bg-emerald-800' },
+                      { id: 'corporate', label: isAr ? 'مؤسسي' : 'Corporate', bg: 'bg-sky-600' },
+                      { id: 'carbon', label: isAr ? 'كربون' : 'Carbon', bg: 'bg-zinc-900' },
+                      { id: 'royal', label: isAr ? 'ملكي' : 'Royal', bg: 'bg-violet-700' },
+                      { id: 'sandstorm', label: isAr ? 'رملي' : 'Sandstorm', bg: 'bg-amber-600' },
+                      { id: 'crimson', label: isAr ? 'قرمزي' : 'Crimson', bg: 'bg-rose-700' },
+                      { id: 'black', label: isAr ? 'طرفية' : 'Terminal', bg: 'bg-black' },
+                      { id: 'navy', label: isAr ? 'كحلي' : 'Navy', bg: 'bg-blue-900' },
+                      { id: 'forest', label: isAr ? 'غابة' : 'Forest', bg: 'bg-emerald-900' },
+                      { id: 'lava', label: isAr ? 'حمم' : 'Magma', bg: 'bg-red-900' },
+                      { id: 'arctic', label: isAr ? 'جليدي' : 'Arctic', bg: 'bg-sky-100' },
+                      { id: 'emerald-vibrant', label: isAr ? 'زمردي' : 'Emerald', bg: 'bg-emerald-500' },
+                      { id: 'phantom', label: isAr ? 'شبح' : 'Phantom', bg: 'bg-zinc-800' },
+                      { id: 'custom', label: isAr ? 'مخصص' : 'Custom', bg: 'bg-gradient-to-tr from-rose-500 via-green-500 to-blue-500' }                    ].map(t => (
                       <button 
                         key={t.id}
                         onClick={() => setTheme(t.id as any)}
-                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${theme === t.id ? 'border-rose-500 scale-105 shadow-xl bg-slate-50 dark:bg-slate-800' : 'border-slate-100 dark:border-white/5 hover:border-slate-200'}`}
+                        className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 min-h-[82px] ${theme === t.id ? 'border-[var(--accent)] scale-[1.03] shadow-xl' : 'border-slate-100 dark:border-white/5 hover:border-[var(--accent)]/50'}`}
                       >
                         <div className={`w-8 h-8 rounded-full ${t.bg} shadow-inner`}></div>
-                        <span className="text-[8px] font-black uppercase text-slate-400">{t.label}</span>
+                        <span className="text-[8px] font-black uppercase" style={{ color: "var(--text-secondary)" }}>{t.label}</span>
                       </button>
                     ))}
                   </div>

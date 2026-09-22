@@ -85,9 +85,16 @@ export async function getCurrentSessionUser(): Promise<User | null> {
  */
 export async function createRealAccount(email: string, password: string, profile: Partial<User>): Promise<{ userId?: string; error?: string }> {
   try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) return { error: 'No active administrator session' };
+
     const res = await fetch('/create-user', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({ email, password, profile }),
     });
     const data = await res.json();

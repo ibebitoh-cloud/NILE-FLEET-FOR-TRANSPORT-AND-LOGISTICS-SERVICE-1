@@ -29,32 +29,45 @@ const Notifications: React.FC = () => {
 
   useEffect(() => {
     refreshNotifs();
-    window.addEventListener('db-undo-success', refreshNotifs);
-    return () => window.removeEventListener('db-undo-success', refreshNotifs);
-  }, []);
+    const handleDbChange = () => refreshNotifs();
+    window.addEventListener('db-undo-success', handleDbChange);
+    window.addEventListener('db-change', handleDbChange);
+    return () => {
+      window.removeEventListener('db-undo-success', handleDbChange);
+      window.removeEventListener('db-change', handleDbChange);
+    };
+  }, [currentUser.id]);
 
-  const handleBroadcast = () => {
-    if (!forceMsgEn || !forceMsgAr) {
+  const handleBroadcast = async () => {
+    if (!forceMsgEn.trim() || !forceMsgAr.trim()) {
         alert(isAr ? 'يرجى إدخال الرسالة باللغتين' : 'Please enter message in both languages');
         return;
     }
-    db.addNotification({
+    const saved = await db.addNotification({
       type: forceType,
-      message: forceMsgEn,
-      messageAr: forceMsgAr,
+      message: forceMsgEn.trim(),
+      messageAr: forceMsgAr.trim(),
       forceBanner: isBanner,
       targetUserId: targetType === 'USER' ? targetValue : undefined,
       targetOrgName: targetType === 'ORG' ? targetValue : undefined
     });
+    if (!saved) {
+      alert(isAr ? `تعذر إرسال التنبيه: ${db.getLastDbError() || 'خطأ في قاعدة البيانات'}` : `Notification failed: ${db.getLastDbError() || 'database error'}`);
+      return;
+    }
     setForceMsgEn('');
     setForceMsgAr('');
-    alert(isAr ? 'تم إرسال التنبيه بنجاح' : 'BROADCAST EXECUTED SUCCESSFULLY');
+    alert(isAr ? 'تم إرسال التنبيه بنجاح' : 'NOTIFICATION SENT SUCCESSFULLY');
     refreshNotifs();
   };
 
-  const handleClearHistory = () => {
-    if (confirm(isAr ? 'هل أنت متأكد من حذف جميع التنبيهات؟' : 'Clear all notification history?')) {
-      db.clearAllNotifications();
+  const handleClearHistory = async () => {
+    if (confirm(isAr ? 'هل أنت متأكد من كتم جميع التنبيهات النشطة؟' : 'Dismiss all active notifications?')) {
+      const saved = await db.clearAllNotifications();
+      if (!saved) {
+        alert(isAr ? `تعذر تحديث التنبيهات: ${db.getLastDbError() || 'خطأ في قاعدة البيانات'}` : `Could not update notifications: ${db.getLastDbError() || 'database error'}`);
+        return;
+      }
       refreshNotifs();
     }
   };
@@ -139,7 +152,10 @@ const Notifications: React.FC = () => {
                            </td>
                            <td className="p-6 text-center">
                               {n.active ? (
-                                <button onClick={() => db.dismissNotification(n.id)} className="text-blue-500 hover:text-blue-700 font-black uppercase text-[9px] underline decoration-dotted">Dismiss</button>
+                                <button onClick={async () => {
+                                const saved = await db.dismissNotification(n.id);
+                                if (!saved) alert(isAr ? 'تعذر تحديث حالة التنبيه.' : 'Could not update notification status.');
+                              }} className="text-blue-500 hover:text-blue-700 font-black uppercase text-[9px] underline decoration-dotted">Dismiss</button>
                               ) : (
                                 <span className="text-slate-300 uppercase italic">Seen</span>
                               )}

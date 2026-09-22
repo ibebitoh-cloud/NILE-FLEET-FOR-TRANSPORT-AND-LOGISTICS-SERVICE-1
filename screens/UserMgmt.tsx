@@ -16,9 +16,8 @@ const ALL_SYSTEM_SCREENS = [
   { id: 'reservations', label: 'Bookings & Reservations', icon: '📅', category: 'Commercial' },
   { id: 'customers', label: 'Partners Directory', icon: '🤝', category: 'Commercial' },
   { id: 'customer-prices', label: 'Customer Price Matrix', icon: '💰', category: 'Commercial' },
-  { id: 'booking-invoices', label: 'Booking Invoices & ETA', icon: '🧾', category: 'Commercial' },
+  { id: 'booking-invoices', label: 'Booking Invoices', icon: '🧾', category: 'Commercial' },
   { id: 'financials', label: 'Financials & Payments', icon: '🏦', category: 'Financials' },
-  { id: 'expense-hub', label: 'Expense Hub & Expenses', icon: '🧾', category: 'Financials' },
   { id: 'intelligence', label: 'AI Intelligence Hub', icon: '🧠', category: 'Analytics' },
   { id: 'reports', label: 'Audit Reports & Analytics', icon: '📝', category: 'Analytics' },
   { id: 'user-mgmt', label: 'User & Access Management', icon: '👤', category: 'Administration' },
@@ -55,8 +54,9 @@ const UserMgmt: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'INTERNAL' | 'CUSTOMER' | 'SERVICE'>('ALL');
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [modalTab, setModalTab] = useState<'PROFILE' | 'PORTS' | 'SCREENS' | 'PERMISSIONS' | 'SECURITY'>('PROFILE');
+  const [modalTab, setModalTab] = useState<'PROFILE' | 'SCREENS' | 'PERMISSIONS' | 'SECURITY'>('PROFILE');
   const [showAvatarStudio, setShowAvatarStudio] = useState(false);
+  const profilePhotoInputRef = React.useRef<HTMLInputElement>(null);
   const [showMatrixModal, setShowMatrixModal] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [authAdvice, setAuthAdvice] = useState('');
@@ -107,11 +107,11 @@ const UserMgmt: React.FC = () => {
     setEditingUser({
       name: '',
       email: '',
-      role: UserRole.GATE_OPERATOR,
+      role: UserRole.MANAGER,
       password: Math.random().toString(36).slice(-8) + 'A1!',
       wipePassword: 'wipe' + Math.floor(1000 + Math.random() * 9000),
       assignedPorts: [Location.ALEX, Location.DAM],
-      allowedScreens: ['port-gate', 'notifications', 'support', 'user-settings'],
+      allowedScreens: ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials',  'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'],
       permissions: {
         canCreate: true,
         canEdit: true,
@@ -119,7 +119,7 @@ const UserMgmt: React.FC = () => {
         canExport: true,
         canViewFinancials: false,
         canManagePrices: false,
-        canApproveBookings: false,
+        canApproveBookings: true,
         canManageUsers: false,
         canKillAccess: false,
         canBypassGeofence: false,
@@ -147,6 +147,8 @@ const UserMgmt: React.FC = () => {
           ? ALL_SYSTEM_SCREENS.map(s => s.id)
           : u.role === UserRole.GATE_OPERATOR
           ? ['port-gate', 'notifications', 'support', 'user-settings']
+          : u.role === UserRole.MANAGER
+          ? ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials',  'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings']
           : u.role === UserRole.CUSTOMER
           ? ['cust-reservations', 'cust-invoices', 'notifications', 'support']
           : ['dashboard', 'master-view', 'reports', 'intelligence', 'support']
@@ -168,11 +170,15 @@ const UserMgmt: React.FC = () => {
     setShowAddModal(true);
   };
 
-  const handleUpdateUser = (e: React.FormEvent) => {
+  const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
     if (editingUser) {
-      db.updateUser(editingUser.id, editingUser);
+      const saved = await db.updateUser(editingUser.id, editingUser);
+      if (!saved) {
+        alert(lang === 'ar' ? 'تعذر حفظ تحديثات المستخدم في قاعدة البيانات.' : 'User updates could not be saved to the database.');
+        return;
+      }
       setEditingUser(null);
       setShowAddModal(false);
       refreshData();
@@ -210,10 +216,14 @@ const UserMgmt: React.FC = () => {
     refreshData();
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     if (isReadOnly) return;
-    if (window.confirm('Are you sure you want to delete this user profile permanently?')) {
-      db.deleteUser(userId);
+    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف ملف المستخدم نهائياً؟' : 'Are you sure you want to delete this user profile permanently?')) {
+      const deleted = await db.deleteUser(userId);
+      if (!deleted) {
+        alert(lang === 'ar' ? 'تعذر حذف المستخدم من قاعدة البيانات.' : 'User could not be deleted from the database.');
+        return;
+      }
       if (editingUser?.id === userId) {
         setShowAddModal(false);
         setEditingUser(null);
@@ -251,6 +261,8 @@ const UserMgmt: React.FC = () => {
         setEditingUser({ ...editingUser, allowedScreens: ALL_SYSTEM_SCREENS.map(s => s.id) });
       } else if (editingUser.role === UserRole.GATE_OPERATOR) {
         setEditingUser({ ...editingUser, allowedScreens: ['port-gate', 'notifications', 'support', 'user-settings'] });
+      } else if (editingUser.role === UserRole.MANAGER) {
+        setEditingUser({ ...editingUser, allowedScreens: ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials',  'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'] });
       } else if (editingUser.role === UserRole.CUSTOMER) {
         setEditingUser({ ...editingUser, allowedScreens: ['cust-reservations', 'cust-invoices', 'notifications', 'support'] });
       } else {
@@ -273,6 +285,31 @@ const UserMgmt: React.FC = () => {
   const handleSelectAvatar = (url: string) => {
     setEditingUser((prev: any) => ({ ...prev, avatarUrl: url }));
     setShowAvatarStudio(false);
+  };
+
+  const handleProfilePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingUser) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert(lang === 'ar' ? 'يرجى اختيار صورة صالحة.' : 'Please select a valid image file.');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert(lang === 'ar' ? 'حجم الصورة يجب ألا يتجاوز 2 ميجابايت.' : 'Profile photo must be 2 MB or smaller.');
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setEditingUser((prev: any) => ({ ...prev, avatarUrl: reader.result as string }));
+      setShowAvatarStudio(false);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const runAuthAudit = async () => {
@@ -752,13 +789,6 @@ const UserMgmt: React.FC = () => {
                </button>
                <button 
                  type="button" 
-                 onClick={() => setModalTab('PORTS')} 
-                 className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${modalTab === 'PORTS' ? 'bg-[#001F3F] text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}`}
-               >
-                 ⚓ Port Hub Access ({editingUser.assignedPorts?.length || 0})
-               </button>
-               <button 
-                 type="button" 
                  onClick={() => setModalTab('SCREENS')} 
                  className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${modalTab === 'SCREENS' ? 'bg-[#001F3F] text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}`}
                >
@@ -783,136 +813,170 @@ const UserMgmt: React.FC = () => {
              {/* Modal Body Form */}
              <form onSubmit={editingUser.id ? handleUpdateUser : handleAddUser} className="p-6 md:p-8 space-y-6 text-start flex-1 overflow-y-auto custom-scrollbar">
                 
-                {/* TAB 1: PROFILE & CREDENTIALS */}
+                {/* TAB 1: IDENTITY & LOGISTICS */}
                 {modalTab === 'PROFILE' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                       <div>
-                          <label className={labelClass}>Display Name *</label>
-                          <input required className={inputClass} value={editingUser.name} onChange={e => setEditingUser({...editingUser, name: e.target.value})} placeholder="e.g. Mostafa Ibrahim" />
-                       </div>
-                       <div>
-                          <label className={labelClass}>Email Address *</label>
-                          <input required type="email" className={inputClass} value={editingUser.email} onChange={e => setEditingUser({...editingUser, email: e.target.value})} placeholder="user@nilefleet.com" />
-                       </div>
-                       <div>
-                          <label className={labelClass}>Role Class *</label>
-                          <select className={inputClass} value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as any})}>
-                             <option value={UserRole.ADMIN}>ADMINISTRATOR (Full System Master Access)</option>
-                             <option value={UserRole.GATE_OPERATOR}>GATE OPERATOR (Field Operations & Terminal)</option>
-                             <option value={UserRole.VIEWER}>SURVEILLANCE / AUDITOR (View Only Monitoring)</option>
-                             <option value={UserRole.CUSTOMER}>PARTNER / CUSTOMER (Client Portal Access)</option>
-                          </select>
-                       </div>
-                       <div>
-                          <label className={labelClass}>Partner / Company Name</label>
-                          <input className={inputClass} value={editingUser.companyName || ''} onChange={e => setEditingUser({...editingUser, companyName: e.target.value})} placeholder="e.g. MAERSK / ELAMIR" />
-                       </div>
-                       <div>
-                          <label className={labelClass}>Job Title</label>
-                          <input className={inputClass} value={editingUser.jobTitle || ''} onChange={e => setEditingUser({...editingUser, jobTitle: e.target.value})} placeholder="e.g. Logistics Director" />
-                       </div>
-                       <div>
-                          <label className={labelClass}>Department</label>
-                          <input className={inputClass} value={editingUser.department || ''} onChange={e => setEditingUser({...editingUser, department: e.target.value})} placeholder="e.g. Port Operations" />
-                       </div>
-                       <div>
-                          <label className={labelClass}>Phone Number</label>
-                          <input className={inputClass} value={editingUser.phoneNumber || ''} onChange={e => setEditingUser({...editingUser, phoneNumber: e.target.value})} placeholder="+20 1xx xxx xxxx" />
-                       </div>
-                       <div>
-                          <label className={labelClass}>Past Outstanding Ledger Balance ($/EGP)</label>
-                          <input type="number" className={inputClass} value={editingUser.pastOutstandingAmount || 0} onChange={e => setEditingUser({...editingUser, pastOutstandingAmount: parseFloat(e.target.value) || 0})} />
-                       </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* PROFILE PHOTO */}
+                      <div className="lg:col-span-3 p-5 bg-slate-50 dark:bg-slate-800/80 rounded-3xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center">
+                        <p className={labelClass}>{lang === 'ar' ? 'صورة الملف الشخصي' : 'Profile Photo'}</p>
+                        <div className="relative group mb-4">
+                          <div className="w-32 h-32 rounded-[2rem] overflow-hidden border-4 border-white dark:border-slate-700 shadow-xl bg-slate-200 dark:bg-slate-900">
+                            <img
+                              src={editingUser.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${editingUser.id || editingUser.email || editingUser.name || 'nile-fleet'}`}
+                              className="w-full h-full object-cover"
+                              alt="profile"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => profilePhotoInputRef.current?.click()}
+                            className="absolute -bottom-2 -right-2 w-10 h-10 rounded-xl bg-[#001F3F] text-[#C2A378] border-2 border-white dark:border-slate-800 shadow-lg font-black"
+                            title={lang === 'ar' ? 'رفع صورة' : 'Upload Photo'}
+                          >
+                            ↑
+                          </button>
+                        </div>
+                        <input
+                          ref={profilePhotoInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleProfilePhotoUpload}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAvatarStudio(true)}
+                          className="w-full px-4 py-2.5 rounded-xl bg-blue-600 text-white text-[9px] font-black uppercase tracking-wider"
+                        >
+                          {lang === 'ar' ? 'اختيار صورة' : 'Choose Avatar'}
+                        </button>
+                        <p className="text-[8px] text-slate-400 mt-2">
+                          {lang === 'ar' ? 'JPG / PNG • حتى 2 ميجابايت' : 'JPG / PNG • Max 2 MB'}
+                        </p>
+                      </div>
+
+                      {/* IDENTITY + LOGISTICS */}
+                      <div className="lg:col-span-9 space-y-5">
+                        <div className="flex items-center gap-3 pb-3 border-b border-slate-200 dark:border-slate-700">
+                          <span className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">🪪</span>
+                          <div>
+                            <h4 className="text-sm font-black text-slate-800 dark:text-white uppercase">
+                              {lang === 'ar' ? 'الهوية واللوجستيات' : 'Identity & Logistics'}
+                            </h4>
+                            <p className="text-[9px] text-slate-400 font-medium">
+                              {lang === 'ar' ? 'بيانات المستخدم التشغيلية والهوية ومعلومات موقع العمل في نموذج واحد.' : 'Identity, role, contact and logistics assignment in one profile.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'الاسم المعروض' : 'Display Name'} *</label>
+                            <input required className={inputClass} value={editingUser.name} onChange={e => setEditingUser({...editingUser, name: e.target.value})} placeholder={lang === 'ar' ? 'مثال: مصطفى إبراهيم' : 'e.g. Mostafa Ibrahim'} />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email Address'} *</label>
+                            <input required type="email" className={inputClass} value={editingUser.email} onChange={e => setEditingUser({...editingUser, email: e.target.value})} placeholder="user@nilefleet.com" />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'الصفة الوظيفية' : 'Role Class'} *</label>
+                            <select className={inputClass} value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as any})}>
+                              <option value={UserRole.ADMIN}>ADMINISTRATOR (Full System Master Access)</option>
+                              <option value={UserRole.MANAGER}>MANAGER (Operations & Business Management)</option>
+                              <option value={UserRole.GATE_OPERATOR}>GATE OPERATOR (Field Operations & Terminal)</option>
+                              <option value={UserRole.VIEWER}>SURVEILLANCE / AUDITOR (View Only Monitoring)</option>
+                              <option value={UserRole.CUSTOMER}>PARTNER / CUSTOMER (Client Portal Access)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'الشركة / الشريك' : 'Partner / Company Name'}</label>
+                            <input className={inputClass} value={editingUser.companyName || ''} onChange={e => setEditingUser({...editingUser, companyName: e.target.value})} placeholder="e.g. MAERSK / NILE FLEET" />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'المسمى الوظيفي' : 'Job Title'}</label>
+                            <input className={inputClass} value={editingUser.jobTitle || ''} onChange={e => setEditingUser({...editingUser, jobTitle: e.target.value})} placeholder="e.g. Logistics Manager" />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'الإدارة' : 'Department'}</label>
+                            <input className={inputClass} value={editingUser.department || ''} onChange={e => setEditingUser({...editingUser, department: e.target.value})} placeholder="e.g. Port Operations" />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</label>
+                            <input className={inputClass} value={editingUser.phoneNumber || ''} onChange={e => setEditingUser({...editingUser, phoneNumber: e.target.value})} placeholder="+20 1xx xxx xxxx" />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'المحافظة' : 'Governorate'}</label>
+                            <input className={inputClass} value={editingUser.governorate || ''} onChange={e => setEditingUser({...editingUser, governorate: e.target.value})} placeholder={lang === 'ar' ? 'مثال: بورسعيد' : 'e.g. Port Said'} />
+                          </div>
+                        </div>
+
+                        <div className="p-5 bg-blue-500/5 dark:bg-blue-500/10 rounded-3xl border border-blue-500/20">
+                          <div className="flex items-center justify-between mb-4 gap-3">
+                            <div>
+                              <h4 className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">{lang === 'ar' ? 'الموانئ المخصصة' : 'Assigned Logistics Ports'}</h4>
+                              <p className="text-[9px] text-slate-400 mt-0.5">{lang === 'ar' ? 'حدد الموانئ التي يمكن لهذا المستخدم تشغيلها وإدارة عملياتها.' : 'Select the ports this user can operate and manage.'}</p>
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              <button type="button" onClick={() => setEditingUser({ ...editingUser, assignedPorts: [...ALL_LOCATIONS] })} className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[8px] font-black uppercase">
+                                {lang === 'ar' ? 'كل الموانئ' : 'Select All'}
+                              </button>
+                              <button type="button" onClick={() => setEditingUser({ ...editingUser, assignedPorts: [] })} className="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[8px] font-black uppercase">
+                                {lang === 'ar' ? 'مسح' : 'Clear'}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                            {ALL_LOCATIONS.map(loc => {
+                              const isAssigned = editingUser.assignedPorts?.includes(loc);
+                              return (
+                                <button
+                                  key={loc}
+                                  type="button"
+                                  onClick={() => togglePortAccess(loc)}
+                                  className={`p-3 rounded-xl border-2 text-start transition-all ${isAssigned ? 'bg-blue-500/10 border-blue-500 text-blue-600' : 'bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 text-slate-400'}`}
+                                >
+                                  <span className="block font-black text-[10px] uppercase">{loc}</span>
+                                  <span className="block text-[8px] mt-0.5 text-slate-400">
+                                    {loc === Location.DAM ? 'Damietta' : loc === Location.ALEX ? 'Alexandria' : loc === Location.GOUDA ? 'Gouda' : loc === Location.SOKHNA ? 'Sokhna' : loc === Location.SCCT ? 'SCCT' : loc === Location.PSD ? 'Port Said' : loc === Location.MAL ? 'Mallaoui' : 'Workshop'}
+                                  </span>
+                                  {isAssigned && <span className="float-end text-emerald-500 font-black">✓</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'الرصيد السابق المستحق' : 'Past Outstanding Ledger Balance (EGP)'}</label>
+                            <input type="number" className={inputClass} value={editingUser.pastOutstandingAmount || 0} onChange={e => setEditingUser({...editingUser, pastOutstandingAmount: parseFloat(e.target.value) || 0})} />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{lang === 'ar' ? 'تاريخ الانضمام' : 'Joined Date'}</label>
+                            <input type="date" className={inputClass} value={editingUser.joinedDate || ''} onChange={e => setEditingUser({...editingUser, joinedDate: e.target.value})} />
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="p-5 bg-slate-50 dark:bg-slate-800/80 rounded-3xl border border-slate-200 dark:border-slate-700 space-y-4">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-[#C2A378]">Authentication Credentials</h4>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-[#C2A378]">{lang === 'ar' ? 'بيانات الدخول' : 'Authentication Credentials'}</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className={labelClass}>Portal Password</label>
+                          <label className={labelClass}>{lang === 'ar' ? 'كلمة مرور البوابة' : 'Portal Password'}</label>
                           <div className="relative">
-                            <input 
-                              type={showPassword ? "text" : "password"} 
-                              className={inputClass} 
-                              value={editingUser.password || ''} 
-                              onChange={e => setEditingUser({...editingUser, password: e.target.value})} 
-                            />
-                            <button 
-                              type="button" 
-                              onClick={() => setShowPassword(!showPassword)}
-                              className="absolute right-3 top-3.5 text-xs text-slate-400 font-bold uppercase"
-                            >
-                              {showPassword ? 'Hide' : 'Show'}
+                            <input type={showPassword ? "text" : "password"} className={inputClass} value={editingUser.password || ''} onChange={e => setEditingUser({...editingUser, password: e.target.value})} />
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-xs text-slate-400 font-bold uppercase">
+                              {showPassword ? (lang === 'ar' ? 'إخفاء' : 'Hide') : (lang === 'ar' ? 'إظهار' : 'Show')}
                             </button>
                           </div>
                         </div>
                         <div>
-                          <label className={labelClass}>Emergency Wipe Code / Purge Passcode</label>
-                          <input 
-                            type="text" 
-                            className={inputClass} 
-                            value={editingUser.wipePassword || ''} 
-                            onChange={e => setEditingUser({...editingUser, wipePassword: e.target.value})} 
-                            placeholder="e.g. wipe999"
-                          />
+                          <label className={labelClass}>{lang === 'ar' ? 'رمز التصفير الطارئ' : 'Emergency Wipe Code / Purge Passcode'}</label>
+                          <input type="text" className={inputClass} value={editingUser.wipePassword || ''} onChange={e => setEditingUser({...editingUser, wipePassword: e.target.value})} placeholder="e.g. wipe999" />
                         </div>
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB 2: PORT HUB AUTHORIZATION */}
-                {modalTab === 'PORTS' && (
-                  <div className="space-y-6 animate-in fade-in duration-300">
-                    <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
-                      <div>
-                        <h4 className="text-sm font-black text-slate-800 dark:text-white uppercase">Assigned Port Hubs</h4>
-                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">Select ports this user has authorization to operate in and manage operations for.</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button 
-                          type="button" 
-                          onClick={() => setEditingUser({ ...editingUser, assignedPorts: [...ALL_LOCATIONS] })}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-blue-700"
-                        >
-                          Select All Ports
-                        </button>
-                        <button 
-                          type="button" 
-                          onClick={() => setEditingUser({ ...editingUser, assignedPorts: [] })}
-                          className="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[9px] font-black uppercase tracking-wider"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {ALL_LOCATIONS.map(loc => {
-                        const isAssigned = editingUser.assignedPorts?.includes(loc);
-                        return (
-                          <div 
-                            key={loc} 
-                            onClick={() => togglePortAccess(loc)}
-                            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${
-                              isAssigned 
-                                ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm' 
-                                : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-slate-400'
-                            }`}
-                          >
-                             <div>
-                               <p className="font-black text-sm uppercase tracking-wider">{loc} HUB</p>
-                               <p className="text-[9px] font-bold text-slate-400 mt-0.5">
-                                 {loc === Location.DAM ? 'Damietta Terminal' : loc === Location.ALEX ? 'Alexandria Terminal' : loc === Location.GOUDA ? 'Gouda Inland Depot' : loc === Location.SOKHNA ? 'Sokhna Hub' : loc === Location.SCCT ? 'SCCT Terminal' : loc === Location.PSD ? 'Port Said Depot' : 'Mallaoui Depot'}
-                               </p>
-                             </div>
-                             <span className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs ${isAssigned ? 'bg-blue-600 text-white' : 'border border-slate-300'}`}>
-                               {isAssigned ? '✓' : ''}
-                             </span>
-                          </div>
-                        );
-                      })}
                     </div>
                   </div>
                 )}

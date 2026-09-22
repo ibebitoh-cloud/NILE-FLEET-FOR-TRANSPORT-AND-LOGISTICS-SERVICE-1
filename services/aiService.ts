@@ -1,8 +1,5 @@
-
-// All Gemini AI calls go through a server-side Netlify Function
-// (netlify/functions/ai-proxy.js), so the API key never ships to the browser.
-
-const AI_ENDPOINT = '/ai-proxy'; // Cloudflare Pages Function at functions/ai-proxy.js
+const AI_ENDPOINT = '/ai-proxy';
+const OPEN_SOURCE_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 
 async function callAi(action: string, payload: any) {
   const res = await fetch(AI_ENDPOINT, {
@@ -10,18 +7,29 @@ async function callAi(action: string, payload: any) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, payload }),
   });
-  if (!res.ok) throw new Error(`AI request failed: ${res.status}`);
-  return res.json();
+
+  const raw = await res.text();
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!res.ok) {
+    const detail = data?.detail || data?.error || raw || `HTTP ${res.status}`;
+    throw new Error(`AI request failed (${res.status}): ${detail}`);
+  }
+
+  if (!data) {
+    throw new Error('AI request returned an empty response.');
+  }
+
+  return data;
 }
 
-// Kept for compatibility with any screen that checks "is AI available" before
-// showing a feature. Since the key now lives server-side, we can't check it
-// directly from the browser — assume available and let the proxy report errors.
-export const getSafeApiKey = (): string | null => 'server-managed';
+export const getSafeApiKey = (): string | null => 'open-source-nile-ai';
 
-/**
- * Specifically translates logistics entity names from English to Arabic.
- */
 export const translateBusinessEntities = async (names: string[]) => {
   if (names.length === 0) return {};
   try {
@@ -32,9 +40,19 @@ export const translateBusinessEntities = async (names: string[]) => {
   }
 };
 
-export const runThinkingAudit = async (prompt: string, budget: number = 4000, model: string = 'gemini-3-flash-preview') => {
-  const { text } = await callAi('runThinkingAudit', { prompt, model, thinkingBudget: budget });
-  return text;
+export const runThinkingAudit = async (prompt: string, budget: number = 1200) => {
+  try {
+    const { text, error, detail } = await callAi('runThinkingAudit', {
+      prompt,
+      model: OPEN_SOURCE_MODEL,
+      maxTokens: Math.min(Math.max(budget, 120), 700),
+    });
+    if (error) throw new Error(detail || error);
+    return text || '';
+  } catch (e) {
+    console.error('DALI 1.0 failed', e);
+    throw e;
+  }
 };
 
 export const scanImageForContainer = async (base64Data: string) => {
@@ -42,6 +60,7 @@ export const scanImageForContainer = async (base64Data: string) => {
     const { text } = await callAi('scanImageForContainer', { base64Data });
     return text || 'NOT_FOUND';
   } catch (e) {
+    console.error('DALI container scan failed', e);
     return 'ERROR';
   }
 };
@@ -50,6 +69,7 @@ export const mapSpreadsheetToSchema = async (csvData: string): Promise<any[]> =>
   try {
     return await callAi('mapSpreadsheetToSchema', { csvData });
   } catch (e) {
+    console.error('DALI spreadsheet mapping failed', e);
     return [];
   }
 };

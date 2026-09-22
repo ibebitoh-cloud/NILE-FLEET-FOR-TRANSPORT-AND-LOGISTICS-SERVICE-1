@@ -32,6 +32,20 @@ function snakeToCamel(obj: any): any {
   );
 }
 
+function normalizeDateForDb(value: unknown, fallback = ''): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return fallback;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const dmy = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return fallback;
+}
+
 function camelToSnake(obj: any): any {
   if (Array.isArray(obj)) return obj.map(camelToSnake);
   if (obj === null || typeof obj !== 'object') return obj;
@@ -52,18 +66,31 @@ async function query<T>(table: string, options?: { filter?: Record<string, any>;
     q = q.order(options.order, { ascending: options.ascending ?? false }) as any;
   }
   const { data, error } = await q;
-  if (error) { console.error(`[supabaseDb] query ${table}:`, error.message); return []; }
+  if (error) { _lastDbError = `${table}: ${error.message}`; console.error(`[supabaseDb] query ${table}:`, error.message); return []; }
   return snakeToCamel(data || []) as T[];
 }
 
+function prepareOperationsDbRow(row: any): any {
+  const today = new Date().toISOString().slice(0, 10);
+  const opDate = normalizeDateForDb(row.operationDate, today);
+  const clipOffDate = normalizeDateForDb(row.clipOffDate, '');
+  return {
+    ...row,
+    operationDate: opDate,
+    dateReceived: normalizeDateForDb(row.dateReceived, opDate),
+    clipOnDate: normalizeDateForDb(row.clipOnDate, opDate),
+    // PostgreSQL DATE columns reject an empty string. An operation that has
+    // not been clipped off yet must be stored as NULL, not "".
+    clipOffDate: clipOffDate || null
+  };
+}
+
 async function insert<T>(table: string, row: Partial<T>): Promise<T | null> {
-  // The UI still generates placeholder ids like "G-ABC-123" or "op-man-172..." —
-  // leftover from the old in-memory mock database. Every real table's id column
-  // is a uuid with a default generator, so a non-UUID id here makes Postgres
-  // reject the whole insert. Strip it and let the database assign the real id.
+  // Strip UI-generated placeholder ids and let Postgres generate UUIDs.
   const { id, ...rest } = row as any;
-  const { data, error } = await supabase.from(table).insert(camelToSnake(rest)).select().single();
-  if (error) { console.error(`[supabaseDb] insert ${table}:`, error.message); return null; }
+  const prepared = table === 'operations' ? prepareOperationsDbRow(rest) : rest;
+  const { data, error } = await supabase.from(table).insert(camelToSnake(prepared)).select().single();
+  if (error) { _lastDbError = `${table}: ${error.message}`; console.error(`[supabaseDb] insert ${table}:`, error.message); return null; }
   return snakeToCamel(data) as T;
 }
 
@@ -73,18 +100,29 @@ async function upsert<T>(table: string, row: Partial<T>): Promise<T | null> {
   return snakeToCamel(data) as T;
 }
 
-async function update<T>(table: string, id: string, updates: Partial<T>): Promise<void> {
-  const { error } = await supabase.from(table).update(camelToSnake(updates)).eq('id', id);
-  if (error) console.error(`[supabaseDb] update ${table}:`, error.message);
+async function update<T>(table: string, id: string, updates: Partial<T>): Promise<boolean> {
+  const prepared = table === 'operations' ? prepareOperationsDbRow(updates) : updates;
+  const { error } = await supabase.from(table).update(camelToSnake(prepared)).eq('id', id);
+  if (error) {
+    _lastDbError = `${table}: ${error.message}`;
+    console.error(`[supabaseDb] update ${table}:`, error.message);
+    return false;
+  }
+  return true;
 }
 
-async function remove(table: string, id: string): Promise<void> {
+async function remove(table: string, id: string): Promise<boolean> {
   const { error } = await supabase.from(table).delete().eq('id', id);
-  if (error) console.error(`[supabaseDb] delete ${table}:`, error.message);
+  if (error) {
+    console.error(`[supabaseDb] delete ${table}:`, error.message);
+    return false;
+  }
+  return true;
 }
 
 function dispatchChange() {
   window.dispatchEvent(new CustomEvent('db-undo-success'));
+  window.dispatchEvent(new CustomEvent('db-change'));
 }
 
 async function auditLog(action: string, details: string) {
@@ -126,6 +164,7 @@ let _faqs: FAQItem[] = [];
 let _portsInfo: PortInfo[] = [];
 let _maintenanceLogs: GensetMaintenanceLog[] = [];
 let _loaded = false;
+let _lastDbError = '';
 
 class SupabaseDB {
 
@@ -190,6 +229,32 @@ class SupabaseDB {
   getStock(): Genset[] { return _stock; }
   getReservations(): Reservation[] { return _reservations; }
   getOperations(): Operation[] { return _operations; }
+
+  getLastDbError(): string { return _lastDbError; }
+
+  async reloadOperations(): Promise<boolean> {
+    const { data, error } = await supabase.from('operations').select('*').order('created_at', { ascending: false });
+    if (error) {
+      _lastDbError = `operations: ${error.message}`;
+      console.error('[supabaseDb] reload operations:', error.message);
+      return false;
+    }
+    _operations = snakeToCamel(data || []) as Operation[];
+    dispatchChange();
+    return true;
+  }
+
+  /** Returns other active assignments using the same genset. Duplicates are allowed;
+   * callers should warn the operator when both records are IN PROGRESS. */
+  getActiveGensetConflicts(unitNumber: string, excludeOperationId?: string): Operation[] {
+    const normalized = unitNumber.trim().toUpperCase();
+    return _operations.filter(o =>
+      o.status === 'IN PROGRESS' &&
+      o.gensetNumber?.trim().toUpperCase() === normalized &&
+      o.id !== excludeOperationId
+    );
+  }
+
   getInvoices(): Invoice[] { return _invoices; }
   getPayments(): Payment[] { return _payments; }
   getUsers(): User[] { return _users; }
@@ -281,30 +346,33 @@ class SupabaseDB {
 
   // ─── operations ────────────────────────────────────────────────────────────
 
-  async addOperation(op: Operation): Promise<void> {
+  async addOperation(op: Operation): Promise<boolean> {
     if (!op.internalSerial) op.internalSerial = generateInternalSerial();
     const row = { ...op, id: op.id || undefined };
     const saved = await insert<Operation>('operations', row);
-    if (saved) {
-      _operations = [saved, ..._operations];
-      await this._syncGensetStatus(op);
-      if (op.status === 'DONE' && !op.invoiced) {
-        await this.generateInvoiceFromBooking(op.bookingNumber, op.customerName);
-      }
-      await auditLog('OPS', `Manual Entry ${op.bookingNumber}`);
-      dispatchChange();
+    if (!saved) return false;
+    _operations = [saved, ..._operations];
+    await this._syncGensetStatus(saved);
+    if (saved.status === 'DONE' && !saved.invoiced) {
+      await this.generateInvoiceFromBooking(saved.bookingNumber, saved.customerName);
     }
+    await auditLog('OPS', `Manual Entry ${saved.bookingNumber}`);
+    dispatchChange();
+    return true;
   }
 
-  async updateOperation(updatedOp: Operation): Promise<void> {
-    await update('operations', updatedOp.id, updatedOp);
+  async updateOperation(updatedOp: Operation): Promise<boolean> {
+    const previous = _operations.find(o => o.id === updatedOp.id);
+    const saved = await update('operations', updatedOp.id, updatedOp);
+    if (!saved) return false;
     _operations = _operations.map(o => o.id === updatedOp.id ? updatedOp : o);
-    await this._syncGensetStatus(updatedOp);
+    await this._syncGensetStatus(updatedOp, previous);
     if (updatedOp.status === 'DONE' && !updatedOp.invoiced) {
       await this.generateInvoiceFromBooking(updatedOp.bookingNumber, updatedOp.customerName);
     }
     await auditLog('OPS', `Updated operation ${updatedOp.bookingNumber}`);
     dispatchChange();
+    return true;
   }
 
   async confirmOperation(id: string): Promise<void> {
@@ -321,12 +389,20 @@ class SupabaseDB {
     dispatchChange();
   }
 
-  async addOperationsBulk(ops: Operation[]): Promise<void> {
+  async addOperationsBulk(ops: Operation[]): Promise<boolean> {
     const prepared = ops.map(op => ({ ...op, internalSerial: op.internalSerial || generateInternalSerial() }));
-    const rowsToInsert = prepared.map(op => { const { id, ...rest } = op as any; return camelToSnake(rest); });
+    const rowsToInsert = prepared.map(op => {
+      const { id, ...rest } = op as any;
+      return camelToSnake(prepareOperationsDbRow(rest));
+    });
     const { data, error } = await supabase.from('operations').insert(rowsToInsert).select();
-    if (error) { console.error('[supabaseDb] bulk insert operations:', error.message); return; }
+    if (error) { _lastDbError = `operations: ${error.message}`; console.error('[supabaseDb] bulk insert operations:', error.message); return false; }
     const saved = snakeToCamel(data || []) as Operation[];
+    if (saved.length !== rowsToInsert.length) {
+      _lastDbError = `operations: database accepted ${saved.length}/${rowsToInsert.length} rows but did not return all inserted records`;
+      console.error('[supabaseDb] bulk insert verification mismatch:', _lastDbError);
+      return false;
+    }
     _operations = [...saved, ..._operations];
     await Promise.all(prepared.map(op => this._syncGensetStatus(op)));
     const doneBookings = Array.from(new Set(prepared.filter(o => o.status === 'DONE').map(o => o.bookingNumber)));
@@ -336,36 +412,84 @@ class SupabaseDB {
     }
     await auditLog('OPS', `Bulk deployment ${ops.length} units`);
     dispatchChange();
+    return true;
   }
 
   async deleteOperation(id: string): Promise<void> {
-    await remove('operations', id);
+    const previous = _operations.find(o => o.id === id);
+    const removed = await remove('operations', id);
+    if (!removed) return;
     _operations = _operations.filter(o => o.id !== id);
+    if (previous?.status === 'IN PROGRESS' && previous.gensetNumber) {
+      await this._releaseGensetIfUnused(previous.gensetNumber);
+    }
     await auditLog('OPS', `Deleted operation ${id}`);
     dispatchChange();
   }
 
   async deleteOperationsBulk(ids: string[]): Promise<void> {
-    await Promise.all(ids.map(id => remove('operations', id)));
-    _operations = _operations.filter(o => !ids.includes(o.id));
-    await auditLog('OPS', `Force deleted ${ids.length} manifest entries`);
+    const previous = _operations.filter(o => ids.includes(o.id));
+    const results = await Promise.all(ids.map(id => remove('operations', id)));
+    const removedIds = ids.filter((_, i) => results[i]);
+    if (!removedIds.length) return;
+    _operations = _operations.filter(o => !removedIds.includes(o.id));
+    const units = Array.from(new Set(
+      previous.filter(o => removedIds.includes(o.id) && o.status === 'IN PROGRESS' && o.gensetNumber)
+        .map(o => o.gensetNumber as string)
+    ));
+    await Promise.all(units.map(unit => this._releaseGensetIfUnused(unit)));
+    await auditLog('OPS', `Force deleted ${removedIds.length} manifest entries`);
     dispatchChange();
   }
 
-  private async _syncGensetStatus(op: Operation): Promise<void> {
-    if (!op.gensetNumber) return;
-    const genset = _stock.find(s => s.unitNumber === op.gensetNumber);
+  private async _releaseGensetIfUnused(unitNumber: string): Promise<void> {
+    const normalized = unitNumber.trim().toUpperCase();
+    const stillActive = _operations.some(o =>
+      o.status === 'IN PROGRESS' &&
+      o.gensetNumber?.trim().toUpperCase() === normalized
+    );
+    if (stillActive) return;
+    const genset = _stock.find(s => s.unitNumber?.trim().toUpperCase() === normalized);
     if (!genset) return;
-    let updates: Partial<Genset> = {};
-    if (op.status === 'IN PROGRESS') {
-      updates.status = GensetStatus.CLIPPED_ON;
-    } else if (op.status === 'DONE' || op.status === 'CANCEL') {
-      updates.status = GensetStatus.IN_STOCK;
-      if (op.status === 'DONE' && op.clipOffPort) updates.location = op.clipOffPort as Location;
+    const updates: Partial<Genset> = { status: GensetStatus.IN_STOCK };
+    const saved = await update('gensets', genset.id, updates);
+    if (saved) _stock = _stock.map(s => s.id === genset.id ? { ...s, ...updates } : s);
+  }
+
+  private async _syncGensetStatus(op: Operation, previous?: Operation): Promise<void> {
+    // If an operation switches units, release the old unit only when no other
+    // IN PROGRESS operation is still using it.
+    if (previous?.gensetNumber && previous.gensetNumber !== op.gensetNumber) {
+      await this._releaseGensetIfUnused(previous.gensetNumber);
     }
-    if (Object.keys(updates).length > 0) {
-      await update('gensets', genset.id, updates);
-      _stock = _stock.map(s => s.id === genset.id ? { ...s, ...updates } : s);
+    if (!op.gensetNumber) return;
+    const normalized = op.gensetNumber.trim().toUpperCase();
+    const genset = _stock.find(s => s.unitNumber?.trim().toUpperCase() === normalized);
+    if (!genset) return;
+
+    if (op.status === 'IN PROGRESS') {
+      const updates: Partial<Genset> = { status: GensetStatus.CLIPPED_ON };
+      const saved = await update('gensets', genset.id, updates);
+      if (saved) _stock = _stock.map(s => s.id === genset.id ? { ...s, ...updates } : s);
+    } else if (op.status === 'DONE' || op.status === 'CANCEL') {
+      // A completed/cancelled record must not put a genset back in stock while
+      // another IN PROGRESS record is legitimately using the same unit.
+      await this._releaseGensetIfUnused(op.gensetNumber);
+      if (op.status === 'DONE' && op.clipOffPort) {
+        const stillActive = _operations.some(o =>
+          o.status === 'IN PROGRESS' &&
+          o.id !== op.id &&
+          o.gensetNumber?.trim().toUpperCase() === normalized
+        );
+        if (!stillActive) {
+          const locationUpdates: Partial<Genset> = {
+            location: op.clipOffPort as Location,
+            status: GensetStatus.IN_STOCK
+          };
+          const saved = await update('gensets', genset.id, locationUpdates);
+          if (saved) _stock = _stock.map(s => s.id === genset.id ? { ...s, ...locationUpdates } : s);
+        }
+      }
     }
   }
 
@@ -413,25 +537,30 @@ class SupabaseDB {
     return saved;
   }
 
-  async updateInvoice(id: string, updated: Partial<Invoice>): Promise<void> {
-    await update('invoices', id, updated);
+  async updateInvoice(id: string, updated: Partial<Invoice>): Promise<boolean> {
+    const saved = await update('invoices', id, updated);
+    if (!saved) return false;
     _invoices = _invoices.map(i => i.id === id ? { ...i, ...updated } : i);
     await auditLog('FIN', `Updated Invoice ${id}`);
     dispatchChange();
+    return true;
   }
 
-  async updateInvoiceEtaStatus(id: string, etaStatus: 'DRAFT' | 'SUBMITTED' | 'VALID' | 'INVALID'): Promise<void> {
-    await update('invoices', id, { etaStatus });
+  async updateInvoiceEtaStatus(id: string, etaStatus: 'DRAFT' | 'SUBMITTED' | 'VALID' | 'INVALID'): Promise<boolean> {
+    const saved = await update('invoices', id, { etaStatus });
+    if (!saved) return false;
     _invoices = _invoices.map(i => i.id === id ? { ...i, etaStatus } : i);
     await auditLog('ETA', `Status update for ${id} -> ${etaStatus}`);
     dispatchChange();
+    return true;
   }
 
   // ─── payments ──────────────────────────────────────────────────────────────
 
-  async addPayment(payment: Payment, allocatedInvoiceIds: string[] = []): Promise<void> {
-    await insert('payments', payment);
-    _payments = [..._payments, payment];
+  async addPayment(payment: Payment, allocatedInvoiceIds: string[] = []): Promise<boolean> {
+    const savedPayment = await insert<Payment>('payments', payment);
+    if (!savedPayment) return false;
+    _payments = [..._payments, savedPayment];
 
     let remainingMoney = payment.amount;
     for (const invId of allocatedInvoiceIds) {
@@ -460,6 +589,7 @@ class SupabaseDB {
 
     await auditLog('FIN', `Recorded Payment ${payment.amount} from ${payment.customerName}`);
     dispatchChange();
+    return true;
   }
 
   // ─── gensets ───────────────────────────────────────────────────────────────
@@ -473,34 +603,42 @@ class SupabaseDB {
     }
   }
 
-  async updateGenset(updatedGenset: Genset): Promise<void> {
-    await update('gensets', updatedGenset.id, updatedGenset);
+  async updateGenset(updatedGenset: Genset): Promise<boolean> {
+    const saved = await update('gensets', updatedGenset.id, updatedGenset);
+    if (!saved) return false;
     _stock = _stock.map(s => s.id === updatedGenset.id ? updatedGenset : s);
     await auditLog('STOCK', `Updated unit ${updatedGenset.unitNumber}`);
     dispatchChange();
+    return true;
   }
 
-  async deleteGenset(id: string): Promise<void> {
-    await remove('gensets', id);
+  async deleteGenset(id: string): Promise<boolean> {
+    const removed = await remove('gensets', id);
+    if (!removed) return false;
     _stock = _stock.filter(s => s.id !== id);
     await auditLog('STOCK', `Deleted unit ${id}`);
     dispatchChange();
+    return true;
   }
 
   // ─── users / customers ─────────────────────────────────────────────────────
 
-  async updateUser(id: string, updates: Partial<User>): Promise<void> {
-    await update('profiles', id, updates);
+  async updateUser(id: string, updates: Partial<User>): Promise<boolean> {
+    const saved = await update('profiles', id, updates);
+    if (!saved) return false;
     _users = _users.map(u => u.id === id ? { ...u, ...updates } : u);
     await auditLog('USER', `Updated user access profile for ${id}`);
     dispatchChange();
+    return true;
   }
 
-  async updateUserFinance(userId: string, updates: { pastOutstandingAmount?: number }): Promise<void> {
-    await update('profiles', userId, updates);
+  async updateUserFinance(userId: string, updates: { pastOutstandingAmount?: number }): Promise<boolean> {
+    const saved = await update('profiles', userId, updates);
+    if (!saved) return false;
     _users = _users.map(u => u.id === userId ? { ...u, ...updates } : u);
     await auditLog('FIN', `Updated ledger balance for ${userId}`);
     dispatchChange();
+    return true;
   }
 
   async deleteUser(id: string): Promise<void> {
@@ -557,13 +695,15 @@ class SupabaseDB {
     }
   }
 
-  async updateReservationStatus(id: string, status: ReservationStatus): Promise<void> {
-    await update('reservations', id, { status });
+  async updateReservationStatus(id: string, status: ReservationStatus): Promise<boolean> {
+    const saved = await update('reservations', id, { status });
+    if (!saved) return false;
     _reservations = _reservations.map(r => r.id === id ? { ...r, status } : r);
     dispatchChange();
+    return true;
   }
 
-  async createOperationFromReservation(res: Reservation): Promise<void> {
+  async createOperationFromReservation(res: Reservation): Promise<boolean> {
     const newOperations: Operation[] = Array.from({ length: res.gensetsNeeded }).map((_, idx) => {
       const foundPrice = _customerPrices.find(p => p.customerName === res.customerName && p.portIn === res.portIn && p.portOut === res.portOut);
       return {
@@ -592,8 +732,10 @@ class SupabaseDB {
         reviewedByManager: false,
       } as Operation;
     });
-    await this.addOperationsBulk(newOperations);
-    await this.updateReservationStatus(res.id, ReservationStatus.APPROVED);
+    const operationsSaved = await this.addOperationsBulk(newOperations);
+    if (!operationsSaved) return false;
+    const reservationSaved = await this.updateReservationStatus(res.id, ReservationStatus.APPROVED);
+    return reservationSaved;
   }
 
   // ─── customer prices ───────────────────────────────────────────────────────
@@ -649,89 +791,112 @@ class SupabaseDB {
 
   // ─── notifications ─────────────────────────────────────────────────────────
 
-  async addNotification(n: Omit<SystemNotification, 'id' | 'timestamp' | 'active'>): Promise<void> {
+  async addNotification(n: Omit<SystemNotification, 'id' | 'timestamp' | 'active'>): Promise<boolean> {
     const full = { ...n, timestamp: new Date().toISOString(), active: true };
     const saved = await insert<SystemNotification>('system_notifications', full);
-    if (saved) {
-      _notifications = [saved, ..._notifications];
-      dispatchChange();
-    }
+    if (!saved) return false;
+    _notifications = [saved, ..._notifications];
+    dispatchChange();
+    return true;
   }
 
-  async dismissNotification(id: string): Promise<void> {
-    await update('system_notifications', id, { active: false });
+  async dismissNotification(id: string): Promise<boolean> {
+    const saved = await update('system_notifications', id, { active: false });
+    if (!saved) return false;
     _notifications = _notifications.map(n => n.id === id ? { ...n, active: false } : n);
     dispatchChange();
+    return true;
   }
 
-  async clearAllNotifications(): Promise<void> {
-    await supabase.from('system_notifications').update({ active: false }).eq('active', true);
+  async clearAllNotifications(): Promise<boolean> {
+    const { error } = await supabase.from('system_notifications').update({ active: false }).eq('active', true);
+    if (error) {
+      _lastDbError = `system_notifications: ${error.message}`;
+      return false;
+    }
     _notifications = _notifications.map(n => ({ ...n, active: false }));
     dispatchChange();
+    return true;
   }
 
   // ─── support / FAQ / ports ─────────────────────────────────────────────────
 
-  async updateSupportContact(contact: SupportContact): Promise<void> {
-    await update('support_contacts', contact.id, contact);
+  async updateSupportContact(contact: SupportContact): Promise<boolean> {
+    const saved = await update('support_contacts', contact.id, contact);
+    if (!saved) return false;
     _supportContacts = _supportContacts.map(c => c.id === contact.id ? contact : c);
     dispatchChange();
+    return true;
   }
   async addSupportContact(contact: SupportContact): Promise<void> {
     const saved = await insert<SupportContact>('support_contacts', contact);
     if (saved) { _supportContacts = [..._supportContacts, saved]; dispatchChange(); }
   }
-  async deleteSupportContact(id: string): Promise<void> {
-    await remove('support_contacts', id);
+  async deleteSupportContact(id: string): Promise<boolean> {
+    const removed = await remove('support_contacts', id);
+    if (!removed) return false;
     _supportContacts = _supportContacts.filter(c => c.id !== id);
     dispatchChange();
+    return true;
   }
 
-  async updateFAQ(item: FAQItem): Promise<void> {
-    await update('faqs', item.id, item);
+  async updateFAQ(item: FAQItem): Promise<boolean> {
+    const saved = await update('faqs', item.id, item);
+    if (!saved) return false;
     _faqs = _faqs.map(f => f.id === item.id ? item : f);
     dispatchChange();
+    return true;
   }
   async addFAQ(item: FAQItem): Promise<void> {
     const saved = await insert<FAQItem>('faqs', item);
     if (saved) { _faqs = [..._faqs, saved]; dispatchChange(); }
   }
-  async deleteFAQ(id: string): Promise<void> {
-    await remove('faqs', id);
+  async deleteFAQ(id: string): Promise<boolean> {
+    const removed = await remove('faqs', id);
+    if (!removed) return false;
     _faqs = _faqs.filter(f => f.id !== id);
     dispatchChange();
+    return true;
   }
 
-  async updatePortInfo(info: PortInfo): Promise<void> {
-    await update('ports_info', info.id, info);
+  async updatePortInfo(info: PortInfo): Promise<boolean> {
+    const saved = await update('ports_info', info.id, info);
+    if (!saved) return false;
     _portsInfo = _portsInfo.map(p => p.id === info.id ? info : p);
     dispatchChange();
+    return true;
   }
   async addPortInfo(info: PortInfo): Promise<void> {
     const saved = await insert<PortInfo>('ports_info', info);
     if (saved) { _portsInfo = [..._portsInfo, saved]; dispatchChange(); }
   }
-  async deletePortInfo(id: string): Promise<void> {
-    await remove('ports_info', id);
+  async deletePortInfo(id: string): Promise<boolean> {
+    const removed = await remove('ports_info', id);
+    if (!removed) return false;
     _portsInfo = _portsInfo.filter(p => p.id !== id);
     dispatchChange();
+    return true;
   }
 
   // ─── procurement ───────────────────────────────────────────────────────────
 
-  async addProcurement(p: Procurement): Promise<void> {
+  async addProcurement(p: Procurement): Promise<boolean> {
     const saved = await insert<Procurement>('procurement', p);
-    if (saved) { _procurements = [..._procurements, saved]; await auditLog('EXP', `General Procurement ${p.itemDescription}`); dispatchChange(); }
+    if (saved) { _procurements = [..._procurements, saved]; await auditLog('EXP', `General Procurement ${p.itemDescription}`); dispatchChange(); return true; } return false;
   }
-  async updateProcurement(p: Procurement): Promise<void> {
-    await update('procurement', p.id, p);
+  async updateProcurement(p: Procurement): Promise<boolean> {
+    const saved = await update('procurement', p.id, p);
+    if (!saved) return false;
     _procurements = _procurements.map(item => item.id === p.id ? p : item);
     dispatchChange();
+    return true;
   }
-  async deleteProcurement(id: string): Promise<void> {
-    await remove('procurement', id);
+  async deleteProcurement(id: string): Promise<boolean> {
+    const removed = await remove('procurement', id);
+    if (!removed) return false;
     _procurements = _procurements.filter(p => p.id !== id);
     dispatchChange();
+    return true;
   }
   async updateProcurementStatus(id: string, status: 'PENDING' | 'COMPLETED'): Promise<void> {
     await update('procurement', id, { status });
@@ -741,97 +906,121 @@ class SupabaseDB {
 
   // ─── gas ───────────────────────────────────────────────────────────────────
 
-  async addGasTransaction(t: GasTransaction): Promise<void> {
+  async addGasTransaction(t: GasTransaction): Promise<boolean> {
     const saved = await insert<GasTransaction>('gas_transactions', t);
-    if (saved) { _gasTransactions = [..._gasTransactions, saved]; await auditLog('EXP', `Gas Topup ${t.amount}`); dispatchChange(); }
+    if (saved) { _gasTransactions = [..._gasTransactions, saved]; await auditLog('EXP', `Gas Topup ${t.amount}`); dispatchChange(); return true; } return false;
   }
-  async updateGasTransaction(t: GasTransaction): Promise<void> {
-    await update('gas_transactions', t.id, t);
+  async updateGasTransaction(t: GasTransaction): Promise<boolean> {
+    const saved = await update('gas_transactions', t.id, t);
+    if (!saved) return false;
     _gasTransactions = _gasTransactions.map(item => item.id === t.id ? t : item);
     dispatchChange();
+    return true;
   }
-  async deleteGasTransaction(id: string): Promise<void> {
-    await remove('gas_transactions', id);
+  async deleteGasTransaction(id: string): Promise<boolean> {
+    const removed = await remove('gas_transactions', id);
+    if (!removed) return false;
     _gasTransactions = _gasTransactions.filter(t => t.id !== id);
     dispatchChange();
+    return true;
   }
 
   // ─── employees / payroll ───────────────────────────────────────────────────
 
-  async addEmployee(e: Employee): Promise<void> {
+  async addEmployee(e: Employee): Promise<boolean> {
     const saved = await insert<Employee>('employees', e);
-    if (saved) { _employees = [..._employees, saved]; dispatchChange(); }
+    if (saved) { _employees = [..._employees, saved]; dispatchChange(); return true; } return false;
   }
-  async updateEmployee(e: Employee): Promise<void> {
-    await update('employees', e.id, e);
+  async updateEmployee(e: Employee): Promise<boolean> {
+    const saved = await update('employees', e.id, e);
+    if (!saved) return false;
     _employees = _employees.map(item => item.id === e.id ? e : item);
     dispatchChange();
+    return true;
   }
-  async deleteEmployee(id: string): Promise<void> {
-    await remove('employees', id);
+  async deleteEmployee(id: string): Promise<boolean> {
+    const removed = await remove('employees', id);
+    if (!removed) return false;
     _employees = _employees.filter(e => e.id !== id);
     dispatchChange();
+    return true;
   }
-  async addPayrollTransaction(t: PayrollTransaction): Promise<void> {
+  async addPayrollTransaction(t: PayrollTransaction): Promise<boolean> {
     const saved = await insert<PayrollTransaction>('payroll_transactions', t);
-    if (saved) { _payrollTransactions = [..._payrollTransactions, saved]; dispatchChange(); }
+    if (saved) { _payrollTransactions = [..._payrollTransactions, saved]; dispatchChange(); return true; } return false;
   }
-  async updatePayrollTransaction(t: PayrollTransaction): Promise<void> {
-    await update('payroll_transactions', t.id, t);
+  async updatePayrollTransaction(t: PayrollTransaction): Promise<boolean> {
+    const saved = await update('payroll_transactions', t.id, t);
+    if (!saved) return false;
     _payrollTransactions = _payrollTransactions.map(item => item.id === t.id ? t : item);
     dispatchChange();
+    return true;
   }
-  async deletePayrollTransaction(id: string): Promise<void> {
-    await remove('payroll_transactions', id);
+  async deletePayrollTransaction(id: string): Promise<boolean> {
+    const removed = await remove('payroll_transactions', id);
+    if (!removed) return false;
     _payrollTransactions = _payrollTransactions.filter(t => t.id !== id);
     dispatchChange();
+    return true;
   }
 
   // ─── food / transport / port rent ──────────────────────────────────────────
 
-  async addFoodExpense(e: FoodExpense): Promise<void> {
+  async addFoodExpense(e: FoodExpense): Promise<boolean> {
     const saved = await insert<FoodExpense>('food_expenses', e);
-    if (saved) { _foodExpenses = [..._foodExpenses, saved]; await auditLog('EXP', `Food Allowance ${e.amount}`); dispatchChange(); }
+    if (saved) { _foodExpenses = [..._foodExpenses, saved]; await auditLog('EXP', `Food Allowance ${e.amount}`); dispatchChange(); return true; } return false;
   }
-  async updateFoodExpense(e: FoodExpense): Promise<void> {
-    await update('food_expenses', e.id, e);
+  async updateFoodExpense(e: FoodExpense): Promise<boolean> {
+    const saved = await update('food_expenses', e.id, e);
+    if (!saved) return false;
     _foodExpenses = _foodExpenses.map(item => item.id === e.id ? e : item);
     dispatchChange();
+    return true;
   }
-  async deleteFoodExpense(id: string): Promise<void> {
-    await remove('food_expenses', id);
+  async deleteFoodExpense(id: string): Promise<boolean> {
+    const removed = await remove('food_expenses', id);
+    if (!removed) return false;
     _foodExpenses = _foodExpenses.filter(e => e.id !== id);
     dispatchChange();
+    return true;
   }
 
-  async addTransportExpense(e: TransportExpense): Promise<void> {
+  async addTransportExpense(e: TransportExpense): Promise<boolean> {
     const saved = await insert<TransportExpense>('transport_expenses', e);
-    if (saved) { _transportExpenses = [..._transportExpenses, saved]; await auditLog('EXP', `Transport ${e.amount}`); dispatchChange(); }
+    if (saved) { _transportExpenses = [..._transportExpenses, saved]; await auditLog('EXP', `Transport ${e.amount}`); dispatchChange(); return true; } return false;
   }
-  async updateTransportExpense(e: TransportExpense): Promise<void> {
-    await update('transport_expenses', e.id, e);
+  async updateTransportExpense(e: TransportExpense): Promise<boolean> {
+    const saved = await update('transport_expenses', e.id, e);
+    if (!saved) return false;
     _transportExpenses = _transportExpenses.map(item => item.id === e.id ? e : item);
     dispatchChange();
+    return true;
   }
-  async deleteTransportExpense(id: string): Promise<void> {
-    await remove('transport_expenses', id);
+  async deleteTransportExpense(id: string): Promise<boolean> {
+    const removed = await remove('transport_expenses', id);
+    if (!removed) return false;
     _transportExpenses = _transportExpenses.filter(e => e.id !== id);
     dispatchChange();
+    return true;
   }
 
-  async addPortRent(e: PortRent): Promise<void> {
+  async addPortRent(e: PortRent): Promise<boolean> {
     const saved = await insert<PortRent>('port_rents', e);
-    if (saved) { _portRents = [..._portRents, saved]; await auditLog('EXP', `Port Rent ${e.amount} at ${e.port}`); dispatchChange(); }
+    if (saved) { _portRents = [..._portRents, saved]; await auditLog('EXP', `Port Rent ${e.amount} at ${e.port}`); dispatchChange(); return true; } return false;
   }
-  async updatePortRent(e: PortRent): Promise<void> {
-    await update('port_rents', e.id, e);
+  async updatePortRent(e: PortRent): Promise<boolean> {
+    const saved = await update('port_rents', e.id, e);
+    if (!saved) return false;
     _portRents = _portRents.map(item => item.id === e.id ? e : item);
     dispatchChange();
+    return true;
   }
-  async deletePortRent(id: string): Promise<void> {
-    await remove('port_rents', id);
+  async deletePortRent(id: string): Promise<boolean> {
+    const removed = await remove('port_rents', id);
+    if (!removed) return false;
     _portRents = _portRents.filter(e => e.id !== id);
     dispatchChange();
+    return true;
   }
 
   // ─── audit / history ───────────────────────────────────────────────────────

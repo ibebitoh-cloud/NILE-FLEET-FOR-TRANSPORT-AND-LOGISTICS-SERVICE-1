@@ -10,15 +10,24 @@ const Reservations: React.FC = () => {
   const t = translations[lang];
   const [reservations, setReservations] = useState<Reservation[]>(db.getReservations());
 
-  const handleStatusChange = (id: string, status: ReservationStatus) => {
-    db.updateReservationStatus(id, status);
+  const handleStatusChange = async (id: string, status: ReservationStatus) => {
+    await db.updateReservationStatus(id, status);
     setReservations([...db.getReservations()]);
   };
 
-  const approveAndRelease = (res: Reservation) => {
-    db.createOperationFromReservation(res);
+  const approveAndRelease = async (res: Reservation) => {
+    const saved = await db.createOperationFromReservation(res);
     setReservations([...db.getReservations()]);
+    if (!saved) {
+      alert(lang === 'ar' ? `فشل اعتماد الحجز: ${db.getLastDbError() || 'تعذر حفظ بيانات التشغيل.'}` : `Approval failed: ${db.getLastDbError() || 'The operation could not be saved.'}`);
+      return;
+    }
     alert(lang === 'ar' ? 'تمت الموافقة! الحجز الآن متاح لبوابة الميناء.' : 'Approved! Reservation is now visible in Port Gate queue.');
+  };
+
+  const cancelReservation = async (res: Reservation) => {
+    if (!window.confirm(lang === 'ar' ? `إلغاء الحجز ${res.bookingNumber}؟` : `Cancel booking ${res.bookingNumber}?`)) return;
+    await handleStatusChange(res.id, ReservationStatus.CANCELLED);
   };
 
   return (
@@ -90,7 +99,7 @@ const Reservations: React.FC = () => {
                     {res.status === ReservationStatus.APPROVED && (
                       <span className="text-[9px] font-black text-slate-400 uppercase italic">In Gate Queue</span>
                     )}
-                    <button className="p-2 text-slate-300 hover:text-rose-600 transition-colors">
+                    <button onClick={() => cancelReservation(res)} title={lang === 'ar' ? 'إلغاء الحجز' : 'Cancel reservation'} className="p-2 text-slate-300 hover:text-rose-600 transition-colors">
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </td>

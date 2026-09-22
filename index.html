@@ -8,6 +8,7 @@
     <meta name="description" content="Premium Clip-On Genset Management Platform">
     <meta property="og:title" content="Nile Fleet Command">
     <meta property="og:description" content="Premium Clip-On Genset Management Platform">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
@@ -225,6 +226,38 @@
             --input-bg: #252525;
         }
 
+        /* NILE FLEET THEME PACK — high-contrast, operational palettes */
+        body.theme-nile {
+            --bg-primary: #061a16; --text-primary: #f4fbf8; --text-secondary: #9dd7c2;
+            --border-primary: #17483b; --card-bg: #0b241f; --accent: #4fd1a5; --input-bg: #102f28;
+            --rail-bg: #04120f; --row-bg: #081f1a;
+        }
+        body.theme-carbon {
+            --bg-primary: #101214; --text-primary: #f5f7fa; --text-secondary: #aab2bd;
+            --border-primary: #30363d; --card-bg: #181b1f; --accent: #60a5fa; --input-bg: #20242a;
+            --rail-bg: #0b0d0f; --row-bg: #15181c;
+        }
+        body.theme-royal {
+            --bg-primary: #11152f; --text-primary: #f8f9ff; --text-secondary: #b9c0ed;
+            --border-primary: #343b72; --card-bg: #191f42; --accent: #a78bfa; --input-bg: #222951;
+            --rail-bg: #0a0d21; --row-bg: #151a38;
+        }
+        body.theme-sandstorm {
+            --bg-primary: #f7f0e3; --text-primary: #33281d; --text-secondary: #705d49;
+            --border-primary: #ddcbb0; --card-bg: #fffaf2; --accent: #b7791f; --input-bg: #f2e7d4;
+            --rail-bg: #eadbc4; --row-bg: #fffaf2;
+        }
+        body.theme-corporate {
+            --bg-primary: #eef3f7; --text-primary: #102a43; --text-secondary: #486581;
+            --border-primary: #cbd5e1; --card-bg: #ffffff; --accent: #0077b6; --input-bg: #f8fafc;
+            --rail-bg: #e2eaf1; --row-bg: #ffffff;
+        }
+        body.theme-crimson {
+            --bg-primary: #190b10; --text-primary: #fff5f7; --text-secondary: #e6a8b5;
+            --border-primary: #55202d; --card-bg: #241018; --accent: #fb7185; --input-bg: #32131e;
+            --rail-bg: #10070b; --row-bg: #1e0d14;
+        }
+
         /* GLOBAL SELECTORS FOR DYNAMIC COLORS */
         main, aside, section, div, table, tr, th, td, input, select, textarea, button {
             transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
@@ -285,6 +318,55 @@
         label { 
             color: var(--text-secondary) !important; 
             font-weight: 800 !important;
+        }
+
+        /* THEME SURFACE NORMALIZATION */
+        body[class*="theme-"] .bg-white,
+        body[class*="theme-"] .bg-slate-50,
+        body[class*="theme-"] .bg-slate-100 {
+            background-color: var(--card-bg) !important;
+            color: var(--text-primary);
+        }
+        body[class*="theme-"] .text-slate-900,
+        body[class*="theme-"] .text-slate-800,
+        body[class*="theme-"] .text-slate-700 {
+            color: var(--text-primary);
+        }
+        body[class*="theme-"] .text-slate-500,
+        body[class*="theme-"] .text-slate-400 {
+            color: var(--text-secondary);
+        }
+        body[class*="theme-"] .hover\\:bg-slate-50:hover,
+        body[class*="theme-"] .hover\\:bg-slate-100:hover {
+            background-color: var(--input-bg) !important;
+        }
+        body[class*="theme-"] input,
+        body[class*="theme-"] select,
+        body[class*="theme-"] textarea {
+            color-scheme: light;
+        }
+        body.theme-black input, body.theme-navy input, body.theme-forest input,
+        body.theme-sahara input, body.theme-cyber input, body.theme-slate input,
+        body.theme-midnight input, body.theme-toxic input, body.theme-lava input,
+        body.theme-copper input, body.theme-phantom input, body.theme-nile input,
+        body.theme-carbon input, body.theme-royal input, body.theme-crimson input {
+            color-scheme: dark;
+        }
+        body.theme-sandstorm input, body.theme-corporate input, body.theme-ocean input,
+        body.theme-mint input, body.theme-arctic input, body.theme-white input,
+        body.theme-rose input, body.theme-emerald-vibrant input {
+            color-scheme: light;
+        }
+
+        /* Brand utility classes are theme-aware while preserving semantic status colors. */
+        body[class*="theme-"] [class~="text-[#001F3F]"] { color: var(--text-primary) !important; }
+        body[class*="theme-"] [class~="bg-slate-50"] { background-color: var(--card-bg) !important; }
+        body[class*="theme-"] [class~="bg-slate-100"] { background-color: var(--input-bg) !important; }
+        body[class*="theme-"] [class~="border-slate-100"],
+        body[class*="theme-"] [class~="border-slate-200"] { border-color: var(--border-primary) !important; }
+
+        @media (max-width: 1023px) {
+            main { padding-bottom: 76px; }
         }
 
         /* Scrollbars */
