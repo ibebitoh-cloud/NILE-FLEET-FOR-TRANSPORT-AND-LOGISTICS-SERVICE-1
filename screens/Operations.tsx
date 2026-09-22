@@ -168,6 +168,10 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
   const [editingOp, setEditingOp] = useState<Operation | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
+  const selectedPort = highlightId && Object.values(Location).includes(highlightId as Location)
+    ? highlightId as Location
+    : null;
+
   const todayStr = new Date().toISOString().split('T')[0];
 
   const refresh = () => setOperations([...db.getOperations()]);
@@ -185,9 +189,10 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
       if (activeQuickFilter === 'OPERATE') matchesFilter = op.status === 'UNDER OPERATE';
       if (activeQuickFilter === 'REVIEW') matchesFilter = !op.reviewedByManager;
       
-      return matchesSearch && matchesFilter;
+      const matchesPort = !selectedPort || op.clipOnPort === selectedPort || op.clipOffPort === selectedPort;
+      return matchesSearch && matchesFilter && matchesPort;
     });
-  }, [operations, searchTerm, activeQuickFilter]);
+  }, [operations, searchTerm, activeQuickFilter, selectedPort]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, Operation[]> = {};
@@ -199,7 +204,7 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
       bk,
       items,
       rep: items[0],
-      total: items.reduce((s, i) => s + parseFloat(i.rate) + parseFloat(i.vat), 0),
+      total: items.reduce((s, i) => s + (Number.parseFloat(i.rate || '0') || 0) + (Number.parseFloat(i.vat || '0') || 0), 0),
       needsReview: items.some(i => !i.reviewedByManager)
     })).sort((a,b) => b.rep.operationDate.localeCompare(a.rep.operationDate));
   }, [filteredOps]);
