@@ -34,6 +34,8 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatMessages, setAiChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
   const [aiChatLoading, setAiChatLoading] = useState(false);
+  const [themeIslandOpen, setThemeIslandOpen] = useState(false);
+  const themeIslandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -214,6 +216,18 @@ LIVE DATA: ${JSON.stringify(context)}`;
     setActiveScreen('booking-invoices');
     window.dispatchEvent(new CustomEvent('invoices-tab-change', { detail: tab }));
   };
+
+  const toggleTheme = () => {
+    const nextTheme = isDark ? 'white' : 'black';
+    setTheme(nextTheme);
+    setThemeIslandOpen(true);
+    if (themeIslandTimerRef.current) clearTimeout(themeIslandTimerRef.current);
+    themeIslandTimerRef.current = setTimeout(() => setThemeIslandOpen(false), 1800);
+  };
+
+  useEffect(() => () => {
+    if (themeIslandTimerRef.current) clearTimeout(themeIslandTimerRef.current);
+  }, []);
 
   const toggleFullscreen = async () => {
     try {
@@ -613,6 +627,14 @@ LIVE DATA: ${JSON.stringify(context)}`;
             >
                <span className="text-base">{isMuted ? '🔇' : '🔊'}</span>
             </button>
+            <button
+              onClick={toggleTheme}
+              className={`relative p-1.5 rounded-lg border transition-all overflow-hidden ${isTerminal ? 'border-[#C2A37844] bg-white/5 text-[#C2A378]' : 'border-slate-200 bg-white'}`}
+              title={isDark ? (isAr ? 'الوضع الفاتح' : 'Light Mode') : (isAr ? 'الوضع الداكن' : 'Dark Mode')}
+              aria-label={isDark ? 'Light Mode' : 'Dark Mode'}
+            >
+              <span className={`block text-base leading-none transition-all duration-500 ${isDark ? 'rotate-0' : 'rotate-180'}`}>{isDark ? '☀️' : '🌙'}</span>
+            </button>
             <button onClick={() => setActiveScreen('notifications')} className={`p-1.5 rounded-lg border relative transition-all ${isTerminal ? 'border-[#C2A37844] bg-white/5 text-[#C2A378]' : 'border-slate-200 bg-white'}`}>
                <span className="text-base">🔔</span>
                {notifications.length > 0 && <span className="absolute top-0 right-0 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"></span>}
@@ -638,6 +660,14 @@ LIVE DATA: ${JSON.stringify(context)}`;
               <span className="text-lg">☰</span>
             </button>
           </div>
+          {themeIslandOpen && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[60] pointer-events-none">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#001F3F] dark:bg-white text-white dark:text-[#001F3F] shadow-2xl border border-[#C2A37866] animate-in fade-in zoom-in-95 duration-300">
+                <span className="text-sm animate-spin">{isDark ? '☀️' : '🌙'}</span>
+                <span className="text-[9px] font-black uppercase tracking-[0.2em]">{isDark ? (isAr ? 'الوضع الداكن' : 'DARK MODE') : (isAr ? 'الوضع الفاتح' : 'LIGHT MODE')}</span>
+              </div>
+            </div>
+          )}
         </header>
 
         <div className="p-4 lg:p-6 flex-1">
