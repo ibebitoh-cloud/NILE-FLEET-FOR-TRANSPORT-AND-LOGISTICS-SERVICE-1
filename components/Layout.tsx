@@ -119,8 +119,18 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       if (idMatch) {
         const id = idMatch[1];
-        const hits = gensets.filter(g => String(g.gensetNumber || '').toUpperCase() === id);
-        const opHits = operations.filter(o => String(o.gensetNumber || '').toUpperCase() === id)
+        const normalizeGensetId = (value: string) => String(value || '').toUpperCase().replace(/\s+/g, '');
+        const id4 = id.replace(/\D/g, '').slice(-4).padStart(4, '0');
+        const hits = gensets.filter(g => {
+          const raw = normalizeGensetId(g.gensetNumber);
+          const digits = raw.replace(/\D/g, '');
+          return raw === id || digits === id.replace(/\D/g, '') || (digits.length >= 4 && digits.slice(-4) === id4);
+        });
+        const opHits = operations.filter(o => {
+          const raw = normalizeGensetId(o.gensetNumber);
+          const digits = raw.replace(/\D/g, '');
+          return raw === id || digits === id.replace(/\D/g, '') || (digits.length >= 4 && digits.slice(-4) === id4);
+        })
           .sort((a,b) => String(b.clipOnDate || b.operationDate || '').localeCompare(String(a.clipOnDate || a.operationDate || '')));
         const latest = opHits[0];
         const answer = hits.length || latest
@@ -157,23 +167,31 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         return;
       }
 
-      // Only genuine analysis/reasoning reaches DALI.
+      // Fast customer/operation lookup: factual questions stay local and never wait for AI.
+      const customerQuery = q.match(/(?:HOW MANY|COUNT|NUMBER OF|كام|عدد|كم).*?(?:OPERATIONS?|JOBS?|عمليه|عمليات).*?(?:FOR|ل|لل)?\s*([A-Z][A-Z0-9 .&_-]{2,})$/i);
+      if (customerQuery) {
+        const needle = customerQuery[1].trim().toUpperCase();
+        const hits = operations.filter(o => String(o.customerName || '').toUpperCase().includes(needle));
+        const answer = isAr ? `عدد العمليات لـ ${needle}: ${hits.length}` : `Operations for ${needle}: ${hits.length}`;
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+        return;
+      }
+
+      // Only genuine analysis/reasoning reaches DALI. Keep the model payload tiny.
+      const statusCounts = operations.reduce((m: Record<string, number>, o) => { m[o.status] = (m[o.status] || 0) + 1; return m; }, {});
+      const portCounts = operations.reduce((m: Record<string, number>, o) => { const p = o.clipOnPort || '—'; m[p] = (m[p] || 0) + 1; return m; }, {});
       const context = {
         question,
         totals: { operations: operations.length, invoices: invoices.length, gensets: gensets.length, maintenance: maintenance.length },
-        operations,
-        invoices,
-        gensets,
-        maintenance,
-        reservations: db.getReservations(),
-        gasByPort: db.getGasByPort(),
-        gasByGenset: db.getGasByGenset(),
-        gasBalance: db.getGasBalance(),
-        customers: db.getCustomerPrices(),
-        ports: db.getPortsInfo()
+        statusCounts,
+        portCounts,
+        recentOperations: operations.slice(0, 40).map(o => ({ bookingNumber:o.bookingNumber, containerNumber:o.containerNumber, gensetNumber:o.gensetNumber, customerName:o.customerName, status:o.status, clipOnPort:o.clipOnPort, clipOffPort:o.clipOffPort, operationDate:o.operationDate, rate:o.rate, vat:o.vat })),
+        invoiceTotals: invoices.reduce((m: any, i: any) => { const amount=Number(i.amount)||0; m.billed+=amount; if(i.status==='PAID') m.paid+=amount; return m; }, { billed:0, paid:0 }),
+        gensetStatusCounts: gensets.reduce((m: Record<string, number>, g) => { m[g.status] = (m[g.status] || 0) + 1; return m; }, {}),
+        maintenanceCount: maintenance.length
       };
-      const prompt = `You are DALI 1.0 for Nile Fleet. Answer the exact question using only LIVE DATA. Never invent. Keep operational answers concise (maximum 5 lines). Arabic question = professional Arabic only. Do not output code.\nQUESTION: ${question}\nLIVE DATA: ${JSON.stringify(context)}`;
-      const answer = await runThinkingAudit(prompt, 700);
+      const prompt = `You are DALI 1.0, Nile Fleet's fast operations assistant. Answer ONLY the question from LIVE DATA. Never invent. Maximum 3 short lines. If the question is factual and data is missing, say so. Arabic question: Arabic answer. Preserve IDs/numbers exactly.\nQ:${question}\nDATA:${JSON.stringify(context)}`;
+      const answer = await runThinkingAudit(prompt, 420);
       setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من DALI 1.0.' : 'No response from DALI 1.0.') }]);
     } catch (e) {
       setAiChatMessages(prev => [...prev, { role: 'ai', text: isAr ? 'تعذر الاتصال بـ DALI 1.0 حالياً.' : 'DALI 1.0 is unavailable right now.' }]);
