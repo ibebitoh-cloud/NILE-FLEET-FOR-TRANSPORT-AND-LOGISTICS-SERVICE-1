@@ -1,3 +1,102 @@
+
+import React, { useContext, useState, useEffect, useRef } from 'react';
+import { User, UserRole, SystemNotification } from '../types';
+import { LanguageContext, ThemeContext } from '../App';
+import { translations } from '../translations';
+import { db } from '../services/supabaseDb';
+import { runThinkingAudit } from '../services/aiService';
+
+interface LayoutProps {
+  user: User;
+  onLogout: () => void;
+  activeScreen: string;
+  setActiveScreen: (screen: string) => void;
+  children: React.ReactNode;
+}
+
+const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActiveScreen, children }) => {
+  const { lang, setLang } = useContext(LanguageContext);
+  const { theme, setTheme, isMuted, setIsMuted, isDark } = useContext(ThemeContext);
+  const t = translations[lang];
+  const isAr = lang === 'ar';
+  
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState<SystemNotification[]>(db.getActiveNotifications(user));
+  const mainContentRef = useRef<HTMLElement>(null);
+  const [activePortGateTab, setActivePortGateTab] = useState<'GATE' | 'TRANSIT' | 'UPCOMING'>(() => (sessionStorage.getItem('portGateTab') as any) || 'GATE');
+  const [isPortGateSubmenuCollapsed, setIsPortGateSubmenuCollapsed] = useState<boolean>(() => sessionStorage.getItem('portGateSubmenuCollapsed') === 'true');
+  const [activeInvoicesTab, setActiveInvoicesTab] = useState<'ALL' | 'NEED_ISSUE' | 'PAST_DUE'>(() => (sessionStorage.getItem('invoicesTab') as any) || 'ALL');
+  const [isInvoicesSubmenuCollapsed, setIsInvoicesSubmenuCollapsed] = useState<boolean>(() => sessionStorage.getItem('invoicesSubmenuCollapsed') === 'true');
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+  const [aiChatInput, setAiChatInput] = useState('');
+  const [aiChatMessages, setAiChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
+  const [aiChatLoading, setAiChatLoading] = useState(false);
+  const [themeIslandOpen, setThemeIslandOpen] = useState(false);
+  const themeIslandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      const doc = document as any;
+      const isCurrentlyFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+      setIsFullscreen(isCurrentlyFs);
+      if (isCurrentlyFs) {
+        setIsPseudoFullscreen(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    document.addEventListener('mozfullscreenchange', handleFsChange);
+    document.addEventListener('MSFullscreenChange', handleFsChange);
+    
+    const updateNotifs = () => setNotifications(db.getActiveNotifications(user));
+    window.addEventListener('db-undo-success', updateNotifs);
+    window.addEventListener('db-change', updateNotifs);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+      document.removeEventListener('mozfullscreenchange', handleFsChange);
+      document.removeEventListener('MSFullscreenChange', handleFsChange);
+      window.removeEventListener('db-undo-success', updateNotifs);
+      window.removeEventListener('db-change', updateNotifs);
+    };
+  }, [user]);
+
+  useEffect(() => {
+    const handleTabChange = (e: Event) => {
+      const customEvent = e as CustomEvent<'GATE' | 'TRANSIT' | 'UPCOMING'>;
+      if (customEvent.detail) {
+        setActivePortGateTab(customEvent.detail);
+      }
+    };
+    window.addEventListener('port-gate-tab-change', handleTabChange);
+    return () => {
+      window.removeEventListener('port-gate-tab-change', handleTabChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleInvoicesTabChange = (e: Event) => {
+      const customEvent = e as CustomEvent<'ALL' | 'NEED_ISSUE' | 'PAST_DUE'>;
+      if (customEvent.detail) {
+        setActiveInvoicesTab(customEvent.detail);
+      }
+    };
+    window.addEventListener('invoices-tab-change', handleInvoicesTabChange);
+    return () => {
+      window.removeEventListener('invoices-tab-change', handleInvoicesTabChange);
+    };
+  }, []);
+
+  const askNileAi = async () => {
+    const question = aiChatInput.trim();
+    if (!question || aiChatLoading) return;
+    setAiChatInput('');
+    setAiChatMessages(prev => [...prev, { role: 'user', text: question }]);
+    setAiChatLoading(true);
+
     try {
       const operations = db.getOperations();
       const gensets = db.getStock();
