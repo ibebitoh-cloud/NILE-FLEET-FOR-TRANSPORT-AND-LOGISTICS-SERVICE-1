@@ -25,6 +25,7 @@ const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   shipper: 110,
   clipOnPort: 85,
   clipOffPort: 85,
+  destination: 150,
   containerNumber: 120,
   gensetNumber: 90,
   rate: 80,
@@ -580,7 +581,7 @@ const MasterView: React.FC = () => {
   const todayDate = new Date().toISOString().split('T')[0];
 
   const [stagedOps, setStagedOps] = useState<any[]>([
-    { customerName: '', bookingNumber: '', gensetNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, trucker: '', beneficiaryName: '', quantity: 1 }
+    { customerName: '', bookingNumber: '', gensetNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, destination: '', trucker: '', beneficiaryName: '', quantity: 1 }
   ]);
   const [rawPasteBuffer, setRawPasteBuffer] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
@@ -864,6 +865,7 @@ const MasterView: React.FC = () => {
       status: item.status || 'UNDER OPERATE',
       clipOnPort: item.clipOnPort || Location.ALEX,
       clipOffPort: item.clipOffPort || Location.ALEX,
+      destination: item.destination || '',
       rate: item.rate || '0',
       vat: '0'
     }));
@@ -887,6 +889,7 @@ const MasterView: React.FC = () => {
         status: 'UNDER OPERATE',
         clipOnPort: Location.ALEX,
         clipOffPort: Location.ALEX,
+        destination: '',
         quantity: 1,
         vat: '0'
       };
@@ -940,6 +943,7 @@ const MasterView: React.FC = () => {
           clipOffDate: '',
           clipOnPort: (s.clipOnPort as Location) || Location.ALEX,
           clipOffPort: (s.clipOffPort as Location) || Location.ALEX,
+          destination: s.destination || '',
           status: (s.status as any) || 'UNDER OPERATE',
           rate: s.rate || '0.00',
           vat: s.vat || '0.00',
@@ -984,7 +988,7 @@ const MasterView: React.FC = () => {
       }
       setOperations([...freshOps]);
       setShowAddModal(false);
-      setStagedOps([{ customerName: '', bookingNumber: '', gensetNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, trucker: '', beneficiaryName: '', quantity: 1 }]);
+      setStagedOps([{ customerName: '', bookingNumber: '', gensetNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, destination: '', trucker: '', beneficiaryName: '', quantity: 1 }]);
       setRawPasteBuffer('');
       refresh();
       alert(isAr ? `تمت إضافة ${toInject.length} عملية بنجاح` : `Successfully injected ${toInject.length} operations.`);
@@ -1165,6 +1169,7 @@ const MasterView: React.FC = () => {
                   { key: 'shipper', label: t.shipper },
                   { key: 'clipOnPort', label: isAr ? 'دخول' : 'IN', extraClass: isDark ? 'bg-[#C2A378]/20' : 'bg-amber-100/50' },
                   { key: 'clipOffPort', label: isAr ? 'خروج' : 'OUT', extraClass: isDark ? 'bg-[#C2A378]/20' : 'bg-amber-100/50' },
+                  { key: 'destination', label: isAr ? 'الوجهة' : 'DESTINATION', sortable: true },
                   { key: 'containerNumber', label: t.container },
                   { key: 'gensetNumber', label: isAr ? 'المولد' : 'Genset' },
                   { key: 'rate', label: t.rate, align: 'text-right' },
@@ -1282,6 +1287,9 @@ const MasterView: React.FC = () => {
                                 isDark={isDark} 
                                 renderValue={(v) => <span className={`${portBadgeStyle(v as Location)} inline-block`}>{translateEntity(v, lang)}</span>}
                              />
+                          </td>
+                          <td style={{ ...dynamicCellStyle, ...getColStyle('destination') }} className={`px-2 border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
+                            <EditableCell value={op.destination || ''} onSave={(val) => handleUpdateCell(op, 'destination', val)} disabled={isReadOnly} isDark={isDark} className={`${isSelected ? 'text-white' : (isDark ? 'text-slate-300' : 'text-slate-800')} font-bold uppercase text-[9px]`} placeholder={isAr ? 'الوجهة' : 'DESTINATION'} />
                           </td>
                           <td 
                             style={{ ...dynamicCellStyle, ...getColStyle('containerNumber') }} 
@@ -1481,6 +1489,7 @@ const MasterView: React.FC = () => {
                         <th className="p-4">{t.date}</th>
                         <th className="p-4">{isAr ? 'ميناء الدخول' : 'In Hub'}</th>
                         <th className="p-4">{isAr ? 'ميناء الخروج' : 'Out Hub'}</th>
+                        <th className="p-4 min-w-[150px]">{isAr ? 'الوجهة' : 'Destination'}</th>
                         <th className="p-4 text-right">{t.rate}</th>
                         <th className="p-4 min-w-[120px]">{t.shipper}</th>
                         <th className="p-4 min-w-[120px]">{t.trucker}</th>
@@ -1510,6 +1519,9 @@ const MasterView: React.FC = () => {
                               <select className="w-full p-2 rounded-xl border-2 font-black text-[10px]" value={o.clipOffPort} onChange={e => updateStagedRow(idx, 'clipOffPort', e.target.value as any)}>
                                 {allPorts.map(p => <option key={p} value={p}>{translateEntity(p, lang)}</option>)}
                               </select>
+                           </td>
+                           <td className="p-2">
+                             <input className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" placeholder={isAr ? 'الوجهة النهائية' : 'Final destination'} value={o.destination || ''} onChange={e => updateStagedRow(idx, 'destination', e.target.value)} />
                            </td>
                            <td className="p-2"><input type="number" className="w-full p-2 text-right rounded-xl border-2 font-black text-[10px]" value={o.rate} onChange={e => updateStagedRow(idx, 'rate', e.target.value)} /></td>
                            <td className="p-2">
