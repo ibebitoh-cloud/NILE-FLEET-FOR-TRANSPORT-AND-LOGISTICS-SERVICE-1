@@ -1,5 +1,5 @@
 const AI_ENDPOINT = '/ai-proxy';
-const OPEN_SOURCE_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const OPEN_SOURCE_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 
 async function callAi(action: string, payload: any) {
   const res = await fetch(AI_ENDPOINT, {
@@ -7,8 +7,25 @@ async function callAi(action: string, payload: any) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, payload }),
   });
-  if (!res.ok) throw new Error(`AI request failed: ${res.status}`);
-  return res.json();
+
+  const raw = await res.text();
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!res.ok) {
+    const detail = data?.detail || data?.error || raw || `HTTP ${res.status}`;
+    throw new Error(`AI request failed (${res.status}): ${detail}`);
+  }
+
+  if (!data) {
+    throw new Error('AI request returned an empty response.');
+  }
+
+  return data;
 }
 
 export const getSafeApiKey = (): string | null => 'open-source-nile-ai';
@@ -25,11 +42,12 @@ export const translateBusinessEntities = async (names: string[]) => {
 
 export const runThinkingAudit = async (prompt: string, budget: number = 1200) => {
   try {
-    const { text } = await callAi('runThinkingAudit', {
+    const { text, error, detail } = await callAi('runThinkingAudit', {
       prompt,
       model: OPEN_SOURCE_MODEL,
       maxTokens: Math.min(Math.max(budget, 120), 700),
     });
+    if (error) throw new Error(detail || error);
     return text || '';
   } catch (e) {
     console.error('DALI 1.0 failed', e);
@@ -51,6 +69,7 @@ export const mapSpreadsheetToSchema = async (csvData: string): Promise<any[]> =>
   try {
     return await callAi('mapSpreadsheetToSchema', { csvData });
   } catch (e) {
+    console.error('DALI spreadsheet mapping failed', e);
     return [];
   }
 };
