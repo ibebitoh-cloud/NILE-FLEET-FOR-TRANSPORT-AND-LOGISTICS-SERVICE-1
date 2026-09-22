@@ -1,13 +1,13 @@
-// Cloudflare Pages Function: runs all AI features on Cloudflare Workers AI —
-// free, open-source models (Llama 3.3 for text, Llama 3.2 Vision for images).
+// Cloudflare Pages Function: runs all AI features on Cloudflare Workers AI.
+// DALI uses Qwen3 for fast text reasoning and Qwen3.8 for multimodal container OCR.
 // No external API key, no billing account: the model runs directly on
 // Cloudflare's infrastructure via the "AI" binding (Settings -> Functions ->
 // Bindings -> add "AI" -> variable name AI). Free tier: 10,000 Neurons/day,
 // resets daily, no credit card required.
 
 const TEXT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
-const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
-const VISION_FALLBACK_MODEL = '@cf/qwen/qwen3.8-27b';
+const VISION_MODEL = '@cf/qwen/qwen3.8-27b';
+const VISION_FALLBACK_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 const TEXT_FALLBACK_MODEL = '@cf/zai-org/glm-4.7-flash';
 
 // Open models are less reliable than Claude/GPT at strictly following
