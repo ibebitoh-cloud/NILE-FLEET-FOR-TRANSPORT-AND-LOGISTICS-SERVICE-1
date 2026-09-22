@@ -38,26 +38,44 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   const portData = useMemo(() => {
     const locations = ['DAM', 'ALEX', 'GOUDA', 'SOKHNA', 'SCCT', 'PSD', 'MAL', 'WORKSHOP'] as const;
-    return locations.map(port => {
-      const stockCount = stock.filter(g => g.location === port && g.status === 'IN_STOCK').length;
-      const maintenanceCount = stock.filter(g => g.location === port && g.status === 'MAINTENANCE').length;
-      const preorderCount =
-        ops.filter(o => o.clipOnPort === port && (o.status === 'UNDER OPERATE' || o.status === 'HOLD')).length +
-        reservations.filter(r => r.portIn === port && r.status === 'PENDING').length;
-      const active = ops.filter(o => o.clipOnPort === port && o.status === 'IN PROGRESS').length;
-      return { port, stockCount, maintenanceCount, preorderCount, active };
+    const byPort: Record<string, { stockCount: number; maintenanceCount: number; preorderCount: number; active: number }> = {};
+    locations.forEach(port => { byPort[port] = { stockCount: 0, maintenanceCount: 0, preorderCount: 0, active: 0 }; });
+
+    stock.forEach(g => {
+      const p = String(g.location || '');
+      if (!byPort[p]) return;
+      if (g.status === 'IN_STOCK') byPort[p].stockCount++;
+      if (g.status === 'MAINTENANCE') byPort[p].maintenanceCount++;
     });
+    ops.forEach(o => {
+      const p = String(o.clipOnPort || '');
+      if (!byPort[p]) return;
+      if (o.status === 'UNDER OPERATE' || o.status === 'HOLD') byPort[p].preorderCount++;
+      if (o.status === 'IN PROGRESS') byPort[p].active++;
+    });
+    reservations.forEach(r => {
+      const p = String(r.portIn || '');
+      if (byPort[p] && r.status === 'PENDING') byPort[p].preorderCount++;
+    });
+    return locations.map(port => ({ port, ...byPort[port] }));
   }, [stock, ops, reservations]);
 
   const customerFinancials = useMemo(() => {
+    const invoiceByCustomer: Record<string, { billed: number; paid: number }> = {};
+    invoices.forEach(i => {
+      const name = String(i.customerName || '');
+      if (!invoiceByCustomer[name]) invoiceByCustomer[name] = { billed: 0, paid: 0 };
+      const amount = Number(i.amount) || 0;
+      invoiceByCustomer[name].billed += amount;
+      if (i.status === 'PAID') invoiceByCustomer[name].paid += amount;
+    });
+    const opsByCustomer: Record<string, number> = {};
+    ops.forEach(o => { const n = String(o.customerName || ''); opsByCustomer[n] = (opsByCustomer[n] || 0) + 1; });
+
     return customers.map(cust => {
       const name = cust.companyName || cust.name;
-      const custInvoices = invoices.filter(i => i.customerName === name);
-      const billed = custInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-      const paid = custInvoices.filter(i => i.status === 'PAID').reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-      const outstanding = billed - paid;
-      const operations = ops.filter(o => o.customerName === name).length;
-      return { id: cust.id, name, billed, paid, outstanding, operations };
+      const totals = invoiceByCustomer[name] || { billed: 0, paid: 0 };
+      return { id: cust.id, name, billed: totals.billed, paid: totals.paid, outstanding: totals.billed - totals.paid, operations: opsByCustomer[name] || 0 };
     }).sort((a, b) => b.outstanding - a.outstanding);
   }, [customers, invoices, ops]);
 
