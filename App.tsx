@@ -258,47 +258,81 @@ const App: React.FC = () => {
       } finally {
         isProcessing = false;
       }
-    }, 2000);
+    }, 5000);
 
     return () => clearInterval(observer);
   }, [lang]);
 
-  // GLOBAL UI TRANSLATION FALLBACK: catches hard-coded English labels across screens.
-  // React components that already use t()/translateEntity() remain untouched.
+  // GLOBAL UI TRANSLATION FALLBACK.
+  // Keep this lightweight: a full DOM walk on every React mutation caused UI lag.
   useEffect(() => {
     if (lang !== 'ar') return;
 
-    const translateDom = () => {
-      const root = document.body;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let running = false;
+
+    const translateRoot = (root: ParentNode) => {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       const nodes: Text[] = [];
       let node: Node | null;
       while ((node = walker.nextNode())) {
         const text = node as Text;
-        if (text.parentElement && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(text.parentElement.tagName)) {
-          nodes.push(text);
-        }
+        const parent = text.parentElement;
+        if (parent && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(parent.tagName)) nodes.push(text);
       }
-      nodes.forEach(text => {
-        const translated = translateUiText(text.nodeValue || '', 'ar');
-        if (translated !== text.nodeValue) text.nodeValue = translated;
-      });
-
-      root.querySelectorAll<HTMLElement>('[placeholder],[title],[aria-label]').forEach(el => {
-        for (const attr of ['placeholder', 'title', 'aria-label']) {
-          const value = el.getAttribute(attr);
-          if (!value) continue;
-          const translated = translateUiText(value, 'ar');
-          if (translated !== value) el.setAttribute(attr, translated);
-        }
-      });
+      for (const text of nodes) {
+        const value = text.nodeValue || '';
+        const translated = translateUiText(value, 'ar');
+        if (translated !== value) text.nodeValue = translated;
+      }
+      if (root === document.body) {
+        document.body.querySelectorAll<HTMLElement>('[placeholder],[title],[aria-label]').forEach(el => {
+          for (const attr of ['placeholder', 'title', 'aria-label']) {
+            const value = el.getAttribute(attr);
+            if (!value) continue;
+            const translated = translateUiText(value, 'ar');
+            if (translated !== value) el.setAttribute(attr, translated);
+          }
+        });
+      }
     };
 
-    translateDom();
-    const observer = new MutationObserver(() => translateDom());
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    return () => observer.disconnect();
+    translateRoot(document.body);
+
+    const observer = new MutationObserver(mutations => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (running) return;
+        running = true;
+        try {
+          // Only inspect newly inserted subtrees. Do not react to characterData
+          // changes caused by our own translations.
+          const roots = mutations
+            .flatMap(m => Array.from(m.addedNodes))
+            .filter(n => n.nodeType === Node.ELEMENT_NODE || n.nodeType === Node.TEXT_NODE)
+            .slice(0, 20);
+          for (const root of roots) {
+            if (root.nodeType === Node.ELEMENT_NODE) translateRoot(root);
+            else {
+              const text = root as Text;
+              const value = text.nodeValue || '';
+              const translated = translateUiText(value, 'ar');
+              if (translated !== value) text.nodeValue = translated;
+            }
+          }
+        } finally {
+          running = false;
+        }
+      }, 120);
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      if (timer) clearTimeout(timer);
+    };
   }, [lang, langUpdateKey]);
+
 
   // Handle refresh events from translations.ts
   useEffect(() => {
