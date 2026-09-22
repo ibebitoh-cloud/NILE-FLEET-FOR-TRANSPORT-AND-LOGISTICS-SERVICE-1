@@ -163,6 +163,9 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
 
   const [operations, setOperations] = useState<Operation[]>(db.getOperations());
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => { const timer = setTimeout(() => setDebouncedSearch(searchTerm), 150); return () => clearTimeout(timer); }, [searchTerm]);
   const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
   const [activeQuickFilter, setActiveQuickFilter] = useState<QuickFilter>('ALL');
   const [editingOp, setEditingOp] = useState<Operation | null>(null);
@@ -178,7 +181,7 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
 
   const filteredOps = useMemo(() => {
     return operations.filter(op => {
-      const search = searchTerm.toLowerCase().trim();
+      const search = debouncedSearch.toLowerCase().trim();
       const matchesSearch = (op.bookingNumber || '').toLowerCase().includes(search) || 
                             (op.customerName || '').toLowerCase().includes(search) || 
                             (op.containerNumber || '').toLowerCase().includes(search);
@@ -192,7 +195,7 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
       const matchesPort = !selectedPort || op.clipOnPort === selectedPort || op.clipOffPort === selectedPort;
       return matchesSearch && matchesFilter && matchesPort;
     });
-  }, [operations, searchTerm, activeQuickFilter, selectedPort]);
+  }, [operations, debouncedSearch, activeQuickFilter, selectedPort]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, Operation[]> = {};
