@@ -61,7 +61,7 @@ export async function onRequestPost(context) {
           ],
           max_tokens: 1500,
         });
-        return json(parseJsonLoose(result.response || ''));
+        return json(parseJsonLoose(extractText(result)));
       }
 
       case 'runThinkingAudit': {
@@ -75,7 +75,7 @@ export async function onRequestPost(context) {
           max_tokens: Math.min(Math.max(payload?.maxTokens || 1600, 200), 3000),
           temperature: 0.2,
         });
-        const text = String(result?.response || '').trim();
+        const text = extractText(result);
         if (!text) {
           throw new Error('Workers AI returned no text from the primary/fallback model.');
         }
@@ -137,18 +137,46 @@ Respond with ONLY the raw JSON array — no markdown, no code fences, no comment
   }
 }
 
+function extractText(result) {
+  if (typeof result === 'string') return result.trim();
+  if (!result || typeof result !== 'object') return '';
+  if (typeof result.response === 'string') return result.response.trim();
+  if (typeof result.output_text === 'string') return result.output_text.trim();
+  if (typeof result.text === 'string') return result.text.trim();
+  if (typeof result.reasoning === 'string' && result.reasoning.trim()) return result.reasoning.trim();
+  if (Array.isArray(result.choices)) {
+    const choice = result.choices[0];
+    const content = choice?.message?.content ?? choice?.text;
+    if (typeof content === 'string') return content.trim();
+  }
+  return '';
+}
+
 async function runTextModel(env, options) {
+  const modelOptions = {
+    ...options,
+    chat_template_kwargs: {
+      ...(options.chat_template_kwargs || {}),
+      enable_thinking: false,
+    },
+  };
+
   try {
-    return await env.AI.run(TEXT_MODEL, options);
+    const result = await env.AI.run(TEXT_MODEL, modelOptions);
+    if (extractText(result)) return result;
+    console.error('Primary Workers AI model returned an empty text response:', result);
   } catch (primaryError) {
     console.error('Primary Workers AI model failed, trying fallback', primaryError);
-    try {
-      return await env.AI.run(TEXT_FALLBACK_MODEL, options);
-    } catch (fallbackError) {
-      throw new Error(
-        `Primary model failed: ${primaryError?.message || primaryError}; fallback model failed: ${fallbackError?.message || fallbackError}`
-      );
-    }
+  }
+
+  try {
+    const result = await env.AI.run(TEXT_FALLBACK_MODEL, modelOptions);
+    if (extractText(result)) return result;
+    throw new Error('Workers AI fallback returned an empty text response.');
+  } catch (fallbackError) {
+    throw new Error(
+      `Qwen3 returned no usable text; fallback model failed: ${fallbackError?.message || fallbackError}`
+    );
   }
 }
 
