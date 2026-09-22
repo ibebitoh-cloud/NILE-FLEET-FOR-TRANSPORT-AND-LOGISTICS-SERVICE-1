@@ -43,15 +43,29 @@ const STATUS_CYCLE: string[] = ['UNDER OPERATE', 'IN PROGRESS', 'DONE', 'HOLD', 
 
 const getContrastColor = (bgClass: string, isDarkTerminal: boolean) => {
   if (isDarkTerminal) {
-    if (bgClass.includes('slate-900') || bgClass.includes('slate-950') || bgClass.includes('blue-900')) return 'text-white';
-    if (bgClass.includes('emerald-900')) return 'text-emerald-400';
-    if (bgClass.includes('bg-[#001F3F]')) return 'text-[#C2A378]';
-    return 'text-slate-100';
+    if (bgClass.includes('bg-[#98FFD9]') || bgClass.includes('bg-[#FFEB3B]') || bgClass.includes('bg-[#87CEEB]')) return 'text-slate-950';
+    return 'text-white';
   }
   const lightColors = ['bg-white', 'bg-slate-50', 'bg-blue-50', 'bg-[#98FFD9]', 'bg-[#FFEB3B]', 'bg-amber-50', 'bg-emerald-50'];
   const isLight = lightColors.some(c => bgClass.includes(c));
   return isLight ? 'text-slate-900' : 'text-white';
 };
+
+const getDarkPortStyle = (loc: Location) => {
+  const styles: Record<string, { backgroundColor: string; color: string; borderColor: string; boxShadow: string }> = {
+    [Location.DAM]: { backgroundColor: 'rgba(16,185,129,0.22)', color: '#6EE7B7', borderColor: '#34D399', boxShadow: '0 0 10px rgba(52,211,153,0.18)' },
+    [Location.ALEX]: { backgroundColor: 'rgba(234,179,8,0.22)', color: '#FDE047', borderColor: '#FACC15', boxShadow: '0 0 10px rgba(250,204,21,0.18)' },
+    [Location.GOUDA]: { backgroundColor: 'rgba(37,99,235,0.24)', color: '#93C5FD', borderColor: '#60A5FA', boxShadow: '0 0 10px rgba(96,165,250,0.18)' },
+    [Location.SOKHNA]: { backgroundColor: 'rgba(249,115,22,0.24)', color: '#FDBA74', borderColor: '#FB923C', boxShadow: '0 0 10px rgba(251,146,60,0.18)' },
+    [Location.SCCT]: { backgroundColor: 'rgba(14,165,233,0.22)', color: '#7DD3FC', borderColor: '#38BDF8', boxShadow: '0 0 10px rgba(56,189,248,0.18)' },
+    [Location.PSD]: { backgroundColor: 'rgba(124,58,237,0.25)', color: '#C4B5FD', borderColor: '#A78BFA', boxShadow: '0 0 10px rgba(167,139,250,0.18)' },
+    [Location.MAL]: { backgroundColor: 'rgba(34,197,94,0.22)', color: '#86EFAC', borderColor: '#4ADE80', boxShadow: '0 0 10px rgba(74,222,128,0.18)' },
+    [Location.WORKSHOP]: { backgroundColor: 'rgba(100,116,139,0.28)', color: '#CBD5E1', borderColor: '#94A3B8', boxShadow: '0 0 10px rgba(148,163,184,0.16)' }
+  };
+  return styles[loc] || { backgroundColor: 'rgba(71,85,105,0.28)', color: '#E2E8F0', borderColor: '#64748B', boxShadow: 'none' };
+};
+
+interface EditableCellProps
 
 interface EditableCellProps {
   value: string;
@@ -528,6 +542,7 @@ const MasterView: React.FC = () => {
   });
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [collapsedStatusGroups, setCollapsedStatusGroups] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -1223,16 +1238,30 @@ const MasterView: React.FC = () => {
                 if (group.length === 0) return null;
                 return (
                   <React.Fragment key={status}>
-                    <tr className={`sticky z-30 shadow-sm ${isDark ? 'bg-slate-900' : 'bg-slate-100'}`} style={{ top: '35px' }}>
-                      <td colSpan={18} className={`px-4 py-1.5 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                        <div className="flex items-center gap-3">
-                           <div className={`w-1.5 h-1.5 rounded-full ${status === 'DONE' ? 'bg-emerald-500' : status === 'IN PROGRESS' ? 'bg-blue-500' : status === 'UNDER OPERATE' ? 'bg-amber-500' : 'bg-slate-400'}`}></div>
+                    <tr className={`sticky z-30 shadow-sm ${isDark ? 'bg-slate-900/95' : 'bg-slate-100'}`} style={{ top: '35px' }}>
+                      <td colSpan={18} className={`px-3 py-1.5 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedStatusGroups(prev => {
+                            const next = new Set(prev);
+                            if (next.has(status)) next.delete(status);
+                            else next.add(status);
+                            return next;
+                          })}
+                          className="w-full flex items-center gap-3 text-start hover:bg-white/5 rounded-lg px-2 py-1 transition-all"
+                          aria-expanded={!collapsedStatusGroups.has(status)}
+                        >
+                           <span className={`text-[9px] w-4 text-center transition-transform ${collapsedStatusGroups.has(status) ? '' : 'rotate-90'}`}>▶</span>
+                           <div className={`w-2 h-2 rounded-full ${status === 'DONE' ? 'bg-emerald-500' : status === 'IN PROGRESS' ? 'bg-blue-500' : status === 'UNDER OPERATE' ? 'bg-amber-500' : 'bg-slate-400'}`}></div>
                            <span className={`font-black uppercase tracking-[0.2em] text-[9px] ${isDark ? 'text-[#C2A378]' : 'text-[#001F3F]'}`}>{translateEntity(status, lang)}</span>
-                           <span className={`px-1.5 py-0.5 rounded text-[7px] font-black ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-[#001F3F] text-white'}`}>{group.length} {isAr ? 'وحدة' : 'UNITS'}</span>
-                        </div>
+                           <span className={`px-1.5 py-0.5 rounded text-[7px] font-black ${isDark ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-[#001F3F] text-white'}`}>{group.length} {isAr ? 'وحدة' : 'UNITS'}</span>
+                           <span className={`ml-auto text-[8px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                             {collapsedStatusGroups.has(status) ? (isAr ? 'فتح' : 'Expand') : (isAr ? 'طي' : 'Collapse')}
+                           </span>
+                        </button>
                       </td>
                     </tr>
-                    {group.map((op) => {
+                    {!collapsedStatusGroups.has(status) && 
                       const isSelected = selectedRowIds.has(op.id);
                       const isContainerDup = Boolean(op.containerNumber?.trim() && duplicateContainerNumbers.has(op.containerNumber.trim().toUpperCase()));
                       const isGensetDup = Boolean(
@@ -1243,9 +1272,20 @@ const MasterView: React.FC = () => {
 
                       const portBadgeStyle = (loc: Location) => {
                          const style = PORT_STYLING[loc];
-                         if (!style) return isDark ? 'bg-slate-900 text-white border-slate-700' : 'bg-white text-slate-900 border-slate-200';
-                         return isDark ? `${style.border} border font-black text-[8px] bg-white/5 backdrop-blur-sm px-2 py-0.5 rounded-md ring-1 ring-white/10 shadow-[0_0_10px_rgba(255,255,255,0.05)] ${getContrastColor(style.bg, true)}` : `${style.bg} ${getContrastColor(style.bg, false)} ${style.border} border px-2 py-0.5 rounded-md font-black text-[8px]`;
+                         if (!style) return { className: isDark ? 'bg-slate-900 text-white border-slate-700' : 'bg-white text-slate-900 border-slate-200', style: undefined };
+                         if (isDark) {
+                           return {
+                             className: 'border font-black text-[8px] px-2 py-0.5 rounded-md backdrop-blur-sm',
+                             style: getDarkPortStyle(loc)
+                           };
+                         }
+                         return {
+                           className: style.bg + ' ' + getContrastColor(style.bg, false) + ' ' + style.border + ' border px-2 py-0.5 rounded-md font-black text-[8px]',
+                           style: undefined
+                         };
                       };
+
+                      return (
                       return (
                         <tr key={op.id} className={`transition-all duration-200 group ${isSelected ? 'selected-row ' + (isDark ? 'bg-blue-900/40 text-white' : 'bg-blue-600 text-white') : (isDark ? 'hover:bg-white/5' : 'hover:bg-blue-50/50')}`}>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('checkbox') }} className={`text-center border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
@@ -1275,7 +1315,7 @@ const MasterView: React.FC = () => {
                                 onSave={(val) => handleUpdateCell(op, 'clipOnPort', val)} 
                                 disabled={isReadOnly} 
                                 isDark={isDark} 
-                                renderValue={(v) => <span className={`${portBadgeStyle(v as Location)} inline-block`}>{translateEntity(v, lang)}</span>}
+                                renderValue={(v) => <span className={`${portBadgeStyle(v as Location).className} inline-block`} style={portBadgeStyle(v as Location).style}>{translateEntity(v, lang)}</span>}
                              />
                           </td>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('clipOffPort') }} className={`text-center border-r ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
@@ -1285,7 +1325,7 @@ const MasterView: React.FC = () => {
                                 onSave={(val) => handleUpdateCell(op, 'clipOffPort', val)} 
                                 disabled={isReadOnly} 
                                 isDark={isDark} 
-                                renderValue={(v) => <span className={`${portBadgeStyle(v as Location)} inline-block`}>{translateEntity(v, lang)}</span>}
+                                renderValue={(v) => <span className={`${portBadgeStyle(v as Location).className} inline-block`} style={portBadgeStyle(v as Location).style}>{translateEntity(v, lang)}</span>}
                              />
                           </td>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('destination') }} className={`px-2 border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
