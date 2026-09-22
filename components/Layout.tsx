@@ -51,12 +51,14 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     
     const updateNotifs = () => setNotifications(db.getActiveNotifications(user));
     window.addEventListener('db-undo-success', updateNotifs);
+    window.addEventListener('db-change', updateNotifs);
     return () => {
       document.removeEventListener('fullscreenchange', handleFsChange);
       document.removeEventListener('webkitfullscreenchange', handleFsChange);
       document.removeEventListener('mozfullscreenchange', handleFsChange);
       document.removeEventListener('MSFullscreenChange', handleFsChange);
       window.removeEventListener('db-undo-success', updateNotifs);
+      window.removeEventListener('db-change', updateNotifs);
     };
   }, [user]);
 
