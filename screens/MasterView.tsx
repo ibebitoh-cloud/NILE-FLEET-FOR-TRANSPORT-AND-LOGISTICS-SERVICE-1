@@ -1261,7 +1261,7 @@ const MasterView: React.FC = () => {
                         </button>
                       </td>
                     </tr>
-                    {!collapsedStatusGroups.has(status) && 
+                    {!collapsedStatusGroups.has(status) && group.map((op) => {
                       const isSelected = selectedRowIds.has(op.id);
                       const isContainerDup = Boolean(op.containerNumber?.trim() && duplicateContainerNumbers.has(op.containerNumber.trim().toUpperCase()));
                       const isGensetDup = Boolean(
@@ -1285,7 +1285,6 @@ const MasterView: React.FC = () => {
                          };
                       };
 
-                      return (
                       return (
                         <tr key={op.id} className={`transition-all duration-200 group ${isSelected ? 'selected-row ' + (isDark ? 'bg-blue-900/40 text-white' : 'bg-blue-600 text-white') : (isDark ? 'hover:bg-white/5' : 'hover:bg-blue-50/50')}`}>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('checkbox') }} className={`text-center border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
