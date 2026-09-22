@@ -5,9 +5,9 @@
 // Bindings -> add "AI" -> variable name AI). Free tier: 10,000 Neurons/day,
 // resets daily, no credit card required.
 
-const TEXT_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
+const TEXT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
-const TEXT_FALLBACK_MODEL = '@cf/meta/llama-3.2-1b-instruct';
+const TEXT_FALLBACK_MODEL = '@cf/zai-org/glm-4.7-flash';
 
 // Open models are less reliable than Claude/GPT at strictly following
 // "return only JSON" instructions — strip code fences and grab the first
