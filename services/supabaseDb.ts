@@ -791,13 +791,13 @@ class SupabaseDB {
 
   // ─── notifications ─────────────────────────────────────────────────────────
 
-  async addNotification(n: Omit<SystemNotification, 'id' | 'timestamp' | 'active'>): Promise<void> {
+  async addNotification(n: Omit<SystemNotification, 'id' | 'timestamp' | 'active'>): Promise<boolean> {
     const full = { ...n, timestamp: new Date().toISOString(), active: true };
     const saved = await insert<SystemNotification>('system_notifications', full);
-    if (saved) {
-      _notifications = [saved, ..._notifications];
-      dispatchChange();
-    }
+    if (!saved) return false;
+    _notifications = [saved, ..._notifications];
+    dispatchChange();
+    return true;
   }
 
   async dismissNotification(id: string): Promise<boolean> {
