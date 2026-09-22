@@ -241,7 +241,12 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       const answer = await runThinkingAudit(prompt, 420);
       setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من DALI 1.0.' : 'No response from DALI 1.0.') }]);
     } catch (e) {
-      setAiChatMessages(prev => [...prev, { role: 'ai', text: isAr ? 'تعذر الاتصال بـ DALI 1.0 حالياً.' : 'DALI 1.0 is unavailable right now.' }]);
+      console.error('DALI chat error', e);
+      const detail = e instanceof Error ? e.message : String(e);
+      setAiChatMessages(prev => [...prev, {
+        role: 'ai',
+        text: isAr ? `خطأ DALI: ${detail}` : `DALI ERROR: ${detail}`
+      }]);
     } finally {
       setAiChatLoading(false);
     }
