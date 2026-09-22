@@ -99,102 +99,81 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
     try {
       const operations = db.getOperations();
-      const invoices = db.getInvoices();
       const gensets = db.getStock();
-      const reservations = db.getReservations();
+      const invoices = db.getInvoices();
       const maintenance = db.getMaintenanceLogs();
+      const q = question.toUpperCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
 
-      // Deterministic lookup for short factual questions. Do not make the LLM
-      // guess a number that the application can calculate exactly.
-      const normalize = (value: unknown) => String(value ?? '')
-        .toUpperCase()
-        .replace(/[أإآ]/g, 'ا')
-        .replace(/[ة]/g, 'ه')
-        .replace(/[^A-Z0-9\u0600-\u06FF]+/g, '');
+      // FAST PATH: factual operational questions never go through the LLM.
+      const idMatch = q.match(/(?:GENSET|GENSETS|مولد|مولدات)\s*#?\s*([A-Z0-9-]+)/i);
+      const bookingMatch = q.match(/(?:BOOKING|BOOKING NO|حجز)\s*#?\s*([A-Z0-9-]+)/i);
+      const containerMatch = q.match(/(?:CONTAINER|حاويه|حاوية)\s*#?\s*([A-Z0-9]{7,12})/i);
+      const countWords = /HOW MANY|HOW MUCH|NUMBER OF|كام|عدد|كم/.test(q);
 
-      const questionTokens = question
-        .split(/\s+/)
-        .map(token => normalize(token))
-        .filter(token => token.length >= 4 && ![
-          'HOW', 'MANY', 'MUCH', 'WORK', 'HAVE', 'HAS', 'THE', 'THIS',
-          'WHAT', 'TOTAL', 'NUMBER', 'OPERATIONS', 'OPERATION', 'SHOW',
-          'TELL', 'ABOUT', 'FOR', 'FROM', 'WITH', 'ARE', 'IS', 'DOES'
-        ].includes(token));
+      const fmtOp = (op: any) => {
+        const port = op.clipOnPort || op.clipOffPort || '—';
+        return isAr
+          ? `الحالة: ${op.status || 'غير محدد'}\nالميناء: ${port}\nالحجز: ${op.bookingNumber || '—'}\nالحاوية: ${op.containerNumber || '—'}`
+          : `Status: ${op.status || '—'}\nPort: ${port}\nBooking: ${op.bookingNumber || '—'}\nContainer: ${op.containerNumber || '—'}`;
+      };
 
-      const fieldNames = ['customerName', 'beneficiaryName', 'trucker', 'shipperAddress', 'bookingNumber', 'containerNumber', 'gensetNumber'];
-      const matches = operations.filter(op => questionTokens.some(token =>
-        fieldNames.some(field => normalize((op as any)[field]).includes(token))
-      ));
-
-      const asksForWork = /\\b(work|works|operations?|ops)\\b/i.test(question) ||
-        /how many/i.test(question) || /كام|عدد|شغل|عمليات/i.test(question);
-
-      if (asksForWork && questionTokens.length > 0 && matches.length > 0) {
-        const byStatus = matches.reduce<Record<string, number>>((acc, op) => {
-          const status = String(op.status || 'UNKNOWN').toUpperCase();
-          acc[status] = (acc[status] || 0) + 1;
-          return acc;
-        }, {});
-        const totalValue = matches.reduce((sum, op) => {
-          const rate = Number.parseFloat(String(op.rate ?? '').replace(/,/g, '')) || 0;
-          const vat = Number.parseFloat(String(op.vat ?? '').replace(/,/g, '')) || 0;
-          return sum + rate + vat;
-        }, 0);
-        const matchedNames = Array.from(new Set(matches.flatMap(op =>
-          fieldNames
-            .filter(field => questionTokens.some(token => normalize((op as any)[field]).includes(token)))
-            .map(field => String((op as any)[field] || '').trim())
-            .filter(Boolean)
-        ))).slice(0, 4);
-
-        const statusText = Object.entries(byStatus).map(([status, count]) => `${status}: ${count}`).join(' | ');
-        const answer = isAr
-          ? `وجدت ${matches.length} عملية مسجلة مطابقة لـ ${matchedNames.join(' / ')}. الحالة: ${statusText}. إجمالي قيمة العمليات المسجلة (السعر + الضريبة): ${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP.`
-          : `I found ${matches.length} recorded operations matching ${matchedNames.join(' / ')}. Status: ${statusText}. Recorded operation value (rate + VAT): ${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP.`;
-
+      if (idMatch) {
+        const id = idMatch[1];
+        const hits = gensets.filter(g => String(g.gensetNumber || '').toUpperCase() === id);
+        const opHits = operations.filter(o => String(o.gensetNumber || '').toUpperCase() === id)
+          .sort((a,b) => String(b.clipOnDate || b.operationDate || '').localeCompare(String(a.clipOnDate || a.operationDate || '')));
+        const latest = opHits[0];
+        const answer = hits.length || latest
+          ? (isAr ? `المولد ${id}\n${hits[0] ? `الحالة: ${hits[0].status || '—'}\nالموقع: ${hits[0].location || latest?.clipOnPort || '—'}` : 'غير موجود في المخزون الحالي'}\n${latest ? fmtOp(latest) : ''}` : `المولد ${id} غير موجود في بيانات الأسطول.`)
+          : `GENSET ${id} was not found in the fleet data.`;
         setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
         return;
       }
 
+      if (bookingMatch || containerMatch) {
+        const value = (bookingMatch?.[1] || containerMatch?.[1] || '').toUpperCase();
+        const hits = operations.filter(o =>
+          String(o.bookingNumber || '').toUpperCase() === value ||
+          String(o.containerNumber || '').toUpperCase() === value
+        );
+        const answer = hits.length
+          ? hits.slice(0, 3).map(fmtOp).join('\n\n')
+          : (isAr ? `لم أجد ${value} في العمليات المسجلة.` : `No recorded operation was found for ${value}.`);
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+        return;
+      }
+
+      // Fast count/status questions.
+      if (countWords && /GENSET|مولد|STOCK|مخزون|MAINTENANCE|صيانة|PREORDER|UNDER OPERATE|تحت التشغيل/.test(q)) {
+        const portMatch = q.match(/DAM|ALEX|GOUDA|SOKHNA|SCCT|PSD|MAL/);
+        let list = gensets;
+        if (portMatch) list = list.filter(g => String(g.location || '').toUpperCase() === portMatch[0]);
+        const maintenanceCount = list.filter(g => g.status === 'MAINTENANCE').length;
+        const stockCount = list.filter(g => g.status === 'IN_STOCK').length;
+        const answer = isAr
+          ? `العدد: ${list.length}\nالمخزون: ${stockCount}\nالصيانة: ${maintenanceCount}${portMatch ? `\nالميناء: ${portMatch[0]}` : ''}`
+          : `Total: ${list.length}\nIn stock: ${stockCount}\nMaintenance: ${maintenanceCount}${portMatch ? `\nPort: ${portMatch[0]}` : ''}`;
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+        return;
+      }
+
+      // Only genuine analysis/reasoning reaches DALI.
       const context = {
-        user: { role: user.role, name: user.name },
-        // Compact summaries make the model reason over facts instead of drowning
-        // in thousands of raw fields.
-        totals: {
-          operations: operations.length,
-          invoices: invoices.length,
-          gensets: gensets.length,
-          reservations: reservations.length,
-          maintenance: maintenance.length
-        },
+        question,
+        totals: { operations: operations.length, invoices: invoices.length, gensets: gensets.length, maintenance: maintenance.length },
         operations,
         invoices,
         gensets,
-        reservations,
         maintenance,
+        reservations: db.getReservations(),
         gasByPort: db.getGasByPort(),
         gasByGenset: db.getGasByGenset(),
         gasBalance: db.getGasBalance(),
         customers: db.getCustomerPrices(),
         ports: db.getPortsInfo()
       };
-
-      const prompt = `You are DALI 1.0, the Nile Fleet dashboard assistant.
-Answer the user's exact question FIRST. You are not allowed to reply with generic instructions when the supplied data can answer the question.
-
-RULES:
-1. For Nile Fleet data questions, calculate the answer from LIVE DATA yourself.
-2. Never invent, estimate, or ask the user to provide data that is already in LIVE DATA.
-3. "How much work / how many operations does [name] have?" means count matching operations and give a status breakdown. Search customerName, beneficiaryName, trucker, shipperAddress, bookingNumber, containerNumber, and gensetNumber.
-4. "How much does [name] owe / unpaid / outstanding" means filter invoices for that name and calculate the exact outstanding amount from invoice status/amount.
-5. If a name matches multiple fields, state which field(s) matched.
-6. Show the exact number and amount first, then a short explanation. Do not output Python code.
-7. If the data does not contain the requested entity, say that clearly and do not invent a result.
-8. Arabic question -> professional Arabic only. Preserve IDs, dates, and numbers exactly.
-
-USER QUESTION: ${question}
-LIVE DATA: ${JSON.stringify(context)}`;
-      const answer = await runThinkingAudit(prompt, 1600);
+      const prompt = `You are DALI 1.0 for Nile Fleet. Answer the exact question using only LIVE DATA. Never invent. Keep operational answers concise (maximum 5 lines). Arabic question = professional Arabic only. Do not output code.\nQUESTION: ${question}\nLIVE DATA: ${JSON.stringify(context)}`;
+      const answer = await runThinkingAudit(prompt, 700);
       setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من DALI 1.0.' : 'No response from DALI 1.0.') }]);
     } catch (e) {
       setAiChatMessages(prev => [...prev, { role: 'ai', text: isAr ? 'تعذر الاتصال بـ DALI 1.0 حالياً.' : 'DALI 1.0 is unavailable right now.' }]);
