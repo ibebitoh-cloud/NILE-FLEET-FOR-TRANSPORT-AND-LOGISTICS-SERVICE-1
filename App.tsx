@@ -8,7 +8,6 @@ import Reservations from './screens/Reservations';
 import Customers from './screens/Customers';
 import CustomerPrices from './screens/CustomerPrices';
 import Financials from './screens/Financials';
-import ExpenseHub from './screens/ExpenseHub';
 import HistoryLog from './screens/HistoryLog';
 import Intelligence from './screens/Intelligence';
 import Reports from './screens/Reports';
@@ -390,7 +389,6 @@ const App: React.FC = () => {
       case 'user-mgmt': return <UserMgmt />;
       case 'customer-prices': return <CustomerPrices />;
       case 'financials': return <Financials key={`fin-${langUpdateKey}`} />;
-      case 'expense-hub': return <ExpenseHub key={`exp-${langUpdateKey}`} />;
       case 'support': return <CustomerService />;
       case 'notifications': return <Notifications />;
       case 'system-log': return <HistoryLog />;

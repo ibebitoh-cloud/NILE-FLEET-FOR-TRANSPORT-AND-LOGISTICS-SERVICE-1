@@ -18,7 +18,7 @@ const ALL_SYSTEM_SCREENS = [
   { id: 'customer-prices', label: 'Customer Price Matrix', icon: '💰', category: 'Commercial' },
   { id: 'booking-invoices', label: 'Booking Invoices & ETA', icon: '🧾', category: 'Commercial' },
   { id: 'financials', label: 'Financials & Payments', icon: '🏦', category: 'Financials' },
-  { id: 'expense-hub', label: 'Expense Hub & Expenses', icon: '🧾', category: 'Financials' },
+  { id:  label: 'Expense Hub & Expenses', icon: '🧾', category: 'Financials' },
   { id: 'intelligence', label: 'AI Intelligence Hub', icon: '🧠', category: 'Analytics' },
   { id: 'reports', label: 'Audit Reports & Analytics', icon: '📝', category: 'Analytics' },
   { id: 'user-mgmt', label: 'User & Access Management', icon: '👤', category: 'Administration' },
@@ -111,7 +111,7 @@ const UserMgmt: React.FC = () => {
       password: Math.random().toString(36).slice(-8) + 'A1!',
       wipePassword: 'wipe' + Math.floor(1000 + Math.random() * 9000),
       assignedPorts: [Location.ALEX, Location.DAM],
-      allowedScreens: ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials', 'expense-hub', 'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'],
+      allowedScreens: ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials',  'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'],
       permissions: {
         canCreate: true,
         canEdit: true,
@@ -148,7 +148,7 @@ const UserMgmt: React.FC = () => {
           : u.role === UserRole.GATE_OPERATOR
           ? ['port-gate', 'notifications', 'support', 'user-settings']
           : u.role === UserRole.MANAGER
-          ? ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials', 'expense-hub', 'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings']
+          ? ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials',  'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings']
           : u.role === UserRole.CUSTOMER
           ? ['cust-reservations', 'cust-invoices', 'notifications', 'support']
           : ['dashboard', 'master-view', 'reports', 'intelligence', 'support']
@@ -254,7 +254,7 @@ const UserMgmt: React.FC = () => {
       } else if (editingUser.role === UserRole.GATE_OPERATOR) {
         setEditingUser({ ...editingUser, allowedScreens: ['port-gate', 'notifications', 'support', 'user-settings'] });
       } else if (editingUser.role === UserRole.MANAGER) {
-        setEditingUser({ ...editingUser, allowedScreens: ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials', 'expense-hub', 'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'] });
+        setEditingUser({ ...editingUser, allowedScreens: ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials',  'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'] });
       } else if (editingUser.role === UserRole.CUSTOMER) {
         setEditingUser({ ...editingUser, allowedScreens: ['cust-reservations', 'cust-invoices', 'notifications', 'support'] });
       } else {

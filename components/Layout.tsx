@@ -271,7 +271,6 @@ LIVE DATA: ${JSON.stringify(context)}`;
     { id: 'user-mgmt', label: t.userMgmt, icon: '👤' },
     { id: 'customer-prices', label: t.customerPrices, icon: '💰' },
     { id: 'financials', label: t.financials, icon: '🏦' },
-    { id: 'expense-hub', label: t.expenseHub, icon: '🧾' },
     { id: 'support', label: t.support, icon: '🎧' },
     { id: 'system-log', label: t.systemLog, icon: '🕒' },
     { id: 'cust-reservations', label: t.reservations, icon: '📅' },
@@ -294,7 +293,6 @@ LIVE DATA: ${JSON.stringify(context)}`;
     { id: 'user-mgmt', label: t.userMgmt, icon: '👤' },
     { id: 'customer-prices', label: t.customerPrices, icon: '💰' },
     { id: 'financials', label: t.financials, icon: '🏦' },
-    { id: 'expense-hub', label: t.expenseHub, icon: '🧾' },
     { id: 'support', label: t.support, icon: '🎧' },
     { id: 'system-log', label: t.systemLog, icon: '🕒' },
   ] : (isGate ? [
