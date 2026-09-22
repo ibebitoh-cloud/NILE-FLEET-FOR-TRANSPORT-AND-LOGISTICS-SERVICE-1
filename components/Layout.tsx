@@ -39,8 +39,8 @@
       const fmtOp = (op: any) => {
         const port = op.clipOnPort || op.clipOffPort || '—';
         return isAr
-          ? `الحالة: ${op.status || 'غير محدد'}\\nالميناء: ${port}\\nالحجز: ${op.bookingNumber || '—'}\\nالحاوية: ${op.containerNumber || '—'}`
-          : `Status: ${op.status || '—'}\\nPort: ${port}\\nBooking: ${op.bookingNumber || '—'}\\nContainer: ${op.containerNumber || '—'}`;
+          ? `الحالة: ${op.status || 'غير محدد'}\nالميناء: ${port}\nالحجز: ${op.bookingNumber || '—'}\nالحاوية: ${op.containerNumber || '—'}`
+          : `Status: ${op.status || '—'}\nPort: ${port}\nBooking: ${op.bookingNumber || '—'}\nContainer: ${op.containerNumber || '—'}`;
       };
 
       // Genset lookup searches BOTH the fleet table's unitNumber and operation history.
@@ -68,9 +68,9 @@
         const location = stock?.location || latestOp?.clipOnPort || latestOp?.clipOffPort || latestMaintenance?.location || '—';
         const status = stock?.status || latestOp?.status || latestMaintenance?.status || '—';
         if (isAr) {
-          return `المولد ${stockNumber}\\nالحالة: ${status}\\nالموقع: ${location}${latestOp ? `\\nالحجز: ${latestOp.bookingNumber || '—'}\\nالحاوية: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\\nآخر صيانة: ${latestMaintenance.serviceDate || '—'}` : ''}`;
+          return `المولد ${stockNumber}\nالحالة: ${status}\nالموقع: ${location}${latestOp ? `\nالحجز: ${latestOp.bookingNumber || '—'}\nالحاوية: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nآخر صيانة: ${latestMaintenance.serviceDate || '—'}` : ''}`;
         }
-        return `GENSET ${stockNumber}\\nStatus: ${status}\\nLocation: ${location}${latestOp ? `\\nBooking: ${latestOp.bookingNumber || '—'}\\nContainer: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\\nLast maintenance: ${latestMaintenance.serviceDate || '—'}` : ''}`;
+        return `GENSET ${stockNumber}\nStatus: ${status}\nLocation: ${location}${latestOp ? `\nBooking: ${latestOp.bookingNumber || '—'}\nContainer: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nLast maintenance: ${latestMaintenance.serviceDate || '—'}` : ''}`;
       };
 
       if (idMatch) {
@@ -82,7 +82,7 @@
       // when the identifier is short/numeric, so they never fall through to the LLM.
       if (searchMatch) {
         const value = searchMatch[1];
-        if (/^\\d{1,6}$/.test(value)) {
+        if (/^\d{1,6}$/.test(value)) {
           setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(value) }]);
           return;
         }
@@ -95,7 +95,7 @@
           String(o.containerNumber || '').toUpperCase() === value
         );
         const answer = hits.length
-          ? hits.slice(0, 5).map(fmtOp).join('\\n\\n')
+          ? hits.slice(0, 5).map(fmtOp).join('\n\n')
           : (isAr ? `لم أجد ${value} في العمليات المسجلة.` : `No recorded operation was found for ${value}.`);
         setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
         return;
