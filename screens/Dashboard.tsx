@@ -126,31 +126,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-5 lg:space-y-6 animate-in fade-in duration-500 pb-28 lg:pb-12 text-start">
-      {/* DALI 1.0 — wide, short top command widget */}
-      <button
-        onClick={() => onNavigate('intelligence')}
-        className="w-full bg-[#001F3F] dark:bg-slate-950 text-white rounded-[2rem] px-5 py-4 md:px-8 md:py-5 shadow-xl border border-blue-900/30 hover:shadow-2xl transition-all text-start relative overflow-hidden group"
-      >
-        <div className="absolute -right-10 -top-16 w-48 h-48 rounded-full bg-blue-500/10 blur-3xl group-hover:bg-blue-500/20 transition-all"></div>
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="w-11 h-11 rounded-2xl bg-[#C2A378] text-[#001F3F] flex items-center justify-center font-black text-sm shrink-0">D1</div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[#C2A378] font-black tracking-[0.2em] text-xs uppercase">DALI 1.0</span>
-                <span className="text-[8px] px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-300 font-black uppercase tracking-widest">Live</span>
-              </div>
-              <p className="text-sm md:text-base font-black uppercase italic truncate">Fleet Command Intelligence</p>
-            </div>
+      {/* DALI 1.0 — compact text cell */}
+      <section className="w-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm px-5 py-4 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-black text-[#001F3F] dark:text-white text-base">{lang === 'ar' ? 'دالي' : 'DALI 1.0'}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
           </div>
-          <div className="grid grid-cols-4 gap-2 md:gap-5 shrink-0">
-            <div><span className="block text-[8px] text-slate-400 uppercase font-black">Units</span><b className="text-lg">{daliSummary.totalUnits}</b></div>
-            <div><span className="block text-[8px] text-slate-400 uppercase font-black">Live</span><b className="text-lg text-emerald-400">{daliSummary.active}</b></div>
-            <div><span className="block text-[8px] text-slate-400 uppercase font-black">Preorder</span><b className="text-lg text-amber-400">{daliSummary.preorder}</b></div>
-            <div><span className="block text-[8px] text-slate-400 uppercase font-black">Maint.</span><b className="text-lg text-rose-400">{daliSummary.maintenance}</b></div>
-          </div>
+          <p className="text-[10px] text-slate-400 font-bold truncate">{lang === 'ar' ? 'مساعد العمليات السريع' : 'Fast operations assistant'}</p>
         </div>
-      </button>
+        <button onClick={() => onNavigate('intelligence')} className="text-[9px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 whitespace-nowrap">{lang === 'ar' ? 'فتح دالي' : 'OPEN DALI'}</button>
+      </section>
 
       {/* PORT WIDGETS */}
       <section>
