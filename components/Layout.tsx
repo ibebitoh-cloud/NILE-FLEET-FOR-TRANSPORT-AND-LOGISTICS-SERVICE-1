@@ -587,11 +587,15 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       {/* DALI 1.0 floating dashboard assistant */}
       <div className="fixed bottom-6 right-6 z-[100] no-print">
+        {/* DALI 1.0 quick text-cell assistant */}
         {isAiChatOpen && (
           <div className={`absolute bottom-16 right-0 w-[min(92vw,420px)] h-[min(70vh,620px)] rounded-[2rem] overflow-hidden border shadow-2xl flex flex-col ${isTerminal ? 'bg-[#001224] border-white/10' : 'bg-white border-slate-200'}`}>
-            <div className="px-5 py-4 bg-gradient-to-r from-[#001F3F] to-[#073b6d] text-white flex items-center justify-between">
-              <div><p className="text-[8px] font-black tracking-[0.3em] text-[#C2A378]">DALI 1.0</p><p className="text-sm font-black">{isAr ? 'DALI 1.0' : 'DALI 1.0'}</p></div>
-              <button onClick={() => setIsAiChatOpen(false)} className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20">✕</button>
+            <div className="px-5 py-3 bg-gradient-to-r from-[#001F3F] to-[#073b6d] text-white flex items-center justify-between">
+              <div><p className="text-[8px] font-black tracking-[0.3em] text-[#C2A378]">DALI 1.0</p><p className="text-sm font-black">{isAr ? 'دالي' : 'DALI 1.0'}</p></div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setAiChatMessages([])} className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[8px] font-black uppercase tracking-widest">{isAr ? 'مسح المحادثة' : 'CLEAR CHAT'}</button>
+                <button onClick={() => setIsAiChatOpen(false)} className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20">✕</button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {aiChatMessages.length === 0 && <div className={`rounded-2xl p-4 text-xs leading-6 ${isTerminal ? 'bg-white/5 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>{isAr ? 'اسألني عن العمليات، المخزون، الحجوزات، الفواتير، الوقود، أو أي سؤال عام.' : 'Ask me about operations, stock, bookings, invoices, fuel, logistics, or any general question.'}</div>}
