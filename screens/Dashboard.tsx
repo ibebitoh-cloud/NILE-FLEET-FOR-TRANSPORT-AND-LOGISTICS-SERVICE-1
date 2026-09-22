@@ -1,5 +1,5 @@
 
-import React, { useContext, useMemo } from 'react';
+import React, { useContext, useMemo, useEffect, useState } from 'react';
 import { db } from '../services/supabaseDb';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { Location, GensetStatus, UserRole, User } from '../types';
@@ -17,17 +17,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
   const isReadOnly = currentUser.role === UserRole.VIEWER;
+  const [, setDataVersion] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setDataVersion(v => v + 1);
+    window.addEventListener('db-change', refresh);
+    window.addEventListener('db-undo-success', refresh);
+    return () => {
+      window.removeEventListener('db-change', refresh);
+      window.removeEventListener('db-undo-success', refresh);
+    };
+  }, []);
 
   const stock = db.getStock();
   const ops = db.getOperations();
   const invoices = db.getInvoices();
   const customers = db.getUsers().filter(u => u.role === UserRole.CUSTOMER);
 
+  const todayStr = new Date().toISOString().slice(0, 10);
   const stats = [
     { label: t.totalUnits, value: stock.length, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-white dark:bg-slate-800', target: 'stock' },
     { label: t.clippedOut, value: ops.filter(o => o.status === 'IN PROGRESS').length, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-white dark:bg-slate-800', target: 'operations' },
     { label: t.freeUnits, value: stock.filter(s => s.status === GensetStatus.IN_STOCK).length, color: 'text-[#C2A378]', bg: 'bg-white dark:bg-slate-800', target: 'stock' },
-    { label: t.neededToday, value: ops.filter(o => o.status === 'UNDER OPERATE').length, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-white dark:bg-slate-800', target: 'operations' },
+    { label: t.neededToday, value: ops.filter(o => o.status === 'UNDER OPERATE' && (o.operationDate === todayStr || o.clipOnDate === todayStr)).length, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-white dark:bg-slate-800', target: 'operations' },
   ];
 
   const locationData = Object.values(Location).map(loc => {
@@ -66,7 +78,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 relative z-10">
           {locationData.map((port) => (
-            <div key={port.name} onClick={() => onNavigate('operations')} className="bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] p-5 border-2 border-transparent hover:border-blue-400 dark:hover:border-blue-500 hover:bg-white dark:hover:bg-slate-800 hover:shadow-2xl transition-all cursor-pointer group flex flex-col h-full">
+            <div key={port.name} onClick={() => onNavigate('operations', port.name)} className="bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] p-5 border-2 border-transparent hover:border-blue-400 dark:hover:border-blue-500 hover:bg-white dark:hover:bg-slate-800 hover:shadow-2xl transition-all cursor-pointer group flex flex-col h-full">
               <div className="flex justify-between items-center mb-4">
                 <span className="bg-slate-900 dark:bg-slate-700 text-white px-3 py-1 rounded-lg text-[9px] font-black tracking-widest uppercase italic">{translateEntity(port.name, lang)}</span>
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
