@@ -415,7 +415,14 @@ class SupabaseDB {
       return camelToSnake(prepareOperationsDbRow(rest));
     });
     const { data, error } = await supabase.from('operations').insert(rowsToInsert).select();
-    if (error) { _lastDbError = `operations: ${error.message}`; console.error('[supabaseDb] bulk insert operations:', error.message); return false; }
+    if (error) {
+      const message = error.message || 'Unknown database error';
+      _lastDbError = /destination/i.test(message)
+        ? `operations: destination column is missing from the Supabase operations table. Run the migration 20260924_ensure_operation_destination.sql in Supabase SQL Editor. Original error: ${message}`
+        : `operations: ${message}`;
+      console.error('[supabaseDb] bulk insert operations:', _lastDbError);
+      return false;
+    }
     const saved = snakeToCamel(data || []) as Operation[];
     if (saved.length !== rowsToInsert.length) {
       _lastDbError = `operations: database accepted ${saved.length}/${rowsToInsert.length} rows but did not return all inserted records`;
