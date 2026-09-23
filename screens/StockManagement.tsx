@@ -814,7 +814,7 @@ const StockManagement: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {filteredMaintLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="p-12 text-center text-slate-400">
+                      <td colSpan={14} className="p-12 text-center text-slate-400">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <span className="text-3xl">🛠️</span>
                           <p className="font-black uppercase tracking-wider text-xs">{isAr ? 'لا توجد سجلات صيانة مطابقة' : 'No maintenance logs found'}</p>
@@ -867,9 +867,6 @@ const StockManagement: React.FC = () => {
                           <td className="p-4 font-bold text-slate-800 dark:text-slate-200">{log.technician}</td>
                           <td className="p-4 font-mono font-bold text-slate-600 dark:text-slate-300">
                             {log.runningHours ? `${log.runningHours.toLocaleString()} h` : '—'}
-                          </td>
-                          <td className="p-4 font-mono font-black text-[#001F3F] dark:text-[#C2A378]">
-                            {log.cost ? `${log.cost.toLocaleString()} EGP` : '0 EGP'}
                           </td>
                           <td className="p-4 max-w-xs truncate text-slate-600 dark:text-slate-300 font-medium" title={log.partsReplaced}>
                             {log.partsReplaced || '—'}
