@@ -222,6 +222,10 @@ const Financials: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentRef, setPaymentRef] = useState('');
   const [autoSettleSelection, setAutoSettleSelection] = useState(true);
+  const [allPayments, setAllPayments] = useState<Payment[]>(db.getPayments());
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [editPaymentForm, setEditPaymentForm] = useState<Payment | null>(null);
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
   const isReadOnly = currentUser.role === UserRole.VIEWER;
@@ -230,6 +234,7 @@ const Financials: React.FC = () => {
     setInvoices([...db.getInvoices()]);
     setOperations([...db.getOperations()]);
     setUsers([...db.getUsers()]);
+    setAllPayments([...db.getPayments()]);
     if (selectedUser) {
       const updatedUser = db.getUsers().find(u => u.id === selectedUser.id);
       if (updatedUser) setSelectedUser(updatedUser);
@@ -237,6 +242,57 @@ const Financials: React.FC = () => {
   };
 
   const customers = useMemo(() => users.filter(u => u.role === UserRole.CUSTOMER), [users]);
+
+  const filteredPayments = useMemo(() => {
+    const q = paymentSearch.trim().toLowerCase();
+    return [...allPayments]
+      .filter(p => !q || [p.customerName, p.reference, p.type, p.date, p.id].some(v => String(v || '').toLowerCase().includes(q)))
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  }, [allPayments, paymentSearch]);
+
+  const collectedTotal = useMemo(
+    () => allPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
+    [allPayments]
+  );
+
+  const collectedMonthTotal = useMemo(() => {
+    const month = new Date().toISOString().slice(0, 7);
+    return allPayments.filter(p => String(p.date).startsWith(month)).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  }, [allPayments]);
+
+  const handleOpenPaymentEdit = (payment: Payment) => {
+    setEditingPayment(payment);
+    setEditPaymentForm({ ...payment });
+  };
+
+  const handleSavePaymentEdit = async () => {
+    if (!editPaymentForm) return;
+    const amount = Number(editPaymentForm.amount);
+    if (!editPaymentForm.customerId || !editPaymentForm.customerName.trim() || !Number.isFinite(amount) || amount <= 0 || !editPaymentForm.date) {
+      alert(isAr ? 'راجع بيانات التحصيل وأدخل مبلغاً صحيحاً.' : 'Please enter valid payment details and an amount greater than zero.');
+      return;
+    }
+    const saved = await db.updatePayment({ ...editPaymentForm, amount });
+    if (!saved) {
+      alert(isAr ? `فشل تعديل التحصيل: ${db.getLastDbError() || ''}` : `Payment update failed: ${db.getLastDbError() || ''}`);
+      return;
+    }
+    setEditingPayment(null);
+    setEditPaymentForm(null);
+    refreshData();
+  };
+
+  const handleDeletePayment = async (payment: Payment) => {
+    if (!confirm(isAr ? `حذف تحصيل ${payment.amount.toLocaleString()} ج.م من ${payment.customerName}؟` : `Delete this EGP ${payment.amount.toLocaleString()} collection from ${payment.customerName}?`)) return;
+    const removed = await db.deletePayment(payment.id);
+    if (!removed) {
+      alert(isAr ? `فشل حذف التحصيل: ${db.getLastDbError() || ''}` : `Payment delete failed: ${db.getLastDbError() || ''}`);
+      return;
+    }
+    refreshData();
+  };
+
+
 
   const accountBreakdown = useMemo(() => {
     if (!selectedUser) return { totalExposure: 0, unbilledTotal: 0, unpaidInvoicesTotal: 0 };
@@ -297,6 +353,68 @@ const Financials: React.FC = () => {
              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-sm">{stat.icon}</div>
           </div>
         ))}
+      </div>
+
+      {/* ALL CUSTOMER COLLECTIONS — one professional ledger */}
+      <div className={`rounded-[2.5rem] border shadow-xl overflow-hidden no-print ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-100'}`}>
+        <div className="p-7 border-b border-slate-100 dark:border-white/5 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div>
+            <h3 className="text-lg font-black uppercase italic tracking-tight text-slate-900 dark:text-white">
+              {isAr ? 'سجل التحصيلات — كل العملاء' : 'Customer Collections — All Received Payments'}
+            </h3>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+              {isAr ? 'كل الأموال المحصلة في مكان واحد مع إمكانية التعديل والمراجعة' : 'One professional register for every customer collection, with edit and audit controls'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="px-5 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
+              <span className="block text-[8px] font-black text-slate-400 uppercase">{isAr ? 'إجمالي المحصل' : 'Total Collected'}</span>
+              <span className="text-xl font-black text-emerald-600">EGP {collectedTotal.toLocaleString()}</span>
+            </div>
+            <div className="px-5 py-3 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40">
+              <span className="block text-[8px] font-black text-slate-400 uppercase">{isAr ? 'هذا الشهر' : 'This Month'}</span>
+              <span className="text-xl font-black text-blue-600">EGP {collectedMonthTotal.toLocaleString()}</span>
+            </div>
+            <input
+              value={paymentSearch}
+              onChange={e => setPaymentSearch(e.target.value)}
+              placeholder={isAr ? 'بحث عميل / مرجع / تاريخ...' : 'Search customer / reference / date...'}
+              className="w-64 max-w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-xs font-bold outline-none focus:border-blue-400"
+            />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-start">
+            <thead className="bg-[#001F3F] text-white text-[9px] font-black uppercase tracking-widest">
+              <tr>
+                <th className="px-6 py-4">{isAr ? 'التاريخ' : 'Date'}</th>
+                <th className="px-6 py-4">{isAr ? 'العميل' : 'Customer'}</th>
+                <th className="px-6 py-4">{isAr ? 'المرجع' : 'Reference'}</th>
+                <th className="px-6 py-4">{isAr ? 'النوع' : 'Type'}</th>
+                <th className="px-6 py-4 text-right">{isAr ? 'المبلغ' : 'Collected'}</th>
+                <th className="px-6 py-4 text-right">{isAr ? 'إجراء' : 'Actions'}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+              {filteredPayments.map(payment => (
+                <tr key={payment.id} className="hover:bg-emerald-50/30 dark:hover:bg-white/5">
+                  <td className="px-6 py-4 font-mono text-xs text-slate-500">{payment.date}</td>
+                  <td className="px-6 py-4 font-black text-slate-900 dark:text-white">{translateEntity(payment.customerName, lang)}</td>
+                  <td className="px-6 py-4 text-xs font-bold text-slate-500">{payment.reference || '—'}</td>
+                  <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[9px] font-black uppercase">{payment.type}</span></td>
+                  <td className="px-6 py-4 text-right font-black text-emerald-600">EGP {Number(payment.amount || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right">
+                    {!isReadOnly && <div className="flex justify-end gap-2">
+                      <button onClick={() => handleOpenPaymentEdit(payment)} className="px-3 py-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white text-[9px] font-black uppercase">{isAr ? 'تعديل' : 'Edit'}</button>
+                      <button onClick={() => handleDeletePayment(payment)} className="px-3 py-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white text-[9px] font-black uppercase">{isAr ? 'حذف' : 'Delete'}</button>
+                    </div>}
+                  </td>
+                </tr>
+              ))}
+              {filteredPayments.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-400 font-bold">{isAr ? 'لا توجد تحصيلات' : 'No collections found'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="flex flex-col xl:flex-row gap-8 no-print min-h-[700px]">
@@ -527,6 +645,37 @@ const Financials: React.FC = () => {
                  </button>
               </div>
            </div>
+        </div>
+      )}
+
+      {editingPayment && editPaymentForm && (
+        <div className="fixed inset-0 bg-[#001F3F]/90 backdrop-blur-xl z-[800] flex items-center justify-center p-5">
+          <div className={`bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl max-w-2xl w-full overflow-hidden border-[8px] border-slate-900 ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
+            <div className="p-7 bg-slate-900 text-white flex justify-between items-center">
+              <div><h3 className="text-xl font-black uppercase italic text-[#C2A378]">{isAr ? 'تعديل تحصيل' : 'Edit Collection'}</h3><p className="text-[9px] text-slate-400 uppercase tracking-widest">{editingPayment.id}</p></div>
+              <button onClick={() => { setEditingPayment(null); setEditPaymentForm(null); }} className="text-white hover:text-rose-500 text-xl">✕</button>
+            </div>
+            <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="md:col-span-2">
+                <label className="text-[9px] font-black uppercase text-slate-400 block mb-2">{isAr ? 'العميل' : 'Customer'}</label>
+                <select value={editPaymentForm.customerId} onChange={e => {
+                  const customer = customers.find(x => x.id === e.target.value);
+                  setEditPaymentForm({ ...editPaymentForm, customerId: e.target.value, customerName: customer ? (customer.companyName || customer.name) : editPaymentForm.customerName });
+                }} className="w-full p-4 rounded-2xl border-2 border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-slate-800 font-bold">
+                  {customers.map(customer => <option key={customer.id} value={customer.id}>{customer.companyName || customer.name}</option>)}
+                </select>
+              </div>
+              <div><label className="text-[9px] font-black uppercase text-slate-400 block mb-2">{isAr ? 'المبلغ' : 'Amount'}</label><input type="number" min="0.01" step="0.01" value={editPaymentForm.amount} onChange={e => setEditPaymentForm({ ...editPaymentForm, amount: Number(e.target.value) })} className="w-full p-4 rounded-2xl border-2 border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-slate-800 font-black text-2xl text-emerald-600" /></div>
+              <div><label className="text-[9px] font-black uppercase text-slate-400 block mb-2">{isAr ? 'التاريخ' : 'Date'}</label><input type="date" value={editPaymentForm.date} onChange={e => setEditPaymentForm({ ...editPaymentForm, date: e.target.value })} className="w-full p-4 rounded-2xl border-2 border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-slate-800 font-bold" /></div>
+              <div><label className="text-[9px] font-black uppercase text-slate-400 block mb-2">{isAr ? 'المرجع' : 'Reference'}</label><input value={editPaymentForm.reference} onChange={e => setEditPaymentForm({ ...editPaymentForm, reference: e.target.value })} className="w-full p-4 rounded-2xl border-2 border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-slate-800 font-bold" /></div>
+              <div><label className="text-[9px] font-black uppercase text-slate-400 block mb-2">{isAr ? 'طريقة التحصيل' : 'Payment Type'}</label><select value={editPaymentForm.type} onChange={e => setEditPaymentForm({ ...editPaymentForm, type: e.target.value as Payment['type'] })} className="w-full p-4 rounded-2xl border-2 border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-slate-800 font-bold"><option value="CASH">CASH</option><option value="BANK">BANK</option><option value="ADVANCE">ADVANCE</option></select></div>
+              <div className="md:col-span-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-800">{isAr ? 'تعديل سجل التحصيل لا يعيد توزيع الفاتورة تلقائياً.' : 'Editing the collection record does not automatically reallocate invoices.'}</div>
+              <div className="md:col-span-2 flex gap-3">
+                <button onClick={() => { setEditingPayment(null); setEditPaymentForm(null); }} className="flex-1 py-4 rounded-2xl bg-slate-100 font-black uppercase">{isAr ? 'إلغاء' : 'Cancel'}</button>
+                <button onClick={handleSavePaymentEdit} className="flex-1 py-4 rounded-2xl bg-emerald-600 text-white font-black uppercase">{isAr ? 'حفظ' : 'Save Changes'}</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
