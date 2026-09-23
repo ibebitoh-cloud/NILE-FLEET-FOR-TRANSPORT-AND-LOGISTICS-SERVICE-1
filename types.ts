@@ -237,6 +237,7 @@ export interface Reservation {
 
 export interface Operation {
   id: string;
+  customerId?: string;
   internalSerial: string;
   reservationId?: string;
   customerName: string;
