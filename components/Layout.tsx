@@ -288,6 +288,46 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         return;
       }
 
+      // FAST CUSTOMER STATEMENT OF ACCOUNT (SOA): factual financial questions stay local.
+      const customerProfiles = db.getUsers().filter(u => u.role === UserRole.CUSTOMER);
+      const findCustomerFromQuestion = (rawQuestion: string) => {
+        const normalized = rawQuestion.toUpperCase().replace(/أ|إ|آ/g, 'ا').replace(/ة/g, 'ه').trim();
+        return [...customerProfiles]
+          .map(customer => ({ customer, names: [customer.companyName, customer.name].filter(Boolean).map(String) }))
+          .flatMap(item => item.names.map(name => ({ ...item, name })))
+          .filter(item => normalized.includes(item.name.toUpperCase().trim()))
+          .sort((a, b) => b.name.length - a.name.length)[0]?.customer || null;
+      };
+      const soaIntent = /(?:SOA|STATEMENT OF ACCOUNT|ACCOUNT STATEMENT|CUSTOMER ACCOUNT|كشف\s*حساب|كشف\s*الحساب|حساب العميل|حساب)/i.test(question);
+      const collectedIntent = /(?:COLLECTED|RECEIVED|PAYMENTS?|PAID|COLLECTION|تحصيل|المحصل|المقبوض|مدفوعات|دفع)/i.test(question);
+      if (soaIntent || (collectedIntent && /(?:CUSTOMER|عميل|لل|من)/i.test(question))) {
+        const customer = findCustomerFromQuestion(question);
+        if (customer) {
+          const customerName = customer.companyName || customer.name;
+          const customerOps = operations.filter(o => String(o.customerId || '') === String(customer.id) || String(o.customerName || '').trim().toUpperCase() === customerName.trim().toUpperCase());
+          const customerInvoices = invoices.filter(i => String(i.customerId || '') === String(customer.id) || String(i.customerName || '').trim().toUpperCase() === customerName.trim().toUpperCase());
+          const customerPayments = db.getPayments().filter(p => String(p.customerId || '') === String(customer.id) || String(p.customerName || '').trim().toUpperCase() === customerName.trim().toUpperCase());
+          const unbilled = customerOps.filter(o => !o.invoiced).reduce((s, o) => s + (parseFloat(String(o.rate || '0').replace(/,/g,'')) || 0) + (parseFloat(String(o.vat || '0').replace(/,/g,'')) || 0), 0);
+          const invoiced = customerInvoices.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+          const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+          const paidInvoices = customerInvoices.filter(i => i.status === 'PAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+          const collected = customerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+          const historical = Number(customer.pastOutstandingAmount) || 0;
+          const netDue = historical + unpaid + unbilled;
+          const recentPayments = [...customerPayments].sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
+          const lastPayment = recentPayments.length ? ((isAr ? '\nآخر تحصيل: ' : '\nLast payment: ') + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' EGP') : '';
+          const answer = isAr
+            ? 'كشف حساب: ' + customerName + '\nالعمليات: ' + customerOps.length + ' | الفواتير: ' + customerInvoices.length + '\nإجمالي الفواتير: ' + invoiced.toLocaleString() + ' EGP | المدفوع بالفواتير: ' + paidInvoices.toLocaleString() + ' EGP\nإجمالي التحصيل: ' + collected.toLocaleString() + ' EGP\nغير مسدد: ' + unpaid.toLocaleString() + ' EGP | غير مفوتر: ' + unbilled.toLocaleString() + ' EGP\nالرصيد المستحق: ' + netDue.toLocaleString() + ' EGP' + lastPayment
+            : 'SOA: ' + customerName + '\nOperations: ' + customerOps.length + ' | Invoices: ' + customerInvoices.length + '\nInvoiced: ' + invoiced.toLocaleString() + ' EGP | Paid invoices: ' + paidInvoices.toLocaleString() + ' EGP\nTotal collected: ' + collected.toLocaleString() + ' EGP\nUnpaid: ' + unpaid.toLocaleString() + ' EGP | Unbilled: ' + unbilled.toLocaleString() + ' EGP\nNet due: ' + netDue.toLocaleString() + ' EGP' + lastPayment;
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+          return;
+        }
+        if (soaIntent) {
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: isAr ? 'حدد اسم العميل في السؤال لأعرض كشف الحساب.' : 'Please include the customer name so I can show the Statement of Account.' }]);
+          return;
+        }
+      }
+
       // Fast customer/operation lookup: factual questions stay local and never wait for AI.
       const customerQuery = q.match(/(?:HOW MANY|COUNT|NUMBER OF|كام|عدد|كم).*?(?:OPERATIONS?|JOBS?|عمليه|عمليات).*?(?:FOR|ل|لل)?\s*([A-Z][A-Z0-9 .&_-]{2,})$/i);
       if (customerQuery) {
