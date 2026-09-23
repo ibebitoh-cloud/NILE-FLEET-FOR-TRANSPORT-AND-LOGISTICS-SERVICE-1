@@ -126,16 +126,28 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-5 lg:space-y-6 animate-in fade-in duration-500 pb-28 lg:pb-12 text-start">
-      {/* DALI 1.0 — compact text cell */}
-      <section className="w-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm px-5 py-4 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-black text-[#001F3F] dark:text-white text-base">{lang === 'ar' ? 'دالي' : 'DALI 1.0'}</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+      {/* DALI 1.0 — dashboard chat box */}
+      <section className="w-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm px-5 py-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-black text-[#001F3F] dark:text-white text-base">{lang === 'ar' ? 'دالي' : 'DALI 1.0'}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold">{lang === 'ar' ? 'مساعد العمليات السريع' : 'Fast operations assistant'}</p>
           </div>
-          <p className="text-[10px] text-slate-400 font-bold truncate">{lang === 'ar' ? 'مساعد العمليات السريع' : 'Fast operations assistant'}</p>
         </div>
-        <button onClick={() => onNavigate('intelligence')} className="text-[9px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 whitespace-nowrap">{lang === 'ar' ? 'فتح دالي' : 'OPEN DALI'}</button>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const input = e.currentTarget.elements.namedItem('dali-dashboard-question') as HTMLInputElement | null;
+          const question = input?.value.trim() || '';
+          if (!question) return;
+          window.dispatchEvent(new CustomEvent('dali-ask', { detail: question }));
+          if (input) input.value = '';
+        }} className="flex gap-2">
+          <input name="dali-dashboard-question" className="flex-1 min-w-0 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-3 text-xs font-bold outline-none focus:border-blue-500 text-slate-900 dark:text-white" placeholder={lang === 'ar' ? 'اكتب سؤالك لدالي...' : 'Ask DALI 1.0...'} />
+          <button type="submit" className="px-5 rounded-xl bg-[#001F3F] text-white text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] transition-transform">➤</button>
+        </form>
       </section>
 
       {/* PORT WIDGETS */}
