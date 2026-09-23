@@ -53,12 +53,6 @@ const getContrastColor = (bgClass: string, isDarkTerminal: boolean) => {
   return isLight ? 'text-slate-900' : 'text-white';
 };
 
-const getContrastColor = (bgClass: string, isDarkTerminal: boolean) => {
-  if (isDarkTerminal) return 'text-white';
-  const lightColors = ['bg-white','bg-slate-50','bg-blue-50','bg-[#98FFD9]','bg-[#FFEB3B]','bg-amber-50','bg-emerald-50'];
-  return lightColors.some(c => bgClass.includes(c)) ? 'text-slate-900' : 'text-white';
-};
-
 const getDarkPortStyle = (loc: Location) => {
   const styles: Record<string, { backgroundColor: string; color: string; borderColor: string; boxShadow: string }> = {
     [Location.DAM]: { backgroundColor:'rgba(16,185,129,.22)',color:'#6EE7B7',borderColor:'#34D399',boxShadow:'0 0 10px rgba(52,211,153,.18)' },
