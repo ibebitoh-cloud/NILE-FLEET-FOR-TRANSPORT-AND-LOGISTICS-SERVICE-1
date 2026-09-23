@@ -70,6 +70,16 @@ async function query<T>(table: string, options?: { filter?: Record<string, any>;
   return snakeToCamel(data || []) as T[];
 }
 
+function resolveCustomerId(customerName: string): string | undefined {
+  const name = String(customerName || '').trim().toLowerCase();
+  if (!name) return undefined;
+  const customer = _users.find(u =>
+    u.role === UserRole.CUSTOMER &&
+    [u.companyName, u.name].some(v => String(v || '').trim().toLowerCase() === name)
+  );
+  return customer?.id;
+}
+
 function prepareOperationsDbRow(row: any): any {
   const today = new Date().toISOString().slice(0, 10);
   const opDate = normalizeDateForDb(row.operationDate, today);
@@ -81,7 +91,8 @@ function prepareOperationsDbRow(row: any): any {
     clipOnDate: normalizeDateForDb(row.clipOnDate, opDate),
     // PostgreSQL DATE columns reject an empty string. An operation that has
     // not been clipped off yet must be stored as NULL, not "".
-    clipOffDate: clipOffDate || null
+    clipOffDate: clipOffDate || null,
+    customerId: row.customerId || resolveCustomerId(row.customerName) || null
   };
 }
 
@@ -229,6 +240,14 @@ class SupabaseDB {
   getStock(): Genset[] { return _stock; }
   getReservations(): Reservation[] { return _reservations; }
   getOperations(): Operation[] { return _operations; }
+
+  getCustomerOperations(customerId: string, customerName?: string): Operation[] {
+    const normalized = String(customerName || '').trim().toLowerCase();
+    return _operations.filter(o =>
+      o.customerId === customerId ||
+      (!o.customerId && normalized && String(o.customerName || '').trim().toLowerCase() === normalized)
+    );
+  }
 
   getLastDbError(): string { return _lastDbError; }
 
