@@ -675,7 +675,42 @@ class SupabaseDB {
   // ─── users / customers ─────────────────────────────────────────────────────
 
   async updateUser(id: string, updates: Partial<User>): Promise<boolean> {
-    const saved = await update('profiles', id, updates);
+    // Never send client-only/auth secrets back to the profiles table.
+    // Sending the whole User object used to make edits fail when fields such as
+    // password/wipePassword were present but no matching DB column existed.
+    const profileUpdates: any = {
+      name: updates.name,
+      role: updates.role,
+      companyName: updates.companyName,
+      companyNameAr: updates.companyNameAr,
+      avatarUrl: updates.avatarUrl,
+      phoneNumber: updates.phoneNumber,
+      jobTitle: updates.jobTitle,
+      department: updates.department,
+      joinedDate: updates.joinedDate,
+      bio: updates.bio,
+      assignedPorts: updates.assignedPorts,
+      taxpayerId: updates.taxpayerId,
+      addressLine: updates.addressLine,
+      governorate: updates.governorate,
+      postalCode: updates.postalCode,
+      pastOutstandingAmount: updates.pastOutstandingAmount,
+      revoked: updates.revoked,
+      mfaEnabled: updates.mfaEnabled,
+      allowedScreens: updates.allowedScreens,
+      permissions: updates.permissions,
+      invoiceSettings: updates.invoiceSettings,
+      signatureUrl: updates.signatureUrl,
+      isServiceAccount: updates.isServiceAccount,
+      apiKeys: updates.apiKeys,
+      lastRotationDate: updates.lastRotationDate,
+      passwordHistory: updates.passwordHistory,
+    };
+    Object.keys(profileUpdates).forEach(key => {
+      if (profileUpdates[key] === undefined) delete profileUpdates[key];
+    });
+
+    const saved = await update('profiles', id, profileUpdates);
     if (!saved) return false;
     _users = _users.map(u => u.id === id ? { ...u, ...updates } : u);
     await auditLog('USER', `Updated user access profile for ${id}`);
