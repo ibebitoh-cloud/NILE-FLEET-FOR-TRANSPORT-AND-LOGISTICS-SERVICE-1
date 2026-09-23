@@ -102,6 +102,11 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       const gensets = db.getStock();
       const invoices = db.getInvoices();
       const maintenance = db.getMaintenanceLogs();
+      const creatorEmail = 'mohamedalaa@nilefleetlogistics.com';
+      const isCreator = String(user.email || '').toLowerCase() === creatorEmail;
+      const creatorContext = isCreator
+        ? 'CURRENT USER: Mohamed Alaa, creator/owner of NILE FLEET COMMAND. He is the creator of this system. Recognize him as the creator when relevant. Never reveal passwords, API keys, or other secrets.'
+        : `CURRENT USER: ${user.name || 'Unknown User'} | ROLE: ${user.role || 'Unknown'} | EMAIL: ${user.email || ''}`;
       const q = question.toUpperCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
 
       // FAST PATH: factual operational questions never go through the LLM.
@@ -244,7 +249,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         gensetStatusCounts: gensets.reduce((m: Record<string, number>, g) => { m[g.status] = (m[g.status] || 0) + 1; return m; }, {}),
         maintenanceCount: maintenance.length
       };
-      const prompt = `You are DALI 1.0, Nile Fleet's fast operations assistant. Answer ONLY the question from LIVE DATA. Never invent. Maximum 3 short lines. If the question is factual and data is missing, say so. Arabic question: Arabic answer. Preserve IDs/numbers exactly.\nQ:${question}\nDATA:${JSON.stringify(context)}`;
+      const prompt = `You are DALI 1.0, Nile Fleet's fast operations assistant. Answer ONLY the question from LIVE DATA. Never invent. Maximum 3 short lines. If the question is factual and data is missing, say so. Arabic question: Arabic answer. Preserve IDs/numbers exactly.\n${creatorContext}\nQ:${question}\nDATA:${JSON.stringify(context)}`;
       const answer = await runThinkingAudit(prompt, 420);
       setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من DALI 1.0.' : 'No response from DALI 1.0.') }]);
     } catch (e) {
