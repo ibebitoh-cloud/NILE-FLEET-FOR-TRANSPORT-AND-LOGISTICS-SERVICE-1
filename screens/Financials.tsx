@@ -131,6 +131,7 @@ export const ProLedger: React.FC<{
                                <th className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'مدين (+)' : 'Debit (+)'}</th>
                                <th className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'دائن (-)' : 'Credit (-)'}</th>
                             </tr>
+                         </thead>
                          <tbody className="divide-y divide-slate-100 text-[11px] font-bold">
                             <tr className="bg-rose-50/10 italic">
                                <td className="p-4 text-slate-400">---</td><td className="p-4 font-mono">---</td><td className="p-4">---</td><td className="p-4">---</td><td className="p-4">---</td><td className="p-4">---</td><td className="p-4 uppercase">{isAr ? 'رصيد مرحل مديونية تاريخية' : 'Historical Debt Forward'}</td><td className="p-4 text-right text-rose-600">{partner.pastOutstandingAmount.toLocaleString()}</td><td className="p-4 text-right text-slate-300">---</td>
