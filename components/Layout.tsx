@@ -34,6 +34,12 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatMessages, setAiChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
   const [aiChatLoading, setAiChatLoading] = useState(false);
+  const [daliButtonPosition, setDaliButtonPosition] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('nile-dali-button-position') || '{"right":24,"bottom":24}'); }
+    catch { return { right: 24, bottom: 24 }; }
+  });
+  const daliDraggingRef = useRef(false);
+  const daliDragStartRef = useRef({ x: 0, y: 0, right: 24, bottom: 24 });
   const [themeIslandOpen, setThemeIslandOpen] = useState(false);
   const themeIslandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -89,6 +95,49 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       window.removeEventListener('invoices-tab-change', handleInvoicesTabChange);
     };
   }, []);
+
+  useEffect(() => {
+    const handleDaliAsk = (event: Event) => {
+      const question = String((event as CustomEvent).detail || '').trim();
+      if (!question) return;
+      setIsAiChatOpen(true);
+      setAiChatInput(question);
+      window.setTimeout(() => {
+        const button = document.querySelector('[data-dali-send]') as HTMLButtonElement | null;
+        button?.click();
+      }, 0);
+    };
+    window.addEventListener('dali-ask', handleDaliAsk);
+    return () => window.removeEventListener('dali-ask', handleDaliAsk);
+  }, []);
+
+  const saveDaliButtonPosition = (next: { right: number; bottom: number }) => {
+    setDaliButtonPosition(next);
+    localStorage.setItem('nile-dali-button-position', JSON.stringify(next));
+  };
+
+  const handleDaliPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    daliDraggingRef.current = true;
+    daliDragStartRef.current = { x: e.clientX, y: e.clientY, right: daliButtonPosition.right, bottom: daliButtonPosition.bottom };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  const handleDaliPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!daliDraggingRef.current) return;
+    const start = daliDragStartRef.current;
+    const next = {
+      right: Math.max(8, Math.min(window.innerWidth - 70, start.right - (e.clientX - start.x))),
+      bottom: Math.max(8, Math.min(window.innerHeight - 70, start.bottom - (e.clientY - start.y)))
+    };
+    setDaliButtonPosition(next);
+  };
+
+  const handleDaliPointerUp = () => {
+    if (!daliDraggingRef.current) return;
+    daliDraggingRef.current = false;
+    saveDaliButtonPosition(daliButtonPosition);
+  };
 
   const askNileAi = async () => {
     const question = aiChatInput.trim();
@@ -649,8 +698,11 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         </div>
       )}
 
-      {/* DALI 1.0 floating dashboard assistant */}
-      <div className="fixed bottom-6 right-6 z-[100] no-print">
+      {/* DALI 1.0 floating dashboard assistant — draggable */}
+      <div
+        className="fixed z-[100] no-print"
+        style={{ right: daliButtonPosition.right, bottom: daliButtonPosition.bottom }}
+      >
         {isAiChatOpen && (
           <div className={`absolute bottom-16 right-0 w-[min(92vw,420px)] h-[min(70vh,620px)] rounded-[2rem] overflow-hidden border shadow-2xl flex flex-col ${isTerminal ? 'bg-[#001224] border-white/10' : 'bg-white border-slate-200'}`}>
             <div className="px-5 py-4 bg-gradient-to-r from-[#001F3F] to-[#073b6d] text-white flex items-center justify-between">
@@ -665,12 +717,21 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
             <div className={`p-3 border-t ${isTerminal ? 'border-white/10' : 'border-slate-200'}`}>
               <div className="flex gap-2">
                 <textarea value={aiChatInput} onChange={e => setAiChatInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askNileAi(); } }} placeholder={isAr ? 'اكتب سؤالك...' : 'Ask DALI 1.0 anything...'} className={`flex-1 resize-none rounded-xl border px-3 py-2 text-xs outline-none min-h-[44px] ${isTerminal ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
-                <button onClick={askNileAi} disabled={aiChatLoading || !aiChatInput.trim()} className="self-end w-11 h-11 rounded-xl bg-[#001F3F] text-white disabled:opacity-40">➤</button>
+                <button data-dali-send onClick={askNileAi} disabled={aiChatLoading || !aiChatInput.trim()} className="self-end w-11 h-11 rounded-xl bg-[#001F3F] text-white disabled:opacity-40">➤</button>
               </div>
             </div>
           </div>
         )}
-        <button onClick={() => setIsAiChatOpen(v => !v)} className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#001F3F] to-[#0a4b82] text-white shadow-2xl border border-white/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center text-2xl" title={isAr ? 'مساعد DALI 1.0' : 'DALI 1.0 Assistant'}>✦</button>
+        <button
+          data-dali-button
+          onClick={() => { if (!daliDraggingRef.current) setIsAiChatOpen(v => !v); }}
+          onPointerDown={handleDaliPointerDown}
+          onPointerMove={handleDaliPointerMove}
+          onPointerUp={handleDaliPointerUp}
+          onPointerCancel={handleDaliPointerUp}
+          className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#001F3F] to-[#0a4b82] text-white shadow-2xl border border-white/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center text-2xl cursor-grab active:cursor-grabbing touch-none"
+          title={isAr ? 'مساعد دالي — اسحب لتغيير المكان' : 'DALI 1.0 — drag to move'}
+        >✦</button>
       </div>
 
       {/* MAIN CONTENT */}
