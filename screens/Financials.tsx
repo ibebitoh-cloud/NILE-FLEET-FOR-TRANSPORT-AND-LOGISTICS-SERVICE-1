@@ -122,8 +122,14 @@ export const ProLedger: React.FC<{
                          <thead className="bg-slate-900 text-white text-[9px] font-black uppercase">
                             <tr>
                                <th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{t.date}</th>
-                               <th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'المرجع' : 'Reference'}</th>
-                               <th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'تفاصيل الخدمة' : 'Service Particulars'}</th>
+<th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'رقم الحجز' : 'Booking Number'}</th>
+<th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'رقم الحاوية' : 'Container'}</th>
+<th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'الموانئ' : 'Ports'}</th>
+<th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'السعر' : 'Rate'}</th>
+<th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'الشاحن' : 'Shipper'}</th>
+<th className={`p-4 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'الناقل' : 'Trucker'}</th>
+<th className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'مدين (+)' : 'Debit (+)'}</th>
+<th className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'دائن (-)' : 'Credit (-)'}</th>
                                <th className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'مدين (+)' : 'Debit (+)'}</th>
                                <th className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'دائن (-)' : 'Credit (-)'}</th>
                             </tr>
@@ -148,9 +154,14 @@ export const ProLedger: React.FC<{
                             {unbilledOps.map(op => (
                                <tr key={op.id} className="text-blue-600/70">
                                   <td className="p-4 text-slate-400">{op.operationDate}</td>
-                                  <td className="p-4 font-mono">LIVE</td>
-                                  <td className="p-4 uppercase italic">{isAr ? 'عملية منجزة لم تُفوتر:' : 'Live Unbilled:'} {op.bookingNumber}</td>
-                                  <td className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{( (parseFloat(op.rate.replace(/,/g,'')) || 0) + (parseFloat(op.vat.replace(/,/g,'')) || 0) ).toLocaleString()}</td>
+                                  <td className="p-4 font-mono">{op.bookingNumber || '—'}</td>
+                                  <td className="p-4">{op.containerNumber || '—'}</td>
+                                  <td className="p-4">{op.clipOnPort || '—'} → {op.clipOffPort || '—'}</td>
+                                  <td className="p-4">{(parseFloat(op.rate.replace(/,/g,'')) || 0).toLocaleString()}</td>
+                                  <td className="p-4">{op.beneficiaryName || '—'}</td>
+                                  <td className="p-4">{op.trucker || '—'}</td>
+                                  <td className="p-4 uppercase italic">{isAr ? 'عملية منجزة لم تُفوتر' : 'Live Unbilled'}</td>
+                                  <td className={`p-4 ${isAr ? 'text-left' : 'text-right'}`}>{((parseFloat(op.rate.replace(/,/g,'')) || 0) + (parseFloat(op.vat.replace(/,/g,'')) || 0)).toLocaleString()}</td>
                                   <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-slate-300`}>---</td>
                                </tr>
                             ))}
@@ -166,7 +177,7 @@ export const ProLedger: React.FC<{
                          </tbody>
                          <tfoot>
                             <tr className="bg-slate-900 text-white font-black text-xs uppercase italic total-highlight">
-                               <td colSpan={3} className={`p-6 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'إجمالي الرصيد المستحق النهائي' : 'Closing Reconciled Total'}</td>
+                               <td colSpan={7} className={`p-6 ${isAr ? 'text-left' : 'text-right'}`}>{isAr ? 'إجمالي الرصيد المستحق النهائي' : 'Closing Reconciled Total'}</td>
                                <td colSpan={2} className={`p-6 ${isAr ? 'text-left' : 'text-right'} text-2xl text-[#C2A378]`}>{settings.currency} {netDue.toLocaleString()}</td>
                             </tr>
                          </tfoot>
