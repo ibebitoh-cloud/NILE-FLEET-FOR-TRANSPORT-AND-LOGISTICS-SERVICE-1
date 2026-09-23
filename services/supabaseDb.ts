@@ -611,6 +611,31 @@ class SupabaseDB {
     return true;
   }
 
+  async updatePayment(payment: Payment): Promise<boolean> {
+    const saved = await update<Payment>('payments', payment.id, {
+      customerId: payment.customerId,
+      customerName: payment.customerName,
+      amount: payment.amount,
+      date: payment.date,
+      reference: payment.reference,
+      type: payment.type
+    });
+    if (!saved) return false;
+    _payments = _payments.map(p => p.id === payment.id ? { ...p, ...payment } : p);
+    await auditLog('FIN', `Updated Payment ${payment.id} for ${payment.customerName}`);
+    dispatchChange();
+    return true;
+  }
+
+  async deletePayment(paymentId: string): Promise<boolean> {
+    const removed = await remove('payments', paymentId);
+    if (!removed) return false;
+    _payments = _payments.filter(p => p.id !== paymentId);
+    await auditLog('FIN', `Deleted Payment ${paymentId}`);
+    dispatchChange();
+    return true;
+  }
+
   // ─── gensets ───────────────────────────────────────────────────────────────
 
   async addGenset(genset: Genset): Promise<void> {
