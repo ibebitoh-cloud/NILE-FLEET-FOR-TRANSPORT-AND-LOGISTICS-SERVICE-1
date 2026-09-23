@@ -200,6 +200,8 @@ export interface GensetMaintenanceLog {
   location: Location;
   runningHours?: number;
   cost: number;
+  /** Date the maintenance work finished. Used to calculate service duration. */
+  completedDate?: string;
   status: 'COMPLETED' | 'IN_PROGRESS' | 'SCHEDULED';
   description: string;
   partsReplaced?: string;
