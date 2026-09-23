@@ -39,6 +39,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     catch { return { right: 24, bottom: 24 }; }
   });
   const daliDraggingRef = useRef(false);
+  const daliDraggedRef = useRef(false);
   const daliDragStartRef = useRef({ x: 0, y: 0, right: 24, bottom: 24 });
   const [themeIslandOpen, setThemeIslandOpen] = useState(false);
   const themeIslandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -119,6 +120,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
   const handleDaliPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     daliDraggingRef.current = true;
+    daliDraggedRef.current = false;
     daliDragStartRef.current = { x: e.clientX, y: e.clientY, right: daliButtonPosition.right, bottom: daliButtonPosition.bottom };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
@@ -126,17 +128,28 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
   const handleDaliPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (!daliDraggingRef.current) return;
     const start = daliDragStartRef.current;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) daliDraggedRef.current = true;
     const next = {
-      right: Math.max(8, Math.min(window.innerWidth - 70, start.right - (e.clientX - start.x))),
-      bottom: Math.max(8, Math.min(window.innerHeight - 70, start.bottom - (e.clientY - start.y)))
+      right: Math.max(8, Math.min(window.innerWidth - 70, start.right - dx)),
+      bottom: Math.max(8, Math.min(window.innerHeight - 70, start.bottom - dy))
     };
     setDaliButtonPosition(next);
   };
 
-  const handleDaliPointerUp = () => {
+  const handleDaliPointerUp = (e?: React.PointerEvent<HTMLButtonElement>) => {
     if (!daliDraggingRef.current) return;
+    const start = daliDragStartRef.current;
+    const dx = e ? e.clientX - start.x : 0;
+    const dy = e ? e.clientY - start.y : 0;
+    const next = {
+      right: Math.max(8, Math.min(window.innerWidth - 70, start.right - dx)),
+      bottom: Math.max(8, Math.min(window.innerHeight - 70, start.bottom - dy))
+    };
     daliDraggingRef.current = false;
-    saveDaliButtonPosition(daliButtonPosition);
+    setDaliButtonPosition(next);
+    if (daliDraggedRef.current) localStorage.setItem('nile-dali-button-position', JSON.stringify(next));
   };
 
   const askNileAi = async () => {
@@ -724,7 +737,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         )}
         <button
           data-dali-button
-          onClick={() => { if (!daliDraggingRef.current) setIsAiChatOpen(v => !v); }}
+          onClick={() => { if (daliDraggedRef.current) { daliDraggedRef.current = false; return; } setIsAiChatOpen(v => !v); }}
           onPointerDown={handleDaliPointerDown}
           onPointerMove={handleDaliPointerMove}
           onPointerUp={handleDaliPointerUp}
