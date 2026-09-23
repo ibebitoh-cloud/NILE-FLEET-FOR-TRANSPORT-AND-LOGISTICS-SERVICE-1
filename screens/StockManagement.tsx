@@ -1253,10 +1253,19 @@ const StockManagement: React.FC = () => {
                     required
                     className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-black text-xs text-black dark:text-white outline-none focus:border-amber-400"
                     value={maintModalState.log.status || 'COMPLETED'}
-                    onChange={e => setMaintModalState({
-                      ...maintModalState,
-                      log: { ...maintModalState.log, status: e.target.value as any }
-                    })}
+                    onChange={e => {
+                      const nextStatus = e.target.value as any;
+                      setMaintModalState({
+                        ...maintModalState,
+                        log: {
+                          ...maintModalState.log,
+                          status: nextStatus,
+                          completedDate: nextStatus === 'COMPLETED'
+                            ? (maintModalState.log.completedDate || new Date().toISOString().slice(0, 10))
+                            : ''
+                        }
+                      });
+                    }}
                   >
                     <option value="COMPLETED">{isAr ? 'مكتمل (Completed)' : 'Completed'}</option>
                     <option value="IN_PROGRESS">{isAr ? 'قيد التنفيذ (In Progress)' : 'In Progress'}</option>
