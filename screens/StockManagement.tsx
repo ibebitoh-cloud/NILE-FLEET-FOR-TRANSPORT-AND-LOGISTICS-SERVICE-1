@@ -109,7 +109,6 @@ const StockManagement: React.FC = () => {
     const inStock = stock.filter(s => s.status === GensetStatus.IN_STOCK).length;
     const clippedOn = stock.filter(s => s.status === GensetStatus.CLIPPED_ON).length;
     const inMaint = stock.filter(s => s.status === GensetStatus.MAINTENANCE).length;
-    const totalCost = maintenanceLogs.reduce((acc, curr) => acc + (curr.cost || 0), 0);
     const activeMaintLogs = maintenanceLogs.filter(m => m.status === 'IN_PROGRESS').length;
     const scheduledMaintLogs = maintenanceLogs.filter(m => m.status === 'SCHEDULED').length;
     return {
@@ -117,7 +116,6 @@ const StockManagement: React.FC = () => {
       inStock,
       clippedOn,
       inMaint,
-      totalCost,
       totalLogs: maintenanceLogs.length,
       activeMaintLogs,
       scheduledMaintLogs
@@ -243,7 +241,7 @@ const StockManagement: React.FC = () => {
         technician: currentUser.name || 'Mechanic Lead',
         location: foundUnit?.location || Location.ALEX,
         runningHours: foundUnit?.runningHours || 1200,
-        cost: 1200,
+        completedDate: new Date().toISOString().slice(0, 10),
         status: 'COMPLETED',
         description: '',
         partsReplaced: '',
@@ -274,7 +272,8 @@ const StockManagement: React.FC = () => {
       technician: log.technician || 'Technician',
       location: log.location || Location.ALEX,
       runningHours: Number(log.runningHours) || 0,
-      cost: Number(log.cost) || 0,
+      cost: 0,
+      completedDate: log.completedDate || ((log.status as any) === 'COMPLETED' ? log.serviceDate : ''),
       status: (log.status as any) || 'COMPLETED',
       description: log.description || '',
       partsReplaced: log.partsReplaced || '',
@@ -299,17 +298,18 @@ const StockManagement: React.FC = () => {
   };
 
   const handleExportMaintenanceCsv = () => {
-    const headers = ['Record ID', 'Genset Unit', 'Service Date', 'Service Type', 'Status', 'Technician', 'Hub Location', 'Running Hours', 'Cost (EGP)', 'Parts Replaced', 'Next Service Due', 'Description'];
+    const headers = ['Record ID', 'Genset Unit', 'Start Date', 'Completed Date', 'Duration (Days)', 'Service Type', 'Status', 'Technician', 'Hub Location', 'Running Hours', 'Parts Replaced', 'Next Service Due', 'Description'];
     const rows = filteredMaintLogs.map(l => [
       l.id,
       l.gensetNumber,
       l.serviceDate,
+      l.completedDate || '',
+      l.completedDate && l.serviceDate ? Math.max(0, Math.ceil((new Date(l.completedDate).getTime() - new Date(l.serviceDate).getTime()) / 86400000)) : '',
       l.serviceType,
       l.status,
       `"${l.technician}"`,
       l.location,
       l.runningHours || 0,
-      l.cost,
       `"${(l.partsReplaced || '').replace(/"/g, '""')}"`,
       l.nextServiceDue || '',
       `"${(l.description || '').replace(/"/g, '""')}"`
@@ -796,14 +796,15 @@ const StockManagement: React.FC = () => {
                 <thead className="bg-[#001F3F] text-white font-black uppercase text-[9px]">
                   <tr>
                     <th className="p-4 w-10 text-center">#</th>
-                    <th className="p-4">{isAr ? 'تاريخ الخدمة' : 'Service Date'}</th>
+                    <th className="p-4">{isAr ? 'بدء الصيانة' : 'Start Date'}</th>
+                    <th className="p-4">{isAr ? 'تاريخ الانتهاء' : 'Completed Date'}</th>
+                    <th className="p-4">{isAr ? 'المدة' : 'Duration'}</th>
                     <th className="p-4">{isAr ? 'رقم الوحدة' : 'Genset SN'}</th>
                     <th className="p-4">{isAr ? 'المحطة' : 'Hub'}</th>
                     <th className="p-4">{isAr ? 'نوع الصيانة' : 'Service Type'}</th>
                     <th className="p-4">{isAr ? 'الحالة' : 'Status'}</th>
                     <th className="p-4">{isAr ? 'الفني المسؤول' : 'Technician'}</th>
                     <th className="p-4">{isAr ? 'ساعات التشغيل' : 'Running Hours'}</th>
-                    <th className="p-4">{isAr ? 'التكلفة' : 'Cost (EGP)'}</th>
                     <th className="p-4">{isAr ? 'قطع الغيار المستبدلة' : 'Parts Replaced'}</th>
                     <th className="p-4">{isAr ? 'الصيانة القادمة' : 'Next Due'}</th>
                     <th className="p-4 max-w-xs">{isAr ? 'الملاحظات وتفاصيل الفحص' : 'Work Details'}</th>
@@ -831,6 +832,8 @@ const StockManagement: React.FC = () => {
                         <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                           <td className="p-4 text-center text-slate-300 font-mono">{idx + 1}</td>
                           <td className="p-4 font-bold text-slate-700 dark:text-slate-200">{log.serviceDate}</td>
+                          <td className="p-4 font-mono text-slate-500">{log.completedDate || '—'}</td>
+                          <td className="p-4 font-black text-amber-600">{log.completedDate && log.serviceDate ? `${Math.max(0, Math.ceil((new Date(log.completedDate).getTime() - new Date(log.serviceDate).getTime()) / 86400000))} ${isAr ? 'يوم' : 'days'}` : (log.status === 'IN_PROGRESS' ? `${Math.max(1, Math.ceil((Date.now() - new Date(log.serviceDate).getTime()) / 86400000))} ${isAr ? 'يوم حتى الآن' : 'days so far'}` : '—')}</td>
                           <td className="p-4 font-black text-blue-600 dark:text-blue-400 italic uppercase">
                             <button
                               onClick={() => {
@@ -1143,7 +1146,7 @@ const StockManagement: React.FC = () => {
                       : (isAr ? 'تعديل سجل الصيانة' : 'Modify Maintenance Record')}
                   </h3>
                   <p className="text-[8px] text-slate-300 uppercase tracking-widest">
-                    {isAr ? 'تحديث وتوثيق أعمال الصيانة، قطع الغيار وساعات التشغيل' : 'Service record documentation & equipment health tracking'}
+                    {isAr ? 'تحديث وتوثيق أعمال الصيانة، مدة العمل، قطع الغيار وساعات التشغيل' : 'Service record documentation, duration & equipment health tracking'}
                   </p>
                 </div>
               </div>
@@ -1209,6 +1212,19 @@ const StockManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
+                {/* Completed Date */}
+                <div>
+                  <label className="text-[8px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+                    {isAr ? 'تاريخ انتهاء الصيانة' : 'Completed Date'}
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-black text-xs text-black dark:text-white outline-none focus:border-amber-400"
+                    value={maintModalState.log.completedDate || ''}
+                    onChange={e => setMaintModalState({ ...maintModalState, log: { ...maintModalState.log, completedDate: e.target.value } })}
+                  />
+                </div>
+
                 {/* Service Type */}
                 <div>
                   <label className="text-[8px] font-black uppercase text-slate-400 tracking-wider block mb-1">
@@ -1306,24 +1322,6 @@ const StockManagement: React.FC = () => {
                     onChange={e => setMaintModalState({
                       ...maintModalState,
                       log: { ...maintModalState.log, runningHours: Number(e.target.value) }
-                    })}
-                  />
-                </div>
-
-                {/* Maintenance Cost */}
-                <div>
-                  <label className="text-[8px] font-black uppercase text-slate-400 tracking-wider block mb-1">
-                    {isAr ? 'التكلفة (EGP)' : 'Cost (EGP)'}
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 1500"
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-mono font-bold text-xs text-black dark:text-white outline-none focus:border-amber-400"
-                    value={maintModalState.log.cost ?? ''}
-                    onChange={e => setMaintModalState({
-                      ...maintModalState,
-                      log: { ...maintModalState.log, cost: Number(e.target.value) }
                     })}
                   />
                 </div>
