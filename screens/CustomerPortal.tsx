@@ -90,7 +90,7 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
       csvLines.push("No billing invoices found");
     } else {
       custInvoices.forEach(inv => {
-        csvLines.push(`${inv.id.split('-').pop()},${inv.bookingNumber},${inv.date},${inv.amount.toFixed(2)},${inv.status}`);
+        csvLines.push(`INV-${String(inv.invoiceNo ?? 0).padStart(5, '0')},${inv.bookingNumber},${inv.date},${inv.amount.toFixed(2)},${inv.status}`);
       });
     }
     csvLines.push("");
@@ -101,7 +101,7 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
       csvLines.push("No payments received");
     } else {
       custPayments.forEach(pay => {
-        csvLines.push(`PAY-${pay.id.split('-').pop()},${pay.date},${pay.reference},${pay.amount.toFixed(2)},${pay.type}`);
+        csvLines.push(`PAY-${String(pay.paymentNo ?? 0).padStart(5, '0')},${pay.date},${pay.reference},${pay.amount.toFixed(2)},${pay.type}`);
       });
     }
 
@@ -264,7 +264,7 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
           <tbody className="divide-y divide-slate-100">
             {myInvoices.map(inv => (
               <tr key={inv.id}>
-                <td className="px-6 py-4 font-bold">{inv.id.split('-').pop()}</td>
+                <td className="px-6 py-4 font-bold">INV-{String(inv.invoiceNo ?? 0).padStart(5, '0')}</td>
                 <td className="px-6 py-4 font-mono text-sm">{inv.bookingNumber}</td>
                 <td className="px-6 py-4 text-sm">{inv.date}</td>
                 <td className="px-6 py-4 font-bold text-slate-900">EGP {inv.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>

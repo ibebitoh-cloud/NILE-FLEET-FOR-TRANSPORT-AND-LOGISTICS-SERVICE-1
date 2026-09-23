@@ -139,7 +139,7 @@ export const ProLedger: React.FC<{
                             {unpaidInvoices.map(inv => (
                                <tr key={inv.id}>
                                   <td className="p-4 text-slate-400">{inv.date}</td>
-                                  <td className="p-4 font-mono">#{inv.id.split('-').pop()}</td>
+                                  <td className="p-4 font-mono">#INV-{String(inv.invoiceNo ?? 0).padStart(5, '0')}</td>
                                   <td className="p-4 uppercase">{isAr ? 'فاتورة عمليات:' : 'Container Ops:'} {inv.bookingNumber}</td>
                                   <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-slate-900`}>{inv.amount.toLocaleString()}</td>
                                   <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-slate-300`}>---</td>
@@ -157,7 +157,7 @@ export const ProLedger: React.FC<{
                             {payments.map(pay => (
                                <tr key={pay.id} className="bg-emerald-50/30">
                                   <td className="p-4 text-slate-400">{pay.date}</td>
-                                  <td className="p-4 font-mono text-emerald-600">PAY-{pay.id.split('-').pop()}</td>
+                                  <td className="p-4 font-mono text-emerald-600">PAY-{String(pay.paymentNo ?? 0).padStart(5, '0')}</td>
                                   <td className="p-4 uppercase italic">{isAr ? 'تحصيل نقدية - ' : 'Payment Received - '} {pay.reference}</td>
                                   <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-slate-300`}>---</td>
                                   <td className={`p-4 ${isAr ? 'text-left' : 'text-right'} text-emerald-600`}>{pay.amount.toLocaleString()}</td>
@@ -421,7 +421,7 @@ const Financials: React.FC = () => {
                                 <td className="px-8 py-6 text-slate-400 font-mono">{inv.date}</td>
                                 <td className="px-8 py-6">
                                    <div className="flex flex-col">
-                                      <span className="font-black text-blue-900 dark:text-blue-400 uppercase tracking-tighter text-sm">#{inv.id.split('-').pop()}</span>
+                                      <span className="font-black text-blue-900 dark:text-blue-400 uppercase tracking-tighter text-sm">#INV-{String(inv.invoiceNo ?? 0).padStart(5, '0')}</span>
                                       <span className="text-[8px] font-black text-slate-400 uppercase mt-0.5 tracking-widest">BK: {inv.bookingNumber}</span>
                                    </div>
                                 </td>
@@ -501,7 +501,7 @@ const Financials: React.FC = () => {
                                 className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex justify-between items-center ${selectedInvIds.has(inv.id) ? 'bg-slate-900 border-blue-600 text-white shadow-lg' : 'bg-slate-50 border-transparent text-slate-900'}`}
                              >
                                 <div className="text-start">
-                                   <p className="text-[8px] font-black uppercase tracking-widest opacity-60">#{inv.id.split('-').pop()}</p>
+                                   <p className="text-[8px] font-black uppercase tracking-widest opacity-60">#INV-{String(inv.invoiceNo ?? 0).padStart(5, '0')}</p>
                                    <p className="text-[11px] font-black italic">{inv.bookingNumber}</p>
                                 </div>
                                 <p className={`font-black text-xs ${selectedInvIds.has(inv.id) ? 'text-[#C2A378]' : 'text-blue-600'}`}>EGP {inv.amount.toLocaleString()}</p>

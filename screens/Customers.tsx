@@ -111,7 +111,7 @@ const CustomerDossier: React.FC<{
       csvLines.push("No billing invoices found");
     } else {
       customerInvoices.forEach(inv => {
-        csvLines.push(`${inv.id.split('-').pop()},${inv.bookingNumber},${inv.date},${inv.amount.toFixed(2)},${inv.status}`);
+        csvLines.push(`INV-${String(inv.invoiceNo ?? 0).padStart(5, '0')},${inv.bookingNumber},${inv.date},${inv.amount.toFixed(2)},${inv.status}`);
       });
     }
     csvLines.push("");
@@ -122,7 +122,7 @@ const CustomerDossier: React.FC<{
       csvLines.push("No payments received");
     } else {
       customerPayments.forEach(pay => {
-        csvLines.push(`PAY-${pay.id.split('-').pop()},${pay.date},${pay.reference},${pay.amount.toFixed(2)},${pay.type}`);
+        csvLines.push(`PAY-${String(pay.paymentNo ?? 0).padStart(5, '0')},${pay.date},${pay.reference},${pay.amount.toFixed(2)},${pay.type}`);
       });
     }
 
@@ -307,7 +307,7 @@ const CustomerDossier: React.FC<{
                        <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-[10px]">
                           {customerInvoices.map(inv => (
                             <tr key={inv.id}>
-                               <td className="p-4 font-black">#{inv.id.split('-').pop()}</td>
+                               <td className="p-4 font-black">#INV-{String(inv.invoiceNo ?? 0).padStart(5, '0')}</td>
                                <td className="p-4 text-slate-400">{inv.date}</td>
                                <td className="p-4 text-right font-black">EGP {inv.amount.toLocaleString()}</td>
                                <td className="p-4 text-center"><span className={`px-2 py-0.5 rounded font-black uppercase text-[7px] ${inv.status === 'PAID' ? 'text-emerald-500' : 'text-rose-500'}`}>{inv.status}</span></td>
@@ -328,7 +328,7 @@ const CustomerDossier: React.FC<{
                        <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-[10px]">
                           {customerPayments.map(pay => (
                             <tr key={pay.id}>
-                               <td className="p-4 font-black">PAY-{pay.id.split('-').pop()}</td>
+                               <td className="p-4 font-black">PAY-{String(pay.paymentNo ?? 0).padStart(5, '0')}</td>
                                <td className="p-4 text-slate-400">{pay.date}</td>
                                <td className="p-4 text-right font-black text-emerald-600">-EGP {pay.amount.toLocaleString()}</td>
                                <td className="p-4 font-bold uppercase">{pay.type}</td>

@@ -115,6 +115,7 @@ export interface InvoiceSettings {
 
 export interface Payment {
   id: string;
+  paymentNo?: number;
   customerId: string;
   customerName: string;
   amount: number;
@@ -267,6 +268,7 @@ export interface Operation {
 
 export interface Invoice {
   id: string;
+  invoiceNo?: number;
   customerId: string;
   customerName: string;
   bookingNumber: string;

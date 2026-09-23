@@ -158,7 +158,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ invoice, onClose, settings })
                 </div>
                 <div className="text-right">
                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Protocol Reference</p>
-                   <p className="text-2xl font-black font-mono">#{invoice.id.split('-').pop()}</p>
+                   <p className="text-2xl font-black font-mono">#INV-{String(invoice.invoiceNo ?? 0).padStart(5, '0')}</p>
                 </div>
               </div>
             ) : isElegant ? (
@@ -174,7 +174,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ invoice, onClose, settings })
                   {s.showLogo && (s.logoUrl ? <img src={s.logoUrl} className="h-10 object-contain" /> : <NileFleetLogo color={s.primaryColor} />)}
                   <h1 className="text-2xl font-black uppercase tracking-tighter">{s.documentTitle}</h1>
                 </div>
-                <p className="text-xs font-black">SERIAL: {invoice.id.split('-').pop()}</p>
+                <p className="text-xs font-black">SERIAL: INV-{String(invoice.invoiceNo ?? 0).padStart(5, '0')}</p>
               </div>
             ) : (
               <div className={`flex ${isMinimal ? 'flex-col items-center text-center' : 'justify-between items-start'} mb-12`}>
@@ -190,7 +190,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ invoice, onClose, settings })
                   {s.showInvoiceId && (
                     <div>
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Serial Reference</p>
-                      <p className={`text-xl font-black ${isIndustrial ? 'bg-slate-900 text-white px-4 py-1' : ''}`}>#{invoice.id.split('-').pop()}</p>
+                      <p className={`text-xl font-black ${isIndustrial ? 'bg-slate-900 text-white px-4 py-1' : ''}`}>#INV-{String(invoice.invoiceNo ?? 0).padStart(5, '0')}</p>
                     </div>
                   )}
                   {s.showIssueDate && (

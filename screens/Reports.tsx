@@ -68,7 +68,7 @@ const Reports: React.FC = () => {
         Respond in ${lang === 'en' ? 'English' : 'Arabic'}.
       `;
 
-      const text = await runThinkingAudit(prompt, 4000, 'gemini-3-pro-preview');
+      const text = await runThinkingAudit(prompt);
 
       setAuditAdvice(text || 'Analysis unavailable.');
     } catch (err) {

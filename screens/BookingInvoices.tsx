@@ -465,7 +465,7 @@ const BookingInvoices: React.FC = () => {
                         >
                           <div className="space-y-1">
                             <span className="font-black text-blue-600 dark:text-blue-400 text-[10px] hover:underline cursor-pointer flex items-center gap-1.5" onClick={() => setSelectedInvoice(inv)}>
-                              <span>🧾</span> #{inv.id.split('-').pop()}
+                              <span>🧾</span> #INV-{String(inv.invoiceNo ?? 0).padStart(5, '0')}
                             </span>
                             <span className="block text-[9px] text-slate-400">📅 {inv.date}</span>
                             {inv.etaInternalId && (

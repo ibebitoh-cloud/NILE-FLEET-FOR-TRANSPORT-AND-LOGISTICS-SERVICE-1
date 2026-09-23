@@ -216,7 +216,10 @@ const App: React.FC = () => {
 
   /**
    * AI LINGUISTIC OBSERVER
-   * Automatically monitors the UI for untranslated text andConsults Gemini
+   * Automatically monitors the UI for untranslated text and uses the local
+   * model to translate — but only if the model is already loaded this
+   * session (e.g. the user already ran an audit or spreadsheet import).
+   * Never silently triggers a model download just from browsing in Arabic.
    */
   useEffect(() => {
     if (lang !== 'ar' || !getSafeApiKey()) return;

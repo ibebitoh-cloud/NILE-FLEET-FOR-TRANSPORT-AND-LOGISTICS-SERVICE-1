@@ -1,9 +1,10 @@
 
-import React, { useState, useContext, useMemo, useEffect } from 'react';
+import React, { useState, useContext, useMemo } from 'react';
 import { db } from '../services/supabaseDb';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations } from '../translations';
-import { runThinkingAudit, getSafeApiKey } from '../services/aiService';
+import { runThinkingAudit, getSafeApiKey, type ModelLoadProgress } from '../services/aiService';
+import { getLoadedDevice } from '../services/localLLM';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
 
 const Intelligence: React.FC = () => {
@@ -18,17 +19,8 @@ const Intelligence: React.FC = () => {
   const [thinkingPhase, setThinkingPhase] = useState(0);
   const [advice, setAdvice] = useState<string>('');
   const [linkError, setLinkError] = useState(false);
-  const [apiKeySet, setApiKeySet] = useState(!!getSafeApiKey());
-
-  useEffect(() => {
-    const checkStatus = async () => {
-      if (window.aistudio?.hasSelectedApiKey) {
-        const has = await window.aistudio.hasSelectedApiKey();
-        setApiKeySet(has || !!process.env.API_KEY);
-      }
-    };
-    checkStatus();
-  }, []);
+  const [modelReady, setModelReady] = useState(!!getSafeApiKey());
+  const [loadProgress, setLoadProgress] = useState<ModelLoadProgress | null>(null);
 
   const phases = isAr 
     ? ["مسح قياسات الميناء...", "عزل إشارات التكلفة...", "تحليل سجلات الأسطول...", "توليد الرؤى الاستراتيجية..."]
@@ -51,28 +43,27 @@ const Intelligence: React.FC = () => {
     setIsThinking(true);
     setLinkError(false);
     setAdvice('');
+    setLoadProgress(null);
     
     const phaseInterval = setInterval(() => {
       setThinkingPhase(prev => (prev + 1) % phases.length);
     }, 1200);
 
     try {
-      const prompt = `
-        System: Nile Fleet Strategic Hub. 
-        Context: ${ops.length} Total Ops. Active Trips: ${ops.filter(o => o.status === 'IN PROGRESS').length}.
-        Expense Ratio: Food(${expenseTotals.food}), Transport(${expenseTotals.transport}).
-        Task: Identify one anomaly in port fuel consumption or expense overhead. 
-        Language: ${isAr ? 'Arabic' : 'English'}.
-      `;
+      const prompt = `Identify one anomaly in port fuel consumption or expense overhead, and give one concrete recommendation. Answer in ${isAr ? 'Arabic' : 'English'}.`;
 
-      const result = await runThinkingAudit(prompt);
-      setAdvice(result || 'No telemetry data resolved.');
+      const result = await runThinkingAudit(prompt, undefined, undefined, (p) => {
+        setLoadProgress(p);
+      });
+      setModelReady(true);
+      setAdvice(result || (isAr ? 'لم يتم التوصل إلى بيانات كافية.' : 'No telemetry data resolved.'));
     } catch (err) {
       setLinkError(true);
-      setAdvice('NETWORK INTEGRITY COMPROMISED. RE-LINK NODE.');
+      setAdvice(isAr ? 'تعذر تحميل النموذج المحلي. حاول مرة أخرى.' : 'LOCAL MODEL FAILED TO LOAD. TRY AGAIN.');
     } finally {
       clearInterval(phaseInterval);
       setIsThinking(false);
+      setLoadProgress(null);
     }
   };
 
@@ -96,14 +87,14 @@ const Intelligence: React.FC = () => {
          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
          <div className="flex flex-col lg:flex-row justify-between items-center gap-8 relative z-10">
             <div className="flex items-center gap-6">
-               <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-2xl transition-all duration-500 ${apiKeySet ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-rose-500/20 text-rose-400 border border-rose-500/50 animate-pulse'}`}>
-                  {apiKeySet ? '🛰️' : '📡'}
+               <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-2xl transition-all duration-500 ${modelReady ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-slate-500/20 text-slate-400 border border-slate-500/50'}`}>
+                  {modelReady ? '🧠' : '💾'}
                </div>
                <div>
                   <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase leading-none">Command Intel</h1>
                   <div className="flex items-center gap-3 mt-2">
-                     <span className={`w-1.5 h-1.5 rounded-full ${apiKeySet ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'}`}></span>
-                     <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.4em]">Node Connectivity: {apiKeySet ? 'STABLE' : 'LINK LOST'}</p>
+                     <span className={`w-1.5 h-1.5 rounded-full ${modelReady ? 'bg-emerald-500' : 'bg-slate-500'}`}></span>
+                     <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.4em]">Local Model: {modelReady ? `READY (${getLoadedDevice()?.toUpperCase() || 'CPU'})` : 'NOT LOADED YET'}</p>
                   </div>
                </div>
             </div>
@@ -255,25 +246,29 @@ const Intelligence: React.FC = () => {
               </div>
 
               <div className="mt-8 space-y-4">
-                 {!apiKeySet ? (
-                    <button 
-                       onClick={async () => { if (window.aistudio?.openSelectKey) await window.aistudio.openSelectKey(); setApiKeySet(true); }}
-                       className="w-full bg-blue-600 hover:bg-blue-500 text-white py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.4em] shadow-xl transition-all"
-                    >
-                       Initialize AI Core
-                    </button>
+                 {!modelReady && isThinking && loadProgress ? (
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                       <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-2">
+                          {loadProgress.status === 'downloading' ? (isAr ? 'جاري تحميل النموذج المحلي (مرة واحدة فقط)...' : 'Downloading local model (one-time)...') : (isAr ? 'جاري التحضير...' : 'Preparing...')}
+                       </p>
+                       {typeof loadProgress.progress === 'number' && (
+                          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                             <div className="h-full bg-blue-500 transition-all" style={{ width: `${loadProgress.progress}%` }}></div>
+                          </div>
+                       )}
+                    </div>
                  ) : (
                     <button 
                        onClick={runStrategicAdvisor}
                        disabled={isThinking}
                        className="w-full bg-white text-[#001F3F] py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.4em] shadow-xl hover:bg-slate-100 disabled:opacity-30 transition-all group"
                     >
-                       <span className="group-hover:scale-105 transition-transform block">Request Strategic Audit</span>
+                       <span className="group-hover:scale-105 transition-transform block">{modelReady ? (isAr ? 'طلب تحليل استراتيجي' : 'Request Strategic Audit') : (isAr ? 'تحميل النموذج المحلي وبدء التحليل' : 'Load Local Model & Run Audit')}</span>
                     </button>
                  )}
                  <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
                     <span className="text-[8px] font-black text-slate-500 uppercase">Engine Node</span>
-                    <span className="text-[9px] font-black text-blue-500 italic uppercase">Gemini Flash-V3</span>
+                    <span className="text-[9px] font-black text-blue-500 italic uppercase">Local · Qwen2.5-0.5B · Offline-capable</span>
                  </div>
               </div>
            </div>

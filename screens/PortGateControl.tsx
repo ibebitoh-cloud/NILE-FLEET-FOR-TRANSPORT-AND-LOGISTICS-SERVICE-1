@@ -5,7 +5,7 @@ import { db } from '../services/supabaseDb';
 import { Operation, Location, GensetStatus, UserRole, User } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
-import { scanImageForContainer, getSafeApiKey } from '../services/aiService';
+import { scanImageForContainerDetailed } from '../services/aiService';
 
 const PortGateControl: React.FC = () => {
   const { lang } = useContext(LanguageContext);
@@ -139,10 +139,6 @@ const PortGateControl: React.FC = () => {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!getSafeApiKey()) {
-      addNotification(isAr ? 'خطأ: مفتاح AI غير موجود' : 'Error: AI Key Missing');
-      return;
-    }
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64Data = reader.result as string;
@@ -150,18 +146,19 @@ const PortGateControl: React.FC = () => {
       setIsScanning(true);
       setAnalysisStatus(isAr ? 'جاري تحليل الصورة...' : 'ANALYZING IMAGE...');
       try {
-        const result = await scanImageForContainer(base64Data);
-        if (result && result !== 'NOT_FOUND') {
-          const cleanId = result.replace(/[^A-Z0-9]/g, '').toUpperCase();
+        const result = await scanImageForContainerDetailed(base64Data);
+        if (result.code) {
+          const cleanId = result.code.replace(/[^A-Z0-9]/g, '').toUpperCase();
           setScannedContainer(cleanId);
           const match = openBookings.find(b => (b.containerNumber && b.containerNumber.toUpperCase() === cleanId));
+          const checksumNote = result.valid ? '' : (isAr ? ' (تحقق يدويًا)' : ' (please verify)');
           if (match) {
             setSelectedBookingId(match.id);
             setContainerMatchedViaScan(true);
-            addNotification(isAr ? `تطابق ناجح: ${cleanId}` : `MATCH FOUND: ${cleanId}`);
+            addNotification(isAr ? `تطابق ناجح: ${cleanId}${checksumNote}` : `MATCH FOUND: ${cleanId}${checksumNote}`);
           } else {
             setContainerMatchedViaScan(false);
-            addNotification(isAr ? `تم التعرف: ${cleanId}` : `DETECTED: ${cleanId}`);
+            addNotification(isAr ? `تم التعرف: ${cleanId}${checksumNote}` : `DETECTED: ${cleanId}${checksumNote}`);
           }
         } else {
           addNotification(isAr ? 'فشل استخراج رقم الحاوية' : 'COULD NOT READ BIC');
