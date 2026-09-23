@@ -200,6 +200,8 @@ const UserMgmt: React.FC = () => {
       const { userId, error } = await createRealAccount(editingUser.email, editingUser.password, {
         ...editingUser,
         companyName,
+        jobTitle: String(editingUser.jobTitle || '').trim(),
+        department: String(editingUser.department || '').trim(),
       });
       if (error) {
         alert((lang === 'ar' ? 'فشل إنشاء الحساب: ' : 'Failed to create account: ') + error);
@@ -207,7 +209,12 @@ const UserMgmt: React.FC = () => {
       }
       await db.reloadUsers();
     } else {
-      const newUser = { ...editingUser, companyName };
+      const newUser = {
+        ...editingUser,
+        companyName,
+        jobTitle: String(editingUser.jobTitle || '').trim(),
+        department: String(editingUser.department || '').trim(),
+      };
       const saved = await db.updateUser(editingUser.id, newUser);
       if (!saved) {
         alert((lang === 'ar' ? 'تعذر حفظ بيانات المستخدم والوظيفة في قاعدة البيانات. ' : 'Could not save the user and organization position to the database. ') + db.getLastDbError());
