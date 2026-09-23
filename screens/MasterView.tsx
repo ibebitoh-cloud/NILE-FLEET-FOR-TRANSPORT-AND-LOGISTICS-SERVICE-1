@@ -1,3 +1,17 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { db } from '../services/supabaseDb';
+import { Operation, Location, UserRole } from '../types';
+import { translateEntity } from '../translations';
+const getContrastColor = (bgClass: string, isDarkTerminal: boolean) => {
+  if (isDarkTerminal) {
+    if (bgClass.includes('bg-[#98FFD9]') || bgClass.includes('bg-[#FFEB3B]') || bgClass.includes('bg-[#87CEEB]')) return 'text-slate-950';
+    return 'text-white';
+  }
+  const lightColors = ['bg-white', 'bg-slate-50', 'bg-blue-50', 'bg-[#98FFD9]', 'bg-[#FFEB3B]', 'bg-amber-50', 'bg-emerald-50'];
+  return lightColors.some(c => bgClass.includes(c)) ? 'text-slate-900' : 'text-white';
+};
+
+const getDarkPortStyle = (loc: Location) => {
   const styles: Record<string, { backgroundColor: string; color: string; borderColor: string; boxShadow: string }> = {
     [Location.DAM]: { backgroundColor: 'rgba(16,185,129,0.22)', color: '#6EE7B7', borderColor: '#34D399', boxShadow: '0 0 10px rgba(52,211,153,0.18)' },
     [Location.ALEX]: { backgroundColor: 'rgba(234,179,8,0.22)', color: '#FDE047', borderColor: '#FACC15', boxShadow: '0 0 10px rgba(250,204,21,0.18)' },
