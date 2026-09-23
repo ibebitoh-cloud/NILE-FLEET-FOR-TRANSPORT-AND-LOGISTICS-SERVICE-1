@@ -25,7 +25,7 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
   });
 
   const handleExportAllDataAndFinance = () => {
-    const custOps = db.getOperations().filter(o => o.customerName === (user.companyName || user.name));
+    const custOps = db.getCustomerOperations(user.id, user.companyName || user.name);
     const custInvoices = db.getInvoices().filter(i => i.customerName === (user.companyName || user.name));
     const custPayments = db.getPayments().filter(p => p.customerId === user.id);
     const custPrices = db.getCustomerPrices().filter(p => p.customerName === (user.companyName || user.name));
