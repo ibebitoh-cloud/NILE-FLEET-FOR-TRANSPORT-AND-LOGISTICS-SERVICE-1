@@ -207,8 +207,12 @@ const UserMgmt: React.FC = () => {
       }
       await db.reloadUsers();
     } else {
-      let newUser = { ...editingUser, companyName };
-      await db.updateUser(editingUser.id, newUser);
+      const newUser = { ...editingUser, companyName };
+      const saved = await db.updateUser(editingUser.id, newUser);
+      if (!saved) {
+        alert((lang === 'ar' ? 'تعذر حفظ بيانات المستخدم والوظيفة في قاعدة البيانات. ' : 'Could not save the user and organization position to the database. ') + db.getLastDbError());
+        return;
+      }
     }
 
     setShowAddModal(false);
