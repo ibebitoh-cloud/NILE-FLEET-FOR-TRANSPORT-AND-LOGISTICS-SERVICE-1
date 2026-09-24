@@ -277,14 +277,16 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       };
 
       if (idMatch) {
-        setAiChatMessages(prev => [...prev, { role: 'ai', text: await answerGenset(idMatch[1], question) }]);
+        const answer = await answerGenset(idMatch[1], question);
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
         return;
       }
 
       // A short standalone number is also a genset search. This prevents
       // questions such as "464" from unnecessarily going through the LLM.
       if (/^\\d{1,6}$/.test(q.trim())) {
-        setAiChatMessages(prev => [...prev, { role: 'ai', text: await answerGenset(q.trim(), question) }]);
+        const answer = await answerGenset(q.trim(), question);
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
         return;
       }
 
