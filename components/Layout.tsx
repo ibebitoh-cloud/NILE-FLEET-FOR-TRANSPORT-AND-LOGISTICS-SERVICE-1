@@ -614,6 +614,31 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         }
       }
 
+      // CUSTOMER-ONLY LOOKUP: when the user names a specific customer, DALI must
+      // answer ONLY about that customer. Never return the company-wide customer list
+      // or unrelated customers. This runs before the general AI reasoning path.
+      const customerLookupIntent = /(?:CUSTOMER|CLIENT|COMPANY|CUSTOMER INFO|ABOUT|WHO IS|معلومات|بيانات|العميل|العميله|شركة|شركه|عميل|عن)/i.test(question);
+      if (customerLookupIntent && !soaIntent && !collectedIntent && !customerFinancialIntent) {
+        const customer = findCustomerFromQuestion(question);
+        const resolvedName = customer?.companyName || customer?.name || findCustomerNameFromQuestion(question);
+        if (resolvedName) {
+          const customerOps = customer
+            ? operations.filter(o => customerMatchesOperation(customer, o))
+            : operations.filter(o => normalizeEntityText(o.customerName) === normalizeEntityText(resolvedName));
+          const customerInvoices = invoices.filter(i => (customer && String(i.customerId || '') === String(customer.id)) || normalizeEntityText(i.customerName) === normalizeEntityText(resolvedName));
+          const customerPayments = db.getPayments().filter(p => (customer && String(p.customerId || '') === String(customer.id)) || normalizeEntityText(p.customerName) === normalizeEntityText(resolvedName));
+          const displayName = responseIsAr ? (customer?.companyNameAr || translateEntity(resolvedName, 'ar')) : resolvedName;
+          const collected = customerPayments.reduce((s,p) => s + (Number(p.amount) || 0), 0);
+          const invoiced = customerInvoices.reduce((s,i) => s + (Number(i.amount) || 0), 0);
+          const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s,i) => s + (Number(i.amount) || 0), 0);
+          const answer = responseIsAr
+            ? `العميل: ${displayName}\\nعدد العمليات: ${customerOps.length}\\nإجمالي الفواتير: ${invoiced.toLocaleString()} جنيه\\nإجمالي التحصيل: ${collected.toLocaleString()} جنيه\\nغير مسدد: ${unpaid.toLocaleString()} جنيه`
+            : `Customer: ${displayName}\\nOperations: ${customerOps.length}\\nTotal invoiced: ${invoiced.toLocaleString()} EGP\\nTotal collected: ${collected.toLocaleString()} EGP\\nUnpaid: ${unpaid.toLocaleString()} EGP`;
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+          return;
+        }
+      }
+
       // Fast customer/operation lookup: factual questions stay local and never wait for AI.
       const customerQuery = q.match(/(?:HOW MANY|COUNT|NUMBER OF|كام|عدد|كم).*?(?:OPERATIONS?|JOBS?|عمليه|عمليات)/i);
       if (customerQuery) {
