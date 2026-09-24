@@ -468,8 +468,26 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           return { name: rawName, score: best };
         }).filter(x => x.score > 0).sort((x,y) => y.score - x.score);
 
-        // Only return a transaction customer on a strong phrase/exact match.
-        return ranked[0]?.score >= 50000 ? ranked[0].name : null;
+        // Accept a distinctive single customer token only when it uniquely identifies
+        // one live customer. This handles natural Arabic such as "كشف حساب البيباسوني"
+        // without guessing between similarly named customers.
+        if (ranked[0]?.score >= 50000) return ranked[0].name;
+        const distinctive = tokens
+          .filter(t => t.length >= 4)
+          .map(token => {
+            const hits = transactionCustomerNames.filter(name => {
+              const aliases = [
+                normalizeEntityText(name),
+                normalizeEntityText(translateEntity(String(name), 'ar')),
+                normalizeEntityText(translateEntity(String(name), 'en'))
+              ].filter(Boolean);
+              return aliases.some(a => a.includes(token));
+            });
+            return { token, hits };
+          })
+          .filter(x => x.hits.length === 1);
+        if (distinctive.length === 1) return distinctive[0].hits[0];
+        return null;
       };
 
       // Resolve customer references appearing in operations too. Existing
@@ -511,11 +529,11 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           const grossDue = historical + unpaid + unbilled;
           const netDue = Math.max(0, grossDue - collected);
           const recentPayments = [...customerPayments].sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
-          const lastPayment = recentPayments.length ? ((isAr ? '\nآخر تحصيل: ' : '\nLast payment: ') + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' EGP') : '';
+          const lastPayment = recentPayments.length ? ((responseIsAr ? '\nآخر تحصيل: ' : '\nLast payment: ') + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' EGP') : '';
           const recentOps = [...customerOps]
             .sort((a,b) => String(b.operationDate || '').localeCompare(String(a.operationDate || '')))
             .slice(0, 10)
-            .map(o => isAr
+            .map(o => responseIsAr
               ? `\\n• حجز ${o.bookingNumber || '—'} | حاوية ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | سعر ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | شاحن: ${o.beneficiaryName || '—'} | ناقل: ${o.trucker || '—'}`
               : `\\n• Booking ${o.bookingNumber || '—'} | Container ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | Rate ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | Shipper: ${o.beneficiaryName || '—'} | Trucker: ${o.trucker || '—'}`
             ).join('');
@@ -595,10 +613,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       // Natural-language genset location: "فين المولد 452",
       // "المولد 452 فين", "where is genset 452", etc.
-      const gensetLocationIntent = /(?:فين|اين|أين|مكان|موقع|موجود|عايز\s*اعرف|location|where|locate|find|position).*(?:مولد|مولدات|وحدة|genset|gense?t)|(?:مولد|مولدات|وحدة|genset|gense?t).*?(?:فين|اين|أين|مكان|موقع|موجود|where|location|position)/i.test(q);
+      const gensetLocationIntent = /(?:فين|اين|أين|مكان|موقع|موجود|عايز\s*اعرف|عايز\s*مكان|وريني|دلني|location|where|locate|find|position).*(?:مولد|مولدات|وحدة|genset|gense?t)|(?:مولد|مولدات|وحدة|genset|gense?t).*?(?:فين|اين|أين|مكان|موقع|موجود|where|location|position)|(?:فين|اين|أين|مكان|موقع|location|where|locate|find|position).*?\b\d{1,6}\b/i.test(q);
       if (gensetLocationIntent) {
-        const id = q.match(/(?:مولد(?:ات)?|وحدة|GENSET(?:S)?|GENSETS?\s*ID)\s*#?\s*([A-Z0-9-]+)/i)?.[1]
-          || q.match(/(?:WHERE|LOCATION|LOCATE|FIND|فين|اين|أين|مكان|موقع).*?#?([0-9]{1,6})/i)?.[1];
+        const id = q.match(/(?:مولد(?:ات)?|وحدة|GENSET(?:S)?|GENSETS?\s*ID)\s*(?:#|رقم|رقم\s*)?\s*(?:بتاع|رقم)?\s*([A-Z0-9-]+)/i)?.[1]
+          || q.match(/(?:WHERE|LOCATION|LOCATE|FIND|فين|اين|أين|مكان|موقع|موجود|عايز\s*مكان|عايز\s*اعرف|وريني|دلني).*?#?([0-9]{1,6})/i)?.[1];
         if (id) {
           setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(id) }]);
           return;
@@ -616,9 +634,11 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         recentOperations: operations.slice(0, 40).map(o => ({ bookingNumber:o.bookingNumber, containerNumber:o.containerNumber, gensetNumber:o.gensetNumber, customerName:o.customerName, status:o.status, clipOnPort:o.clipOnPort, clipOffPort:o.clipOffPort, operationDate:o.operationDate, rate:o.rate, vat:o.vat })),
         invoiceTotals: invoices.reduce((m: any, i: any) => { const amount=Number(i.amount)||0; m.billed+=amount; if(i.status==='PAID') m.paid+=amount; return m; }, { billed:0, paid:0 }),
         gensetStatusCounts: gensets.reduce((m: Record<string, number>, g) => { m[g.status] = (m[g.status] || 0) + 1; return m; }, {}),
-        maintenanceCount: maintenance.length
+        maintenanceCount: maintenance.length,
+        customers: customerAliasesForAi.slice(0, 100),
+        recentPayments: db.getPayments().slice(-50).map(p => ({ customerName:p.customerName, amount:p.amount, date:p.date, reference:p.reference }))
       };
-      const prompt = `You are DALI 1.0, Nile Fleet's live operations assistant. Understand Arabic naturally, including Egyptian Arabic, transliterated names, translated customer names, and mixed Arabic/English. Resolve customer names from LIVE customer aliases before answering. For genset location use fleet stock + latest operation + maintenance. For customer SOA use live operations + invoices + payments. Never invent and never say you cannot access data when the data is in the supplied context. Maximum 4 short lines. If the question is factual and data is missing, say so. Arabic question: Arabic answer. Preserve IDs/numbers exactly.\n${creatorContext}\nQ:${question}\nDATA:${JSON.stringify(context)}`;
+      const prompt = `You are DALI 1.0, Nile Fleet's live command assistant. Understand natural Egyptian Arabic, Modern Standard Arabic, English, Arabizi/transliterated customer names, and mixed Arabic/English. Interpret intent from the whole sentence, not exact keywords. For "فين/أين/مكان/موجود/بتاع" + a genset number, perform a genset location lookup. For "كشف حساب/حساب/مديونية/رصيد/المحصل" + a customer name, perform a customer SOA lookup. Resolve customer names from LIVE customer aliases before answering. For genset location use fleet stock + latest operation + maintenance. For customer SOA use live operations + invoices + payments. Never invent and never say you cannot access data when the data is in the supplied context. Maximum 4 short lines. If the question is factual and data is missing, say so. Arabic question: Arabic answer. Preserve IDs/numbers exactly.\n${creatorContext}\nQ:${question}\nDATA:${JSON.stringify(context)}`;
       const answer = await runThinkingAudit(prompt, 420);
       setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من DALI 1.0.' : 'No response from DALI 1.0.') }]);
     } catch (e) {
