@@ -225,7 +225,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         return { stockHits, opHits, maintenanceHits };
       };
 
-      const answerGenset = (id: string) => {
+      const answerGenset = (id: string, questionText = '') => {
         const { stockHits, opHits, maintenanceHits } = lookupGenset(id);
         const stock = stockHits[0];
         const latestOp = opHits[0];
@@ -233,24 +233,51 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         if (!stock && !latestOp && !latestMaintenance) {
           return responseIsAr ? `المولد ${id} غير موجود في بيانات الأسطول أو السجل التشغيلي.` : `GENSET ${id} was not found in fleet, operations, or maintenance records.`;
         }
+
+        // Every persisted operation matched to this genset is part of its lifetime log.
+        // Cancelled records are excluded from the trip count.
+        const completedTrips = opHits.filter(o => String(o.status || '').toUpperCase() !== 'CANCEL').length;
+        const qText = String(questionText).toUpperCase();
+        const wantsTripCount = /HOW MANY|HOW MUCH|NUMBER OF|TRIPS?|OPERATIONS?|رحل|رحلة|رحلات|كام|عدد|كم|عملية|عمليه|عمليات|اشتغل|شغل/.test(qText);
+        const wantsHistory = /HISTORY|LOG|PREVIOUS|PAST|HISTOR|سجل|سجلات|تاريخ|سابق|العمليات|رحلات/.test(qText);
+
         const stockNumber = stock?.unitNumber || stock?.gensetNumber || id;
         const location = stock?.location || latestOp?.clipOnPort || latestOp?.clipOffPort || latestMaintenance?.location || '—';
         const status = stock?.status || latestOp?.status || latestMaintenance?.status || '—';
-        if (responseIsAr) {
-          return `المولد ${stockNumber}\nالحالة: ${status}\nالموقع: ${location}${latestOp ? `\nالحجز: ${latestOp.bookingNumber || '—'}\nالحاوية: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nآخر صيانة: ${latestMaintenance.serviceDate || '—'}` : ''}`;
+
+        if (wantsHistory) {
+          const history = opHits.slice(0, 12).map((op, index) => {
+            const route = [op.clipOnPort, op.clipOffPort].filter(Boolean).join(' → ') || '—';
+            return responseIsAr
+              ? `${index + 1}. ${dateValue(op) || '—'} | حجز ${op.bookingNumber || '—'} | حاوية ${op.containerNumber || '—'} | ${route} | ${op.status || '—'}`
+              : `${index + 1}. ${dateValue(op) || '—'} | Booking ${op.bookingNumber || '—'} | Container ${op.containerNumber || '—'} | ${route} | ${op.status || '—'}`;
+          }).join('\\n');
+          return responseIsAr
+            ? `المولد ${stockNumber} — سجل التشغيل\\nعدد الرحلات: ${completedTrips}\\nالموقع الحالي: ${location}\\nالحالة: ${status}${history ? `\\n\\n${history}` : '\\nلا توجد عمليات سابقة مسجلة.'}`
+            : `GENSET ${stockNumber} — Operation Log\\nTrips: ${completedTrips}\\nCurrent location: ${location}\\nStatus: ${status}${history ? `\\n\\n${history}` : '\\nNo previous operations recorded.'}`;
         }
-        return `GENSET ${stockNumber}\nStatus: ${status}\nLocation: ${location}${latestOp ? `\nBooking: ${latestOp.bookingNumber || '—'}\nContainer: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nLast maintenance: ${latestMaintenance.serviceDate || '—'}` : ''}`;
+
+        if (wantsTripCount) {
+          return responseIsAr
+            ? `المولد ${stockNumber}\\nعدد الرحلات: ${completedTrips}\\nالموقع الحالي: ${location}\\nالحالة: ${status}${latestOp ? `\\nآخر حجز: ${latestOp.bookingNumber || '—'} | ${dateValue(latestOp) || '—'}` : ''}`
+            : `GENSET ${stockNumber}\\nTrips: ${completedTrips}\\nCurrent location: ${location}\\nStatus: ${status}${latestOp ? `\\nLast booking: ${latestOp.bookingNumber || '—'} | ${dateValue(latestOp) || '—'}` : ''}`;
+        }
+
+        if (responseIsAr) {
+          return `المولد ${stockNumber}\\nالحالة: ${status}\\nالموقع: ${location}${latestOp ? `\\nالحجز: ${latestOp.bookingNumber || '—'}\\nالحاوية: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\\nآخر صيانة: ${latestMaintenance.serviceDate || '—'}` : ''}`;
+        }
+        return `GENSET ${stockNumber}\\nStatus: ${status}\\nLocation: ${location}${latestOp ? `\\nBooking: ${latestOp.bookingNumber || '—'}\\nContainer: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\\nLast maintenance: ${latestMaintenance.serviceDate || '—'}` : ''}`;
       };
 
       if (idMatch) {
-        setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(idMatch[1]) }]);
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(idMatch[1], question) }]);
         return;
       }
 
       // A short standalone number is also a genset search. This prevents
       // questions such as "464" from unnecessarily going through the LLM.
       if (/^\\d{1,6}$/.test(q.trim())) {
-        setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(q.trim()) }]);
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(q.trim(), question) }]);
         return;
       }
 
@@ -259,7 +286,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       if (searchMatch) {
         const value = searchMatch[1];
         if (/^\d{1,6}$/.test(value)) {
-          setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(value) }]);
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(value, question) }]);
           return;
         }
       }
