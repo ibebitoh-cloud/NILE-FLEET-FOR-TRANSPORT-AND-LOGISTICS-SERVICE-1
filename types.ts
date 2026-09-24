@@ -163,6 +163,8 @@ export interface User {
   pastOutstandingAmount: number;
   invoiceSettings?: InvoiceSettings;
   isServiceAccount?: boolean;
+  /** Reserved system-owner identity. Derived from the creator email; never user-editable. */
+  isCreator?: boolean;
   apiKeys?: string[];
   revoked?: boolean;
   lastRotationDate?: string;
