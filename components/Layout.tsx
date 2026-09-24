@@ -363,7 +363,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
             const aliasSet = new Set(aliasTokens);
             const exact = normalizedQuestion === alias || compactEntityText(rawQuestion) === alias;
             const contains = normalizedQuestion.includes(alias) || alias.includes(normalizedQuestion);
-            const hits = meaningfulTokens.filter(t => aliasSet.has(t) || alias.includes(t) || t.includes(t)).length;
+            const hits = meaningfulTokens.filter(t => aliasSet.has(t) || alias.includes(t) || alias.split('').length > 0 && t.length >= 3 && t.includes(alias)).length;
             const meaningfulAliasTokens = aliasTokens.filter(t => !intentWords.has(t));
             const coverage = meaningfulAliasTokens.length ? hits / meaningfulAliasTokens.length : 0;
 
