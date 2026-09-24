@@ -447,13 +447,7 @@ const StockManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-          <p className="text-[8px] font-black uppercase tracking-wider text-[#C2A378]">{isAr ? 'تكاليف الصيانة' : 'Total Maint Cost'}</p>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-lg font-black text-[#001F3F] dark:text-white font-mono">{metrics.totalCost.toLocaleString()}</span>
-            <span className="text-[8px] font-bold text-[#C2A378] uppercase">EGP</span>
-          </div>
-        </div>
+
       </div>
 
       {/* ================= TAB 2: FLEET INVENTORY ================= */}
