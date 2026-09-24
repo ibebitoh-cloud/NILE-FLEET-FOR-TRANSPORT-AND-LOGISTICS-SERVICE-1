@@ -26,13 +26,13 @@ export const ProLedger: React.FC<{
   
   const ops = db.getOperations().filter(o => o.customerName === (partner.companyName || partner.name));
   const unbilledOps = ops.filter(o => !o.invoiced);
-  const unbilledTotal = unbilledOps.reduce((s, o) => s + (parseFloat(o.rate.replace(/,/g,'')) || 0) + (parseFloat(o.vat.replace(/,/g,'')) || 0), 0);
+  const unbilledTotal = unbilledOps.reduce((s, o) => s + (parseFloat(String(o.rate || '0').replace(/,/g,'')) || 0) + (parseFloat(String(o.vat || '0').replace(/,/g,'')) || 0), 0);
   const invoices = db.getInvoices().filter(i => i.customerName === (partner.companyName || partner.name));
   const unpaidInvoices = invoices.filter(i => i.status === 'UNPAID');
-  const unpaidInvoicesTotal = unpaidInvoices.reduce((s, i) => s + i.amount, 0);
+  const unpaidInvoicesTotal = unpaidInvoices.reduce((s, i) => s + Number(i.amount || 0), 0);
   const payments = db.getPayments().filter(p => p.customerId === partner.id);
   
-  const netDue = (partner.pastOutstandingAmount || 0) + unpaidInvoicesTotal + unbilledTotal;
+  const netDue = Number(partner.pastOutstandingAmount || 0) + unpaidInvoicesTotal + unbilledTotal;
 
   const settings = branding || {
     primaryColor: '#001F3F',
@@ -254,7 +254,7 @@ const Financials: React.FC = () => {
       .reduce((s, o) => s + (parseFloat(o.rate.replace(/,/g,'')) || 0) + (parseFloat(o.vat.replace(/,/g,'')) || 0), 0);
     const userInvoices = invoices.filter(i => i.customerName === (selectedUser.companyName || selectedUser.name));
     const unpaidInvoicesTotal = userInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + i.amount, 0);
-    const totalExposure = (selectedUser.pastOutstandingAmount || 0) + unpaidInvoicesTotal + unbilledTotal;
+    const totalExposure = (selectedUser?.pastOutstandingAmount || 0) + unpaidInvoicesTotal + unbilledTotal;
     return { totalExposure, unbilledTotal, unpaidInvoicesTotal, userInvoices };
   }, [selectedUser, operations, invoices]);
 
@@ -408,7 +408,7 @@ const Financials: React.FC = () => {
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 dark:divide-white/5 text-[11px] font-bold">
-                           {selectedUser.pastOutstandingAmount > 0 && (
+                           {Number(selectedUser?.pastOutstandingAmount || 0) > 0 && (
                              <tr className="bg-rose-50/10 italic">
                                 <td className="px-6 py-6 text-center text-rose-500 font-black">⚡</td>
                                 <td className="px-8 py-6 text-slate-400">System Genesis</td>
