@@ -288,7 +288,13 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       }
 
       // FAST CUSTOMER STATEMENT OF ACCOUNT (SOA): factual financial questions stay local.
-      const customerProfiles = db.getUsers().filter(u => u.role === UserRole.CUSTOMER);
+      const customerProfiles = db.getUsers().filter(u => String(u.role || '').toUpperCase() === String(UserRole.CUSTOMER).toUpperCase());
+      // Include customer names already present in live transactions. This is critical for older data that has no customer_id/profile match.
+      const transactionCustomerNames = Array.from(new Set([
+        ...operations.map(o => o.customerName),
+        ...invoices.map(i => i.customerName),
+        ...db.getPayments().map(p => p.customerName)
+      ].filter(Boolean).map(String)));
       // Customer/entity understanding works in BOTH Arabic and English.
       // DALI matches the user's wording against the real customer record, its
       // Arabic company name, the system translation dictionary, and learned translations.
@@ -350,6 +356,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       const findCustomerFromQuestion = (rawQuestion: string) => {
         const normalizedQuestion = normalizeEntityText(rawQuestion);
+        const compactQuestion = compactEntityText(rawQuestion);
         const tokens = normalizedQuestion.split(' ').filter(Boolean);
         const meaningfulTokens = tokens.filter(t => !intentWords.has(t) && t.length >= 2);
         if (!meaningfulTokens.length) return null;
@@ -361,9 +368,9 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           for (const alias of aliases) {
             const aliasTokens = alias.split(' ').filter(Boolean);
             const aliasSet = new Set(aliasTokens);
-            const exact = normalizedQuestion === alias || compactEntityText(rawQuestion) === alias;
+            const exact = normalizedQuestion === alias || compactQuestion === alias.replace(/\s/g, '');
             const contains = normalizedQuestion.includes(alias) || alias.includes(normalizedQuestion);
-            const hits = meaningfulTokens.filter(t => aliasSet.has(t) || alias.includes(t) || alias.split('').length > 0 && t.length >= 3 && t.includes(alias)).length;
+            const hits = meaningfulTokens.filter(t => aliasSet.has(t) || alias.includes(t) || (t.length >= 3 && aliasSet.has(t.slice(0, Math.max(2, t.length - 1))))).length;
             const meaningfulAliasTokens = aliasTokens.filter(t => !intentWords.has(t));
             const coverage = meaningfulAliasTokens.length ? hits / meaningfulAliasTokens.length : 0;
 
@@ -378,10 +385,24 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         });
 
         const ranked = scored.filter(x => x.score > 0).sort((a,b) => b.score - a.score);
-        if (!ranked.length) return null;
-        // Avoid guessing between equally strong customer names.
-        if (ranked.length > 1 && ranked[0].score === ranked[1].score) return null;
-        return ranked[0].customer;
+        if (ranked.length) {
+          if (ranked[0].customer && (!ranked[1] || ranked[0].score > ranked[1].score)) return ranked[0].customer;
+          if (ranked[0].customer && ranked[1]?.customer && Math.abs(ranked[0].score - ranked[1].score) >= 1000) return ranked[0].customer;
+        }
+        // Fallback: resolve directly against names stored on operations/invoices/payments.
+        const tx = transactionCustomerNames.map(name => {
+          const alias = normalizeEntityText(name);
+          const compact = alias.replace(/\s/g, '');
+          const exact = normalizedQuestion === alias || compactQuestion === compact;
+          const contains = normalizedQuestion.includes(alias) || alias.includes(normalizedQuestion);
+          const hits = meaningfulTokens.filter(t => alias.includes(t)).length;
+          return { name, score: exact ? 90000 : contains ? 50000 : hits ? 10000 + hits * 2000 : 0 };
+        }).filter(x => x.score > 0).sort((a,b) => b.score - a.score);
+        if (tx.length) {
+          const matched = customerProfiles.find(c => normalizeEntityText(c.companyName || c.name) === normalizeEntityText(tx[0].name));
+          return matched || null;
+        }
+        return null;
       };
 
       // Resolve customer references appearing in operations too. Existing
