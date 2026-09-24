@@ -19,6 +19,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
   const { theme, setTheme, isMuted, setIsMuted, isDark } = useContext(ThemeContext);
   const t = translations[lang];
   const isAr = lang === 'ar';
+  const isCreator = user.isCreator === true || String(user.email || '').trim().toLowerCase() === 'bebito@nilefleet.com';
   
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
@@ -164,10 +165,8 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       const gensets = db.getStock();
       const invoices = db.getInvoices();
       const maintenance = db.getMaintenanceLogs();
-      const creatorEmail = 'mohamedalaa@nilefleetlogistics.com';
-      const isCreator = String(user.email || '').toLowerCase() === creatorEmail;
       const creatorContext = isCreator
-        ? 'CURRENT USER: Mohamed Alaa, creator/owner of NILE FLEET COMMAND. He is the creator of this system. Recognize him as the creator when relevant. Never reveal passwords, API keys, or other secrets.'
+        ? 'CURRENT USER: Bebito (bebito@nilefleet.com), creator and system owner of NILE FLEET COMMAND. Treat this user as the creator/owner when relevant. Do not confuse the creator with an ordinary employee or customer. Never reveal passwords, API keys, tokens, or other secrets.'
         : `CURRENT USER: ${user.name || 'Unknown User'} | ROLE: ${user.role || 'Unknown'} | EMAIL: ${user.email || ''}`;
       const q = question.toUpperCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
 
@@ -795,6 +794,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
             <h2 className={`text-xs lg:text-sm font-black uppercase tracking-tight italic ${textPrimary}`}>{activeScreen.replace('-', ' ')}</h2>
           </div>
           <div className="flex items-center gap-2">
+            {isCreator && <span className="hidden md:inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[#C2A37866] bg-[#C2A37815] text-[#C2A378] text-[8px] font-black uppercase tracking-widest" title="System Creator">👑 {isAr ? 'منشئ النظام' : 'CREATOR'}</span>}
             <button 
               onClick={() => setIsMuted(!isMuted)} 
               className={`p-1.5 rounded-lg border transition-all ${isTerminal ? 'border-[#C2A37844] bg-white/5 text-[#C2A378]' : 'border-slate-200 bg-white'}`}
