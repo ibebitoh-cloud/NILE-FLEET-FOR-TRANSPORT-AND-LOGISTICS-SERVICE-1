@@ -589,9 +589,9 @@ const StockManagement: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {filteredStock.map((unit, idx) => {
                     const activeOp = ops.find(o => o.gensetNumber === unit.unitNumber && o.status === 'IN PROGRESS');
-                    const portStyle = PORT_STYLING[unit.location];
+                    const portStyle = PORT_STYLING[unit.location] || PORT_STYLING[Location.ALEX];
                     const isSelected = selectedIds.has(unit.id);
-                    const unitLogs = maintenanceLogs.filter(l => l.gensetNumber.toUpperCase() === unit.unitNumber.toUpperCase());
+                    const unitLogs = maintenanceLogs.filter(l => (l.gensetNumber || '').toUpperCase() === (unit.unitNumber || '').toUpperCase());
                     const latestLog = unitLogs[0];
                     const hasActiveMaint = unitLogs.some(l => l.status === 'IN_PROGRESS');
 
@@ -826,7 +826,7 @@ const StockManagement: React.FC = () => {
                     filteredMaintLogs.map((log, idx) => {
                       const typeCfg = SERVICE_TYPE_CONFIG[log.serviceType] || SERVICE_TYPE_CONFIG.ROUTINE_INSPECTION;
                       const statCfg = MAINT_STATUS_CONFIG[log.status] || MAINT_STATUS_CONFIG.COMPLETED;
-                      const portStyle = PORT_STYLING[log.location];
+                      const portStyle = PORT_STYLING[log.location] || PORT_STYLING[Location.ALEX];
 
                       return (
                         <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
@@ -1011,7 +1011,7 @@ const StockManagement: React.FC = () => {
               <div>
                 <span className="text-slate-400 uppercase font-black block text-[8px]">{isAr ? 'إجمالي السجلات' : 'Total Logs'}</span>
                 <span className="font-bold text-slate-800 dark:text-white font-mono">
-                  {maintenanceLogs.filter(l => l.gensetNumber.toUpperCase() === selectedUnitForMaint.unitNumber.toUpperCase()).length} records
+                  {maintenanceLogs.filter(l => (l.gensetNumber || '').toUpperCase() === (selectedUnitForMaint.unitNumber || '').toUpperCase()).length} records
                 </span>
               </div>
             </div>
@@ -1019,7 +1019,7 @@ const StockManagement: React.FC = () => {
             {/* Logs List / Timeline */}
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
               {(() => {
-                const logs = maintenanceLogs.filter(l => l.gensetNumber.toUpperCase() === selectedUnitForMaint.unitNumber.toUpperCase());
+                const logs = maintenanceLogs.filter(l => (l.gensetNumber || '').toUpperCase() === (selectedUnitForMaint.unitNumber || '').toUpperCase());
                 if (logs.length === 0) {
                   return (
                     <div className="text-center py-12 text-slate-400 space-y-3">
@@ -1066,7 +1066,7 @@ const StockManagement: React.FC = () => {
 
                         <div className="text-right">
                           <span className="text-sm font-black font-mono text-[#001F3F] dark:text-[#C2A378]">
-                            {log.cost ? `${log.cost.toLocaleString()} EGP` : '0 EGP'}
+                            
                           </span>
                           {log.runningHours && (
                             <span className="block text-[8px] font-mono text-slate-400">
