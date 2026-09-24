@@ -413,7 +413,7 @@ const Financials: React.FC = () => {
                                 <td className="px-6 py-6 text-center text-rose-500 font-black">⚡</td>
                                 <td className="px-8 py-6 text-slate-400">System Genesis</td>
                                 <td className="px-8 py-6 text-rose-600 font-black uppercase tracking-widest underline decoration-2 underline-offset-8">Historical Debt Forward</td>
-                                <td className="px-8 py-6 text-right font-black text-rose-600">EGP {Number(selectedUser.pastOutstandingAmount || 0).toLocaleString()}</td>
+                                <td className="px-8 py-6 text-right font-black text-rose-600">EGP {Number(selectedUser?.pastOutstandingAmount || 0).toLocaleString()}</td>
                                 <td className="px-8 py-6 text-center"><span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border border-rose-200">OPEN BALANCE</span></td>
                                 <td className="px-8 py-6 text-right opacity-30 italic">Pre-Deployment Legacy</td>
                              </tr>
