@@ -384,7 +384,12 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
             let score = 0;
             if (exact) score = 100000 + alias.length;
             else if (contains && alias.length >= 3) score = 50000 + alias.length;
-            else if (hits > 0) score = 10000 + (hits * 2500) + Math.round(coverage * 1000) + Math.min(alias.length, 200);
+            else if (hits >= 2) score = 10000 + (hits * 2500) + Math.round(coverage * 1000) + Math.min(alias.length, 200);
+            // Never resolve a customer from one weak word. A generic word in an
+            // Arabic/English question must not accidentally select the same customer.
+            else if (hits === 1 && meaningfulTokens.length === 1 && tokens.some(t => t.length >= 4) && aliasTokens.length === 1) {
+              score = 7000 + Math.min(alias.length, 200);
+            }
 
             if (score > best) { best = score; bestAlias = alias; }
           }
@@ -395,7 +400,12 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         if (ranked.length && ranked[0].customer) {
           const top = ranked[0];
           const second = ranked[1];
-          if (!second || top.score >= 50000 || top.score - second.score >= 2500) return top.customer;
+          // Strong match = exact/phrase match. Weak/fuzzy matches are only
+          // accepted when clearly separated from another customer.
+          if (top.score >= 50000) return top.customer;
+          if (top.score >= 10000 && (!second || top.score - second.score >= 4000)) return top.customer;
+          // Do not guess. Returning null lets SOA fall back to the general
+          // statement instead of showing an unrelated customer's account.
         }
         // Fallback: resolve directly against names stored on operations/invoices/payments.
         const tx = transactionCustomerNames.map(name => {
@@ -406,7 +416,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           const hits = meaningfulTokens.filter(t => alias.includes(t)).length;
           return { name, score: exact ? 90000 : contains ? 50000 : hits ? 10000 + hits * 2000 : 0 };
         }).filter(x => x.score > 0).sort((a,b) => b.score - a.score);
-        if (tx.length) {
+        if (tx.length && tx[0].score >= 50000) {
           const matched = customerProfiles.find(c => normalizeEntityText(c.companyName || c.name) === normalizeEntityText(tx[0].name));
           return matched || null;
         }
@@ -450,15 +460,16 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
               ? 100000 + alias.length
               : contains
                 ? 60000 + alias.length
-                : hits
+                : hits >= 2
                   ? 10000 + hits * 3000 + Math.round(coverage * 1500)
-                  : 0;
+                  : (hits === 1 && tokens.length === 1 && tokens[0].length >= 4 && aliasTokens.length === 1 ? 7000 : 0);
             if (score > best) best = score;
           }
           return { name: rawName, score: best };
         }).filter(x => x.score > 0).sort((x,y) => y.score - x.score);
 
-        return ranked[0]?.name || null;
+        // Only return a transaction customer on a strong phrase/exact match.
+        return ranked[0]?.score >= 50000 ? ranked[0].name : null;
       };
 
       // Resolve customer references appearing in operations too. Existing
