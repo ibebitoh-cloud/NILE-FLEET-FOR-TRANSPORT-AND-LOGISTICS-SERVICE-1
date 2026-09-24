@@ -103,7 +103,7 @@ export const ProLedger: React.FC<{
                 <div className="grid grid-cols-3 gap-6 mb-12">
                    <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{isAr ? 'مديونية سابقة' : 'Historical Debt'}</p>
-                      <p className="text-2xl lg:text-3xl font-black text-slate-900">{settings.currency} {partner.pastOutstandingAmount.toLocaleString()}</p>
+                      <p className="text-2xl lg:text-3xl font-black text-slate-900">{settings.currency} {Number(partner.pastOutstandingAmount || 0).toLocaleString()}</p>
                    </div>
                    <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{isAr ? 'لم يُفوتر بعد' : 'Unbilled Ops'}</p>
@@ -142,10 +142,10 @@ export const ProLedger: React.FC<{
                                 <td className="p-3">—</td>
                                 <td className="p-3">—</td>
                                 <td className="p-3">—</td>
-                                <td className="p-3">{inv.amount.toLocaleString()}</td>
+                                <td className="p-3">{Number(inv.amount || 0).toLocaleString()}</td>
                                 <td className="p-3">—</td>
                                 <td className="p-3">—</td>
-                                <td className="p-3 text-right">{inv.amount.toLocaleString()}</td>
+                                <td className="p-3 text-right">{Number(inv.amount || 0).toLocaleString()}</td>
                                 <td className="p-3 text-right">—</td>
                               </tr>
                             ))}
@@ -169,7 +169,7 @@ export const ProLedger: React.FC<{
                                 <td className="p-3 font-mono">PAY-{pay.id.split('-').pop()}</td>
                                 <td className="p-3">—</td><td className="p-3">—</td><td className="p-3">—</td><td className="p-3">—</td><td className="p-3">—</td><td className="p-3">{pay.reference || '—'}</td>
                                 <td className="p-3 text-right">—</td>
-                                <td className="p-3 text-right text-emerald-600">{pay.amount.toLocaleString()}</td>
+                                <td className="p-3 text-right text-emerald-600">{Number(pay.amount || 0).toLocaleString()}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -292,7 +292,7 @@ const Financials: React.FC = () => {
              <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{stat.label}</p>
                 <p className={`text-2xl font-black italic tracking-tighter ${stat.color}`}>
-                   {isAr ? 'ج.م' : 'EGP'} {stat.value.toLocaleString()}
+                   {isAr ? 'ج.م' : 'EGP'} {Number(stat.value || 0).toLocaleString()}
                 </p>
              </div>
              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-sm">{stat.icon}</div>
@@ -331,7 +331,7 @@ const Financials: React.FC = () => {
                           {total > 150000 && <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[8px] font-black animate-pulse">LOCKED</span>}
                        </div>
                        <p className={`text-xl font-black mt-4 relative z-10 ${isSelected ? 'text-[#C2A378]' : 'text-blue-600'}`}>
-                          {isAr ? 'ج.م' : 'EGP'} {total.toLocaleString()}
+                          {isAr ? 'ج.م' : 'EGP'} {Number(total || 0).toLocaleString()}
                        </p>
                        {isSelected && <div className="absolute right-[-20px] top-[-20px] w-24 h-24 bg-blue-600/10 rounded-full blur-2xl"></div>}
                     </button>
@@ -368,11 +368,11 @@ const Financials: React.FC = () => {
                   <div className="flex gap-4 relative z-10">
                      <div className="text-center bg-slate-50 dark:bg-slate-800 px-8 py-5 rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-inner">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{t.liveUnbilled}</p>
-                        <p className="text-2xl font-black text-blue-600">EGP {accountBreakdown.unbilledTotal.toLocaleString()}</p>
+                        <p className="text-2xl font-black text-blue-600">EGP {Number(accountBreakdown.unbilledTotal || 0).toLocaleString()}</p>
                      </div>
                      <div className="text-center bg-[#001F3F] px-8 py-5 rounded-[2rem] shadow-xl">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Grand Total Due</p>
-                        <p className="text-2xl font-black text-[#C2A378] italic">EGP {accountBreakdown.totalExposure.toLocaleString()}</p>
+                        <p className="text-2xl font-black text-[#C2A378] italic">EGP {Number(accountBreakdown.totalExposure || 0).toLocaleString()}</p>
                      </div>
                   </div>
 
@@ -413,7 +413,7 @@ const Financials: React.FC = () => {
                                 <td className="px-6 py-6 text-center text-rose-500 font-black">⚡</td>
                                 <td className="px-8 py-6 text-slate-400">System Genesis</td>
                                 <td className="px-8 py-6 text-rose-600 font-black uppercase tracking-widest underline decoration-2 underline-offset-8">Historical Debt Forward</td>
-                                <td className="px-8 py-6 text-right font-black text-rose-600">EGP {selectedUser.pastOutstandingAmount.toLocaleString()}</td>
+                                <td className="px-8 py-6 text-right font-black text-rose-600">EGP {Number(selectedUser.pastOutstandingAmount || 0).toLocaleString()}</td>
                                 <td className="px-8 py-6 text-center"><span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border border-rose-200">OPEN BALANCE</span></td>
                                 <td className="px-8 py-6 text-right opacity-30 italic">Pre-Deployment Legacy</td>
                              </tr>
@@ -435,7 +435,7 @@ const Financials: React.FC = () => {
                                       <span className="text-[8px] font-black text-slate-400 uppercase mt-0.5 tracking-widest">BK: {inv.bookingNumber}</span>
                                    </div>
                                 </td>
-                                <td className="px-8 py-6 text-right font-black text-slate-900 dark:text-white text-base">EGP {inv.amount.toLocaleString()}</td>
+                                <td className="px-8 py-6 text-right font-black text-slate-900 dark:text-white text-base">EGP {Number(inv.amount || 0).toLocaleString()}</td>
                                 <td className="px-8 py-6 text-center">
                                    <span className={`px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border shadow-sm ${inv.status === 'PAID' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
                                       {translateEntity(inv.status, lang)}
@@ -514,7 +514,7 @@ const Financials: React.FC = () => {
                                    <p className="text-[8px] font-black uppercase tracking-widest opacity-60">#INV-{String(inv.invoiceNo ?? 0).padStart(5, '0')}</p>
                                    <p className="text-[11px] font-black italic">{inv.bookingNumber}</p>
                                 </div>
-                                <p className={`font-black text-xs ${selectedInvIds.has(inv.id) ? 'text-[#C2A378]' : 'text-blue-600'}`}>EGP {inv.amount.toLocaleString()}</p>
+                                <p className={`font-black text-xs ${selectedInvIds.has(inv.id) ? 'text-[#C2A378]' : 'text-blue-600'}`}>EGP {Number(inv.amount || 0).toLocaleString()}</p>
                              </div>
                           ))}
                           {accountBreakdown.userInvoices.filter(i => i.status === 'UNPAID').length === 0 && (
