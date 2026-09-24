@@ -30,16 +30,16 @@ const ALL_SYSTEM_SCREENS = [
 ];
 
 const ALL_ACTION_PERMISSIONS: { key: keyof UserPermissions; label: string; icon: string; desc: string }[] = [
-  { key: 'canCreate', label: 'Create New Records', icon: '➕', desc: 'Allow creating new bookings, operations, gensets, expenses' },
-  { key: 'canEdit', label: 'Modify Existing Data', icon: '✏️', desc: 'Allow updating details of existing entries' },
-  { key: 'canDelete', label: 'Delete Records', icon: '🗑️', desc: 'Allow purging or deleting operations, invoices, units' },
+  { key: 'canCreate', label: 'Create Records', icon: '➕', desc: 'Allow creating bookings, operations, gensets and other records' },
+  { key: 'canEdit', label: 'Edit Records', icon: '✏️', desc: 'Allow changing existing operational and user data' },
+  { key: 'canDelete', label: 'Delete Records', icon: '🗑️', desc: 'Allow deleting records such as operations, invoices and gensets' },
   { key: 'canExport', label: 'Export Data & Reports', icon: '📤', desc: 'Allow downloading Excel, CSV, PDF reports' },
   { key: 'canViewFinancials', label: 'View Financial Ledgers', icon: '💵', desc: 'Allow viewing financial amounts, revenue, and expense ledgers' },
   { key: 'canManagePrices', label: 'Manage Price Matrices', icon: '🏷️', desc: 'Allow configuring customer rate matrices & tariffs' },
   { key: 'canApproveBookings', label: 'Approve/Reject Bookings', icon: '⚡', desc: 'Allow confirming customer reservation requests' },
-  { key: 'canManageUsers', label: 'User Management Authority', icon: '👤', desc: 'Allow editing identity profiles and access rights' },
-  { key: 'canKillAccess', label: 'Access Revocation Kill-Switch', icon: '☠️', desc: 'Allow suspending or killing access for any user' },
-  { key: 'canBypassGeofence', label: 'Bypass IP Geofencing', icon: '🌐', desc: 'Allow logging in from unverified IP ranges' },
+  { key: 'canManageUsers', label: 'Manage Users', icon: '👤', desc: 'Allow creating, editing and managing user access' },
+  { key: 'canKillAccess', label: 'Revoke User Access', icon: '⛔', desc: 'Allow disabling a user account' },
+  { key: 'canBypassGeofence', label: 'Security Override', icon: '🛡️', desc: 'Allow approved security exceptions' },
 ];
 
 const ALL_LOCATIONS = Object.values(Location);
@@ -56,6 +56,7 @@ const UserMgmt: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [modalTab, setModalTab] = useState<'PROFILE' | 'SCREENS' | 'PERMISSIONS' | 'SECURITY'>('PROFILE');
   const [showAvatarStudio, setShowAvatarStudio] = useState(false);
+  const avatarFallback = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(editingUser?.name || editingUser?.email || 'Nile Fleet')}&backgroundColor=001f3f&fontFamily=Arial&fontWeight=700`;
   const profilePhotoInputRef = React.useRef<HTMLInputElement>(null);
   const [showMatrixModal, setShowMatrixModal] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -177,12 +178,15 @@ const UserMgmt: React.FC = () => {
     if (editingUser) {
       if (editingUser.isCreator || String(editingUser.email || '').trim().toLowerCase() === 'bebito@nilefleet.com') {
         editingUser.role = UserRole.ADMIN;
+        editingUser.jobTitle = 'SYSTEM DIRECTOR';
+        editingUser.department = 'NILE FLEET COMMAND';
         editingUser.permissions = { canCreate:true, canEdit:true, canDelete:true, canExport:true, canViewFinancials:true, canManagePrices:true, canApproveBookings:true, canManageUsers:true, canKillAccess:true, canBypassGeofence:true };
         editingUser.allowedScreens = ALL_SYSTEM_SCREENS.map(s => s.id);
       }
       const saved = await db.updateUser(editingUser.id, editingUser);
       if (!saved) {
-        alert(lang === 'ar' ? 'تعذر حفظ تحديثات المستخدم في قاعدة البيانات.' : 'User updates could not be saved to the database.');
+        const detail = db.getLastDbError();
+        alert(lang === 'ar' ? `تعذر حفظ تحديثات المستخدم في قاعدة البيانات. ${detail}` : `User updates could not be saved to the database. ${detail}`);
         return;
       }
       setEditingUser(null);
@@ -785,15 +789,15 @@ const UserMgmt: React.FC = () => {
              <div className="p-6 md:p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                 <div className="text-start flex items-center gap-4">
                   <div className="relative group cursor-pointer" onClick={() => setShowAvatarStudio(true)}>
-                    <img src={editingUser.avatarUrl} alt="avatar" className="w-12 h-12 rounded-2xl object-cover border-2 border-[#C2A378]" />
+                    <img src={editingUser.avatarUrl || avatarFallback} onError={(e) => { const img = e.currentTarget; if (img.src !== avatarFallback) img.src = avatarFallback; }} alt="avatar" className="w-12 h-12 rounded-2xl object-cover border-2 border-[#C2A378]" />
                     <div className="absolute inset-0 bg-black/50 rounded-2xl flex items-center justify-center text-[8px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Change</div>
                   </div>
                   <div>
                     <h3 className="text-xl font-black italic uppercase tracking-tighter">
-                      {editingUser.id ? `Edit Access: ${editingUser.name || 'User Profile'}` : 'New System Identity & Permission Setup'}
+                      {editingUser.id ? `Edit User: ${editingUser.name || 'User Profile'}` : 'New System Identity & Permission Setup'}
                     </h3>
                     <p className="text-[9px] text-[#C2A378] font-black uppercase tracking-[0.3em] font-mono">
-                      User Access Control Terminal
+                      User Profile & Access
                     </p>
                   </div>
                 </div>
@@ -807,28 +811,28 @@ const UserMgmt: React.FC = () => {
                  onClick={() => setModalTab('PROFILE')} 
                  className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${modalTab === 'PROFILE' ? 'bg-[#001F3F] text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}`}
                >
-                 👤 Profile & Credentials
+                 👤 Profile
                </button>
                <button 
                  type="button" 
                  onClick={() => setModalTab('SCREENS')} 
                  className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${modalTab === 'SCREENS' ? 'bg-[#001F3F] text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}`}
                >
-                 🖥️ Modules & Screens ({editingUser.allowedScreens?.length || 0})
+                 🖥️ Screens ({editingUser.allowedScreens?.length || 0})
                </button>
                <button 
                  type="button" 
                  onClick={() => setModalTab('PERMISSIONS')} 
                  className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${modalTab === 'PERMISSIONS' ? 'bg-[#001F3F] text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}`}
                >
-                 ⚡ Action Rights
+                 ⚡ Permissions
                </button>
                <button 
                  type="button" 
                  onClick={() => setModalTab('SECURITY')} 
                  className={`px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${modalTab === 'SECURITY' ? 'bg-[#001F3F] text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}`}
                >
-                 🔒 Status & Revocation
+                 🔒 Account Status
                </button>
              </div>
              
@@ -845,7 +849,8 @@ const UserMgmt: React.FC = () => {
                         <div className="relative group mb-4">
                           <div className="w-32 h-32 rounded-[2rem] overflow-hidden border-4 border-white dark:border-slate-700 shadow-xl bg-slate-200 dark:bg-slate-900">
                             <img
-                              src={editingUser.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${editingUser.id || editingUser.email || editingUser.name || 'nile-fleet'}`}
+                              src={editingUser.avatarUrl || avatarFallback}
+                              onError={(e) => { const img = e.currentTarget; if (img.src !== avatarFallback) img.src = avatarFallback; }}
                               className="w-full h-full object-cover"
                               alt="profile"
                             />
@@ -904,7 +909,7 @@ const UserMgmt: React.FC = () => {
                           <div>
                             <label className={labelClass}>{lang === 'ar' ? 'الصفة الوظيفية' : 'Role Class'} *</label>
                             <select className={inputClass} value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as any})}>
-                              <option value={UserRole.ADMIN}>ADMINISTRATOR (Full System Master Access)</option>
+                              <option value={UserRole.ADMIN}>SYSTEM DIRECTOR (Full System Access)</option>
                               <option value={UserRole.MANAGER}>MANAGER (Operations & Business Management)</option>
                               <option value={UserRole.GATE_OPERATOR}>GATE OPERATOR (Field Operations & Terminal)</option>
                               <option value={UserRole.VIEWER}>SURVEILLANCE / AUDITOR (View Only Monitoring)</option>
