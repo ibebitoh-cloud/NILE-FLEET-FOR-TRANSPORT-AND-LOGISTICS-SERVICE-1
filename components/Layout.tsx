@@ -407,15 +407,49 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       const findCustomerNameFromQuestion = (rawQuestion: string) => {
         const nq = normalizeEntityText(rawQuestion);
+        const compactQ = compactEntityText(rawQuestion);
         const tokens = nq.split(' ').filter(Boolean).filter(t => !intentWords.has(t) && t.length >= 2);
+
+        // Search every customer name present in live operations, invoices, or
+        // payments. This works even when no Customer profile exists.
+        // Also compare translated forms of the real name for Arabic questions.
         const ranked = transactionCustomerNames.map(name => {
-          const alias = normalizeEntityText(name);
-          const compact = alias.replace(/\\s/g, '');
-          const exact = nq === alias || compactEntityText(rawQuestion) === compact;
-          const contains = nq.includes(alias) || alias.includes(nq);
-          const hits = tokens.filter(t => alias.includes(t)).length;
-          return { name, score: exact ? 100000 : contains ? 50000 + alias.length : hits ? 10000 + hits * 2500 : 0 };
-        }).filter(x => x.score > 0).sort((a,b) => b.score - a.score);
+          const rawName = String(name || '').trim();
+          const aliases = new Set<string>();
+          const addAlias = (value: unknown) => {
+            const alias = normalizeEntityText(value);
+            if (!alias || alias.length < 2) return;
+            aliases.add(alias);
+            aliases.add(alias.replace(/\\s/g, ''));
+          };
+          addAlias(rawName);
+          addAlias(translateEntity(rawName, 'ar'));
+          addAlias(translateEntity(rawName, 'en'));
+
+          let best = 0;
+          for (const alias of aliases) {
+            const compactAlias = alias.replace(/\\s/g, '');
+            const exact = nq === alias || compactQ === compactAlias;
+            const contains = nq.includes(alias) || alias.includes(nq);
+            const aliasTokens = alias.split(' ').filter(Boolean);
+            const hits = tokens.filter(t =>
+              alias.includes(t) ||
+              aliasTokens.includes(t) ||
+              (t.length >= 3 && aliasTokens.some(x => x.startsWith(t.slice(0, Math.max(2, t.length - 1)))))
+            ).length;
+            const coverage = aliasTokens.length ? hits / aliasTokens.length : 0;
+            const score = exact
+              ? 100000 + alias.length
+              : contains
+                ? 60000 + alias.length
+                : hits
+                  ? 10000 + hits * 3000 + Math.round(coverage * 1500)
+                  : 0;
+            if (score > best) best = score;
+          }
+          return { name: rawName, score: best };
+        }).filter(x => x.score > 0).sort((x,y) => y.score - x.score);
+
         return ranked[0]?.name || null;
       };
 
@@ -454,9 +488,16 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           const netDue = historical + unpaid + unbilled;
           const recentPayments = [...customerPayments].sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
           const lastPayment = recentPayments.length ? ((isAr ? '\nآخر تحصيل: ' : '\nLast payment: ') + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' EGP') : '';
+          const recentOps = [...customerOps]
+            .sort((a,b) => String(b.operationDate || '').localeCompare(String(a.operationDate || '')))
+            .slice(0, 5)
+            .map(o => isAr
+              ? `\\n• حجز ${o.bookingNumber || '—'} | حاوية ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | سعر ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | شاحن: ${o.beneficiaryName || '—'} | ناقل: ${o.trucker || '—'}`
+              : `\\n• Booking ${o.bookingNumber || '—'} | Container ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | Rate ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | Shipper: ${o.beneficiaryName || '—'} | Trucker: ${o.trucker || '—'}`
+            ).join('');
           const answer = isAr
-            ? 'كشف حساب: ' + customerName + '\nالعمليات: ' + customerOps.length + ' | الفواتير: ' + customerInvoices.length + '\nإجمالي الفواتير: ' + invoiced.toLocaleString() + ' EGP | المدفوع بالفواتير: ' + paidInvoices.toLocaleString() + ' EGP\nإجمالي التحصيل: ' + collected.toLocaleString() + ' EGP\nغير مسدد: ' + unpaid.toLocaleString() + ' EGP | غير مفوتر: ' + unbilled.toLocaleString() + ' EGP\nالرصيد المستحق: ' + netDue.toLocaleString() + ' EGP' + lastPayment
-            : 'SOA: ' + customerName + '\nOperations: ' + customerOps.length + ' | Invoices: ' + customerInvoices.length + '\nInvoiced: ' + invoiced.toLocaleString() + ' EGP | Paid invoices: ' + paidInvoices.toLocaleString() + ' EGP\nTotal collected: ' + collected.toLocaleString() + ' EGP\nUnpaid: ' + unpaid.toLocaleString() + ' EGP | Unbilled: ' + unbilled.toLocaleString() + ' EGP\nNet due: ' + netDue.toLocaleString() + ' EGP' + lastPayment;
+            ? 'كشف حساب: ' + customerName + '\\nالعمليات: ' + customerOps.length + ' | الفواتير: ' + customerInvoices.length + '\\nإجمالي الفواتير: ' + invoiced.toLocaleString() + ' EGP | المدفوع بالفواتير: ' + paidInvoices.toLocaleString() + ' EGP\\nإجمالي التحصيل: ' + collected.toLocaleString() + ' EGP\\nغير مسدد: ' + unpaid.toLocaleString() + ' EGP | غير مفوتر: ' + unbilled.toLocaleString() + ' EGP\\nالرصيد المستحق: ' + netDue.toLocaleString() + ' EGP' + lastPayment + (recentOps ? '\\nآخر العمليات:' + recentOps : '')
+            : 'SOA: ' + customerName + '\\nOperations: ' + customerOps.length + ' | Invoices: ' + customerInvoices.length + '\\nInvoiced: ' + invoiced.toLocaleString() + ' EGP | Paid invoices: ' + paidInvoices.toLocaleString() + ' EGP\\nTotal collected: ' + collected.toLocaleString() + ' EGP\\nUnpaid: ' + unpaid.toLocaleString() + ' EGP | Unbilled: ' + unbilled.toLocaleString() + ' EGP\\nNet due: ' + netDue.toLocaleString() + ' EGP' + lastPayment + (recentOps ? '\\nRecent operations:' + recentOps : '');
           setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
           return;
         }
