@@ -72,7 +72,8 @@ const UserMgmt: React.FC = () => {
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
   const isReadOnly = currentUser.role === UserRole.VIEWER;
-  const isAdmin = currentUser.role === UserRole.ADMIN || currentUser.permissions?.canManageUsers;
+  const isCreator = String(currentUser.email || '').trim().toLowerCase() === 'bebito@nilefleet.com' || currentUser.isCreator === true;
+  const isAdmin = isCreator || currentUser.role === UserRole.ADMIN || currentUser.permissions?.canManageUsers;
 
   const refreshData = () => {
     setUsers([...db.getUsers()]);
@@ -174,6 +175,11 @@ const UserMgmt: React.FC = () => {
     e.preventDefault();
     if (isReadOnly) return;
     if (editingUser) {
+      if (editingUser.isCreator || String(editingUser.email || '').trim().toLowerCase() === 'bebito@nilefleet.com') {
+        editingUser.role = UserRole.ADMIN;
+        editingUser.permissions = { canCreate:true, canEdit:true, canDelete:true, canExport:true, canViewFinancials:true, canManagePrices:true, canApproveBookings:true, canManageUsers:true, canKillAccess:true, canBypassGeofence:true };
+        editingUser.allowedScreens = ALL_SYSTEM_SCREENS.map(s => s.id);
+      }
       const saved = await db.updateUser(editingUser.id, editingUser);
       if (!saved) {
         alert(lang === 'ar' ? 'تعذر حفظ تحديثات المستخدم في قاعدة البيانات.' : 'User updates could not be saved to the database.');
@@ -229,6 +235,11 @@ const UserMgmt: React.FC = () => {
 
   const handleDeleteUser = async (userId: string) => {
     if (isReadOnly) return;
+    const target = users.find(u => u.id === userId);
+    if (target?.isCreator === true || String(target?.email || '').trim().toLowerCase() === 'bebito@nilefleet.com') {
+      alert(lang === 'ar' ? 'حساب منشئ النظام محمي ولا يمكن حذفه.' : 'The system creator account is protected and cannot be deleted.');
+      return;
+    }
     if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف ملف المستخدم نهائياً؟' : 'Are you sure you want to delete this user profile permanently?')) {
       const deleted = await db.deleteUser(userId);
       if (!deleted) {
