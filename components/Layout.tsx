@@ -2,7 +2,7 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { User, UserRole, SystemNotification } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
-import { translations } from '../translations';
+import { translations, translateEntity, dynamicTranslations } from '../translations';
 import { db } from '../services/supabaseDb';
 import { runThinkingAudit } from '../services/aiService';
 
@@ -289,14 +289,67 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       // FAST CUSTOMER STATEMENT OF ACCOUNT (SOA): factual financial questions stay local.
       const customerProfiles = db.getUsers().filter(u => u.role === UserRole.CUSTOMER);
-      const findCustomerFromQuestion = (rawQuestion: string) => {
-        const normalized = rawQuestion.toUpperCase().replace(/أ|إ|آ/g, 'ا').replace(/ة/g, 'ه').trim();
-        return [...customerProfiles]
-          .map(customer => ({ customer, names: [customer.companyName, customer.name].filter(Boolean).map(String) }))
-          .flatMap(item => item.names.map(name => ({ ...item, name })))
-          .filter(item => normalized.includes(item.name.toUpperCase().trim()))
-          .sort((a, b) => b.name.length - a.name.length)[0]?.customer || null;
+      // Customer/entity understanding works in BOTH Arabic and English.
+      // DALI matches the user's wording against the real customer record, its
+      // Arabic company name, the system translation dictionary, and learned translations.
+      const normalizeArabic = (value: unknown) => String(value ?? '')
+        .toLowerCase()
+        .replace(/[أإآٱ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/[ًٌٍَُِّْـ]/g, '')
+        .replace(/[إأآا]/g, 'ا')
+        .replace(/[^\\p{L}\\p{N}]+/gu, ' ')
+        .trim()
+        .replace(/\\s+/g, ' ');
+
+      const normalizeEntityText = (value: unknown) => normalizeArabic(value)
+        .replace(/\\b(el|al)\\b/g, '')
+        .trim();
+
+      const getCustomerAliases = (customer: User) => {
+        const baseNames = [
+          customer.companyName,
+          customer.companyNameAr,
+          customer.name,
+          translateEntity(customer.companyName, 'ar'),
+          translateEntity(customer.name, 'ar')
+        ].filter(Boolean).map(String);
+
+        // Also use reverse entries from the learned translation dictionary:
+        // if "ABC LOGISTICS" -> "شركة ايه بي سي" was learned, both forms match.
+        const aliases = new Set(baseNames.map(normalizeEntityText).filter(Boolean));
+        for (const [english, arabic] of Object.entries(dynamicTranslations)) {
+          const en = normalizeEntityText(english);
+          const ar = normalizeEntityText(arabic);
+          if (baseNames.some(n => normalizeEntityText(n) === en || normalizeEntityText(n) === ar)) {
+            if (en) aliases.add(en);
+            if (ar) aliases.add(ar);
+          }
+        }
+        return Array.from(aliases);
       };
+
+      const findCustomerFromQuestion = (rawQuestion: string) => {
+        const normalizedQuestion = normalizeEntityText(rawQuestion);
+        return customerProfiles
+          .map(customer => {
+            const aliases = getCustomerAliases(customer);
+            const matchedAlias = aliases
+              .filter(alias => alias.length >= 2 && (
+                normalizedQuestion.includes(alias) ||
+                alias.includes(normalizedQuestion)
+              ))
+              .sort((a, b) => b.length - a.length)[0];
+            return matchedAlias ? { customer, score: matchedAlias.length } : null;
+          })
+          .filter(Boolean)
+          .sort((a, b) => (b?.score || 0) - (a?.score || 0))[0]?.customer || null;
+      };
+
+      const customerAliasesForAi = customerProfiles.slice(0, 150).map(customer => ({
+        english: customer.companyName || customer.name,
+        arabic: customer.companyNameAr || translateEntity(customer.companyName || customer.name, 'ar')
+      }));
       const soaIntent = /(?:SOA|STATEMENT OF ACCOUNT|ACCOUNT STATEMENT|CUSTOMER ACCOUNT|كشف\s*حساب|كشف\s*الحساب|حساب العميل|حساب)/i.test(question);
       const collectedIntent = /(?:COLLECTED|RECEIVED|PAYMENTS?|PAID|COLLECTION|تحصيل|المحصل|المقبوض|مدفوعات|دفع)/i.test(question);
       if (soaIntent || (collectedIntent && /(?:CUSTOMER|عميل|لل|من)/i.test(question))) {
@@ -328,13 +381,20 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       }
 
       // Fast customer/operation lookup: factual questions stay local and never wait for AI.
-      const customerQuery = q.match(/(?:HOW MANY|COUNT|NUMBER OF|كام|عدد|كم).*?(?:OPERATIONS?|JOBS?|عمليه|عمليات).*?(?:FOR|ل|لل)?\s*([A-Z][A-Z0-9 .&_-]{2,})$/i);
+      const customerQuery = q.match(/(?:HOW MANY|COUNT|NUMBER OF|كام|عدد|كم).*?(?:OPERATIONS?|JOBS?|عمليه|عمليات)/i);
       if (customerQuery) {
-        const needle = customerQuery[1].trim().toUpperCase();
-        const hits = operations.filter(o => String(o.customerName || '').toUpperCase().includes(needle));
-        const answer = isAr ? `عدد العمليات لـ ${needle}: ${hits.length}` : `Operations for ${needle}: ${hits.length}`;
-        setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
-        return;
+        const customer = findCustomerFromQuestion(question);
+        if (customer) {
+          const customerName = customer.companyName || customer.name;
+          const hits = operations.filter(o =>
+            String(o.customerId || '') === String(customer.id) ||
+            normalizeEntityText(o.customerName) === normalizeEntityText(customerName)
+          );
+          const displayName = isAr ? (customer.companyNameAr || translateEntity(customerName, 'ar')) : customerName;
+          const answer = isAr ? `عدد العمليات لـ ${displayName}: ${hits.length}` : `Operations for ${customerName}: ${hits.length}`;
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
+          return;
+        }
       }
 
       // Only genuine analysis/reasoning reaches DALI. Keep the model payload tiny.
