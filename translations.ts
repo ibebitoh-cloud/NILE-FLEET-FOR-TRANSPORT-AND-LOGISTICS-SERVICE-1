@@ -714,6 +714,25 @@ export const translations = {
  * intentionally left alone unless it is already handled by translateEntity().
  */
 const uiExtraTranslations: Record<string, string> = {
+  "Stock • Maintenance • Preorder": "المخزون • الصيانة • الطلب المسبق",
+  "Fleet": "الأسطول",
+  "Stock": "المخزون",
+  "Maint.": "الصيانة",
+  "Preorder": "طلب مسبق",
+  "Smart Operations Watch": "المتابعة الذكية للعمليات",
+  "Automatic exception detection": "اكتشاف الاستثناءات تلقائياً",
+  "Customer Financial Reports": "تقارير العملاء المالية",
+  "Billed": "مفوتر",
+  "Paid": "مدفوع",
+  "Outstanding": "مستحق",
+  "No customer financial data": "لا توجد بيانات مالية للعملاء",
+  "Maintenance Performance & Log": "أداء وسجل الصيانة",
+  "Service execution and latest records": "تنفيذ الصيانة وآخر السجلات",
+  "Done": "تم",
+  "Active": "نشط",
+  "Due": "مستحق",
+  "No maintenance logs recorded": "لا توجد سجلات صيانة",
+
   "Organization": "المؤسسة",
   "Organization Roster": "هيكل المؤسسة",
   "Roster": "هيكل الموظفين",
