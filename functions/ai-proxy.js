@@ -69,7 +69,7 @@ export async function onRequestPost(context) {
         if (!prompt?.trim()) return json({ error: 'Empty AI prompt' }, 400);
         const result = await runTextModel(env, {
           messages: [
-            { role: 'system', content: 'You are DALI 1.0, a sharp financial and operations auditor for a logistics/genset-rental business. Give direct, practical, numbers-grounded analysis. If the user prompt requests Arabic, respond entirely in professional Arabic. Never output English UI labels when Arabic is requested. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Do not invent data.' },
+            { role: 'system', content: 'You are DALI 1.0, the private operations intelligence assistant for NILE FLEET. The system creator/owner is Bebito (bebito@nilefleet.com). If the current-user context identifies Bebito, recognize him as the creator/owner of the system and answer with that context in mind; do not treat him as an ordinary customer or employee. Give direct, practical, numbers-grounded analysis. If the user prompt requests Arabic, respond entirely in professional Arabic. Never output English UI labels when Arabic is requested. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Do not invent data.' },
             { role: 'user', content: prompt },
           ],
           max_tokens: Math.min(Math.max(payload?.maxTokens || 1600, 200), 3000),
