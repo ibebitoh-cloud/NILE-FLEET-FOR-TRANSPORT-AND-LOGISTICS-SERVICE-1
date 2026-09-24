@@ -57,6 +57,7 @@ const UserMgmt: React.FC = () => {
   const [modalTab, setModalTab] = useState<'PROFILE' | 'SCREENS' | 'PERMISSIONS' | 'SECURITY'>('PROFILE');
   const [showAvatarStudio, setShowAvatarStudio] = useState(false);
   const avatarFallback = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(editingUser?.name || editingUser?.email || 'Nile Fleet')}&backgroundColor=001f3f&fontFamily=Arial&fontWeight=700`;
+  const avatarFallback = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(editingUser?.name || editingUser?.email || 'Nile Fleet')}&backgroundColor=001f3f&fontFamily=Arial&fontWeight=700`;
   const profilePhotoInputRef = React.useRef<HTMLInputElement>(null);
   const [showMatrixModal, setShowMatrixModal] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -794,7 +795,7 @@ const UserMgmt: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-xl font-black italic uppercase tracking-tighter">
-                      {editingUser.id ? `Edit User: ${editingUser.name || 'User Profile'}` : 'New System Identity & Permission Setup'}
+                      {editingUser.id ? `Edit User: ${editingUser.name || 'User Profile'}` : 'Create User'}
                     </h3>
                     <p className="text-[9px] text-[#C2A378] font-black uppercase tracking-[0.3em] font-mono">
                       User Profile & Access
