@@ -405,6 +405,20 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         return null;
       };
 
+      const findCustomerNameFromQuestion = (rawQuestion: string) => {
+        const nq = normalizeEntityText(rawQuestion);
+        const tokens = nq.split(' ').filter(Boolean).filter(t => !intentWords.has(t) && t.length >= 2);
+        const ranked = transactionCustomerNames.map(name => {
+          const alias = normalizeEntityText(name);
+          const compact = alias.replace(/\\s/g, '');
+          const exact = nq === alias || compactEntityText(rawQuestion) === compact;
+          const contains = nq.includes(alias) || alias.includes(nq);
+          const hits = tokens.filter(t => alias.includes(t)).length;
+          return { name, score: exact ? 100000 : contains ? 50000 + alias.length : hits ? 10000 + hits * 2500 : 0 };
+        }).filter(x => x.score > 0).sort((a,b) => b.score - a.score);
+        return ranked[0]?.name || null;
+      };
+
       // Resolve customer references appearing in operations too. Existing
       // operations may predate customer_id, so names are matched by the same
       // normalized multilingual rules.
@@ -423,17 +437,20 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       const collectedIntent = /(?:COLLECTED|RECEIVED|PAYMENTS?|PAID|COLLECTION|تحصيل|المحصل|المقبوض|مدفوعات|دفع)/i.test(question);
       if (soaIntent || (collectedIntent && /(?:CUSTOMER|عميل|لل|من)/i.test(question))) {
         const customer = findCustomerFromQuestion(question);
-        if (customer) {
-          const customerName = customer.companyName || customer.name;
-          const customerOps = operations.filter(o => customerMatchesOperation(customer, o));
-          const customerInvoices = invoices.filter(i => String(i.customerId || '') === String(customer.id) || normalizeEntityText(i.customerName) === normalizeEntityText(customerName));
-          const customerPayments = db.getPayments().filter(p => String(p.customerId || '') === String(customer.id) || normalizeEntityText(p.customerName) === normalizeEntityText(customerName));
+        const resolvedCustomerName = customer?.companyName || customer?.name || findCustomerNameFromQuestion(question);
+        if (resolvedCustomerName) {
+          const customerName = resolvedCustomerName;
+          const customerOps = customer
+            ? operations.filter(o => customerMatchesOperation(customer, o))
+            : operations.filter(o => normalizeEntityText(o.customerName) === normalizeEntityText(customerName));
+          const customerInvoices = invoices.filter(i => (customer && String(i.customerId || '') === String(customer.id)) || normalizeEntityText(i.customerName) === normalizeEntityText(customerName));
+          const customerPayments = db.getPayments().filter(p => (customer && String(p.customerId || '') === String(customer.id)) || normalizeEntityText(p.customerName) === normalizeEntityText(customerName));
           const unbilled = customerOps.filter(o => !o.invoiced).reduce((s, o) => s + (parseFloat(String(o.rate || '0').replace(/,/g,'')) || 0) + (parseFloat(String(o.vat || '0').replace(/,/g,'')) || 0), 0);
           const invoiced = customerInvoices.reduce((s, i) => s + (Number(i.amount) || 0), 0);
           const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
           const paidInvoices = customerInvoices.filter(i => i.status === 'PAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
           const collected = customerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-          const historical = Number(customer.pastOutstandingAmount) || 0;
+          const historical = Number(customer?.pastOutstandingAmount) || 0;
           const netDue = historical + unpaid + unbilled;
           const recentPayments = [...customerPayments].sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
           const lastPayment = recentPayments.length ? ((isAr ? '\nآخر تحصيل: ' : '\nLast payment: ') + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' EGP') : '';
