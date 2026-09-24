@@ -295,84 +295,102 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       const normalizeArabic = (value: unknown) => String(value ?? '')
         .toLowerCase()
         .replace(/[أإآٱ]/g, 'ا')
-        .replace(/ة/g, 'ه')
+        .replace(/[ةه]/g, 'ه')
+        .replace(/[ى]/g, 'ي')
+        .replace(/[ؤ]/g, 'و')
+        .replace(/[ئ]/g, 'ي')
         .replace(/[ًٌٍَُِّْـ]/g, '')
-        .replace(/[إأآا]/g, 'ا')
         .replace(/[^\\p{L}\\p{N}]+/gu, ' ')
         .trim()
         .replace(/\\s+/g, ' ');
 
+      // Arabic/English customer names are resolved against the live profile
+      // AND every known translation/learned translation. This lets DALI
+      // understand "كشف حساب شركة..." even when the user types the customer
+      // using Arabic, English, a translated name, or only a distinctive word.
       const normalizeEntityText = (value: unknown) => normalizeArabic(value)
-        .replace(/\\b(el|al)\\b/g, '')
+        .replace(/\\b(?:el|al|the|company|co|ltd|llc|شركه|شركة|مؤسسه|مؤسسة)\\b/g, ' ')
+        .replace(/\\s+/g, ' ')
         .trim();
 
-      const getCustomerAliases = (customer: User) => {
-        const baseNames = [
-          customer.companyName,
-          customer.companyNameAr,
-          customer.name,
-          translateEntity(customer.companyName, 'ar'),
-          translateEntity(customer.name, 'ar')
-        ].filter(Boolean).map(String);
+      const compactEntityText = (value: unknown) => normalizeEntityText(value).replace(/\\s+/g, '');
 
-        // Also use reverse entries from the learned translation dictionary:
-        // if "ABC LOGISTICS" -> "شركة ايه بي سي" was learned, both forms match.
-        const aliases = new Set(baseNames.map(normalizeEntityText).filter(Boolean));
+      const getCustomerAliases = (customer: User) => {
+        const aliases = new Set<string>();
+        const add = (v: unknown) => {
+          const n = normalizeEntityText(v);
+          if (n && n.length >= 2) aliases.add(n);
+          const compact = compactEntityText(v);
+          if (compact && compact.length >= 3) aliases.add(compact);
+        };
+
+        [customer.companyName, customer.companyNameAr, customer.name].forEach(add);
+        [customer.companyName, customer.companyNameAr, customer.name].filter(Boolean).forEach(v => {
+          add(translateEntity(String(v), 'ar'));
+          add(translateEntity(String(v), 'en'));
+        });
+
         for (const [english, arabic] of Object.entries(dynamicTranslations)) {
           const en = normalizeEntityText(english);
           const ar = normalizeEntityText(arabic);
-          if (baseNames.some(n => normalizeEntityText(n) === en || normalizeEntityText(n) === ar)) {
-            if (en) aliases.add(en);
-            if (ar) aliases.add(ar);
+          const current = [customer.companyName, customer.companyNameAr, customer.name]
+            .filter(Boolean).map(normalizeEntityText);
+          if (current.some(n => n === en || n === ar || (n.length >= 4 && (n.includes(en) || en.includes(n))))) {
+            add(english);
+            add(arabic);
           }
         }
         return Array.from(aliases);
       };
 
+      const intentWords = new Set([
+        'soa','statement','account','customer','client','كشف','حساب','الحساب','العميل','للعميل',
+        'عميل','من','عن','اعرض','اعرضلي','عايز','اريد','محتاج','هات','اعطني','اعرض'
+      ]);
+
       const findCustomerFromQuestion = (rawQuestion: string) => {
-        // Remove the generic SOA wording before resolving the customer.
-        // This prevents words such as "حساب" or "كشف حساب" from accidentally
-        // becoming the matched customer.
-        const customerPart = normalizeEntityText(rawQuestion)
-          .replace(/\\b(?:soa|statement|of|account|customer|كشف|الحساب|حساب|العميل|للعميل|لل|عن|من)\\b/gu, ' ')
-          .replace(/\\s+/g, ' ')
-          .trim();
+        const normalizedQuestion = normalizeEntityText(rawQuestion);
+        const tokens = normalizedQuestion.split(' ').filter(Boolean);
+        const meaningfulTokens = tokens.filter(t => !intentWords.has(t) && t.length >= 2);
+        if (!meaningfulTokens.length) return null;
 
-        if (!customerPart) return null;
-
-        const questionTokens = customerPart.split(' ').filter(Boolean);
         const scored = customerProfiles.map(customer => {
           const aliases = getCustomerAliases(customer);
-          let bestScore = 0;
+          let best = 0;
+          let bestAlias = '';
           for (const alias of aliases) {
-            if (alias.length < 2) continue;
             const aliasTokens = alias.split(' ').filter(Boolean);
-            const exact = customerPart === alias;
-            const contains = customerPart.includes(alias);
-            const reverse = alias.includes(customerPart);
-            const tokenHits = aliasTokens.filter(token => questionTokens.includes(token)).length;
+            const aliasSet = new Set(aliasTokens);
+            const exact = normalizedQuestion === alias || compactEntityText(rawQuestion) === alias;
+            const contains = normalizedQuestion.includes(alias) || alias.includes(normalizedQuestion);
+            const hits = meaningfulTokens.filter(t => aliasSet.has(t) || alias.includes(t) || t.includes(t)).length;
+            const meaningfulAliasTokens = aliasTokens.filter(t => !intentWords.has(t));
+            const coverage = meaningfulAliasTokens.length ? hits / meaningfulAliasTokens.length : 0;
 
-            // Exact full-name match wins. Partial matching is only allowed
-            // when the user supplied a meaningful token, not generic SOA text.
             let score = 0;
-            if (exact) score = 10000 + alias.length;
-            else if (contains) score = 7000 + alias.length;
-            else if (tokenHits > 0 && aliasTokens.length <= questionTokens.length + 1) {
-              score = 3000 + (tokenHits * 500) + alias.length;
-            } else if (reverse && questionTokens.length === 1 && customerPart.length >= 3) {
-              score = 1500 + customerPart.length;
-            }
-            bestScore = Math.max(bestScore, score);
+            if (exact) score = 100000 + alias.length;
+            else if (contains && alias.length >= 3) score = 50000 + alias.length;
+            else if (hits > 0) score = 10000 + (hits * 2500) + Math.round(coverage * 1000) + Math.min(alias.length, 200);
+
+            if (score > best) { best = score; bestAlias = alias; }
           }
-          return { customer, score: bestScore };
+          return { customer, score: best, alias: bestAlias };
         });
 
-        const ranked = scored.filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+        const ranked = scored.filter(x => x.score > 0).sort((a,b) => b.score - a.score);
         if (!ranked.length) return null;
-
-        // Do not guess when two customers have equally strong Arabic aliases.
+        // Avoid guessing between equally strong customer names.
         if (ranked.length > 1 && ranked[0].score === ranked[1].score) return null;
         return ranked[0].customer;
+      };
+
+      // Resolve customer references appearing in operations too. Existing
+      // operations may predate customer_id, so names are matched by the same
+      // normalized multilingual rules.
+      const customerMatchesOperation = (customer: User, op: any) => {
+        if (String(op.customerId || '') === String(customer.id)) return true;
+        const opName = normalizeEntityText(op.customerName);
+        return getCustomerAliases(customer).some(alias => opName === alias || (alias.length >= 4 && opName.includes(alias)));
       };
 
       const customerAliasesForAi = customerProfiles.slice(0, 150).map(customer => ({
@@ -380,15 +398,15 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         arabic: customer.companyNameAr || translateEntity(customer.companyName || customer.name, 'ar'),
         aliases: getCustomerAliases(customer)
       }));
-      const soaIntent = /(?:SOA|STATEMENT OF ACCOUNT|ACCOUNT STATEMENT|CUSTOMER ACCOUNT|كشف\s*حساب|كشف\s*الحساب|حساب العميل|حساب)/i.test(question);
+      const soaIntent = /(?:SOA|STATEMENT\s*(?:OF)?\s*ACCOUNT|ACCOUNT\s*STATEMENT|CUSTOMER\s*ACCOUNT|كشف\s*حساب|كشف\s*الحساب|كشف\s*حساب\s*العميل|حساب\s*العميل|حساب)/i.test(question);
       const collectedIntent = /(?:COLLECTED|RECEIVED|PAYMENTS?|PAID|COLLECTION|تحصيل|المحصل|المقبوض|مدفوعات|دفع)/i.test(question);
       if (soaIntent || (collectedIntent && /(?:CUSTOMER|عميل|لل|من)/i.test(question))) {
         const customer = findCustomerFromQuestion(question);
         if (customer) {
           const customerName = customer.companyName || customer.name;
-          const customerOps = operations.filter(o => String(o.customerId || '') === String(customer.id) || String(o.customerName || '').trim().toUpperCase() === customerName.trim().toUpperCase());
-          const customerInvoices = invoices.filter(i => String(i.customerId || '') === String(customer.id) || String(i.customerName || '').trim().toUpperCase() === customerName.trim().toUpperCase());
-          const customerPayments = db.getPayments().filter(p => String(p.customerId || '') === String(customer.id) || String(p.customerName || '').trim().toUpperCase() === customerName.trim().toUpperCase());
+          const customerOps = operations.filter(o => customerMatchesOperation(customer, o));
+          const customerInvoices = invoices.filter(i => String(i.customerId || '') === String(customer.id) || normalizeEntityText(i.customerName) === normalizeEntityText(customerName));
+          const customerPayments = db.getPayments().filter(p => String(p.customerId || '') === String(customer.id) || normalizeEntityText(p.customerName) === normalizeEntityText(customerName));
           const unbilled = customerOps.filter(o => !o.invoiced).reduce((s, o) => s + (parseFloat(String(o.rate || '0').replace(/,/g,'')) || 0) + (parseFloat(String(o.vat || '0').replace(/,/g,'')) || 0), 0);
           const invoiced = customerInvoices.reduce((s, i) => s + (Number(i.amount) || 0), 0);
           const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
@@ -427,6 +445,18 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         }
       }
 
+      // Natural-language genset location: "فين المولد 452",
+      // "المولد 452 فين", "where is genset 452", etc.
+      const gensetLocationIntent = /(?:فين|اين|أين|مكان|موقع|موجود|location|where|locate|find).*(?:مولد|مولدات|genset|gense?t)|(?:مولد|genset|gense?t).*?(?:فين|اين|أين|مكان|موقع|where|location)/i.test(q);
+      if (gensetLocationIntent) {
+        const id = q.match(/(?:مولد(?:ات)?|GENSETS?|GENSETS?\s*ID)\s*#?\s*([A-Z0-9-]+)/i)?.[1]
+          || q.match(/(?:WHERE|LOCATION|LOCATE|FIND|فين|اين|أين|مكان|موقع).*?#?([0-9]{1,6})/i)?.[1];
+        if (id) {
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(id) }]);
+          return;
+        }
+      }
+
       // Only genuine analysis/reasoning reaches DALI. Keep the model payload tiny.
       const statusCounts = operations.reduce((m: Record<string, number>, o) => { m[o.status] = (m[o.status] || 0) + 1; return m; }, {});
       const portCounts = operations.reduce((m: Record<string, number>, o) => { const p = o.clipOnPort || '—'; m[p] = (m[p] || 0) + 1; return m; }, {});
@@ -440,7 +470,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         gensetStatusCounts: gensets.reduce((m: Record<string, number>, g) => { m[g.status] = (m[g.status] || 0) + 1; return m; }, {}),
         maintenanceCount: maintenance.length
       };
-      const prompt = `You are DALI 1.0, Nile Fleet's fast operations assistant. Answer ONLY the question from LIVE DATA. Never invent. Maximum 3 short lines. If the question is factual and data is missing, say so. Arabic question: Arabic answer. Preserve IDs/numbers exactly.\n${creatorContext}\nQ:${question}\nDATA:${JSON.stringify(context)}`;
+      const prompt = `You are DALI 1.0, Nile Fleet's live operations assistant. Understand Arabic naturally, including Egyptian Arabic, transliterated names, translated customer names, and mixed Arabic/English. Resolve customer names from LIVE customer aliases before answering. For genset location use fleet stock + latest operation + maintenance. For customer SOA use live operations + invoices + payments. Never invent and never say you cannot access data when the data is in the supplied context. Maximum 4 short lines. If the question is factual and data is missing, say so. Arabic question: Arabic answer. Preserve IDs/numbers exactly.\n${creatorContext}\nQ:${question}\nDATA:${JSON.stringify(context)}`;
       const answer = await runThinkingAudit(prompt, 420);
       setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من DALI 1.0.' : 'No response from DALI 1.0.') }]);
     } catch (e) {
