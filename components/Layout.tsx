@@ -225,8 +225,15 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         return { stockHits, opHits, maintenanceHits };
       };
 
-      const answerGenset = (id: string, questionText = '') => {
-        const { stockHits, opHits, maintenanceHits } = lookupGenset(id);
+      const answerGenset = async (id: string, questionText = '') => {
+        let { stockHits, opHits, maintenanceHits } = lookupGenset(id);
+        // If the local cache missed it, query Supabase directly before saying it does not exist.
+        if (!stockHits.length && !opHits.length && !maintenanceHits.length) {
+          const fresh = await db.searchGensetRecords(id);
+          stockHits = fresh.stock;
+          opHits = fresh.operations.sort((a, b) => dateValue(b).localeCompare(dateValue(a)));
+          maintenanceHits = fresh.maintenance.sort((a, b) => String(b.serviceDate || '').localeCompare(String(a.serviceDate || '')));
+        }
         const stock = stockHits[0];
         const latestOp = opHits[0];
         const latestMaintenance = maintenanceHits[0];
@@ -270,14 +277,14 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       };
 
       if (idMatch) {
-        setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(idMatch[1], question) }]);
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: await answerGenset(idMatch[1], question) }]);
         return;
       }
 
       // A short standalone number is also a genset search. This prevents
       // questions such as "464" from unnecessarily going through the LLM.
       if (/^\\d{1,6}$/.test(q.trim())) {
-        setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(q.trim(), question) }]);
+        setAiChatMessages(prev => [...prev, { role: 'ai', text: await answerGenset(q.trim(), question) }]);
         return;
       }
 
@@ -286,7 +293,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       if (searchMatch) {
         const value = searchMatch[1];
         if (/^\d{1,6}$/.test(value)) {
-          setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(value, question) }]);
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: await answerGenset(value, question) }]);
           return;
         }
       }
