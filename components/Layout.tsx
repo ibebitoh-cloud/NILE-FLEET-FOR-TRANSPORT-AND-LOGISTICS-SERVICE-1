@@ -295,7 +295,8 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       if (searchMatch) {
         const value = searchMatch[1];
         if (/^\d{1,6}$/.test(value)) {
-          setAiChatMessages(prev => [...prev, { role: 'ai', text: await answerGenset(value, question) }]);
+          const answer = await answerGenset(value, question);
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
           return;
         }
       }
