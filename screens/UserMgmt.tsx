@@ -57,7 +57,6 @@ const UserMgmt: React.FC = () => {
   const [modalTab, setModalTab] = useState<'PROFILE' | 'SCREENS' | 'PERMISSIONS' | 'SECURITY'>('PROFILE');
   const [showAvatarStudio, setShowAvatarStudio] = useState(false);
   const avatarFallback = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(editingUser?.name || editingUser?.email || 'Nile Fleet')}&backgroundColor=001f3f&fontFamily=Arial&fontWeight=700`;
-  const avatarFallback = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(editingUser?.name || editingUser?.email || 'Nile Fleet')}&backgroundColor=001f3f&fontFamily=Arial&fontWeight=700`;
   const profilePhotoInputRef = React.useRef<HTMLInputElement>(null);
   const [showMatrixModal, setShowMatrixModal] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
