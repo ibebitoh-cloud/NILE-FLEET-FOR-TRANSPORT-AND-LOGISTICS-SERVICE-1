@@ -350,8 +350,11 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       };
 
       const intentWords = new Set([
-        'soa','statement','account','customer','client','كشف','حساب','الحساب','العميل','للعميل',
-        'عميل','من','عن','اعرض','اعرضلي','عايز','اريد','محتاج','هات','اعطني','اعرض'
+        'soa','statement','account','customer','client','company','كشف','كشفحساب','حساب','الحساب',
+        'العميل','للعميل','عميل','شركة','شركه','مؤسسة','مؤسسه','من','عن','اعرض','اعرضلي',
+        'عايز','اريد','محتاج','هات','اعطني','اعرض','قولي','قوللي','وريني','رصيد','الرصيد',
+        'مستحق','المستحق','مديونية','تحصيل','تحصيلات','المحصل','المقبوض','دفع','مدفوع',
+        'فاتورة','فواتير','عملية','عمليه','عمليات','حجز','حجوزات','بيان'
       ]);
 
       const findCustomerFromQuestion = (rawQuestion: string) => {
@@ -385,9 +388,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         });
 
         const ranked = scored.filter(x => x.score > 0).sort((a,b) => b.score - a.score);
-        if (ranked.length) {
-          if (ranked[0].customer && (!ranked[1] || ranked[0].score > ranked[1].score)) return ranked[0].customer;
-          if (ranked[0].customer && ranked[1]?.customer && Math.abs(ranked[0].score - ranked[1].score) >= 1000) return ranked[0].customer;
+        if (ranked.length && ranked[0].customer) {
+          const top = ranked[0];
+          const second = ranked[1];
+          if (!second || top.score >= 50000 || top.score - second.score >= 2500) return top.customer;
         }
         // Fallback: resolve directly against names stored on operations/invoices/payments.
         const tx = transactionCustomerNames.map(name => {
@@ -467,9 +471,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         arabic: customer.companyNameAr || translateEntity(customer.companyName || customer.name, 'ar'),
         aliases: getCustomerAliases(customer)
       }));
-      const soaIntent = /(?:SOA|STATEMENT\s*(?:OF)?\s*ACCOUNT|ACCOUNT\s*STATEMENT|CUSTOMER\s*ACCOUNT|كشف\s*حساب|كشف\s*الحساب|كشف\s*حساب\s*العميل|حساب\s*العميل|حساب)/i.test(question);
-      const collectedIntent = /(?:COLLECTED|RECEIVED|PAYMENTS?|PAID|COLLECTION|تحصيل|المحصل|المقبوض|مدفوعات|دفع)/i.test(question);
-      if (soaIntent || (collectedIntent && /(?:CUSTOMER|عميل|لل|من)/i.test(question))) {
+      const soaIntent = /(?:SOA|STATEMENT\s*(?:OF)?\s*ACCOUNT|ACCOUNT\s*STATEMENT|CUSTOMER\s*ACCOUNT|ACCOUNT\s*OF|كشف\s*حساب|كشف\s*الحساب|كشف\s*حساب\s*العميل|حساب\s*العميل|كشف|بيان\s*حساب)/i.test(question);
+      const collectedIntent = /(?:COLLECTED|RECEIVED|PAYMENTS?|PAID|COLLECTION|MONEY\s*RECEIVED|تحصيل|التحصيل|تحصيلات|المحصل|المقبوض|المقبوضات|مدفوعات|الدفع|دفعات|فلوس)/i.test(question);
+      const customerFinancialIntent = /(?:BALANCE|DUE|OUTSTANDING|DEBT|INVOICED|UNPAID|رصيد|مستحق|مستحقات|مديونية|فواتير|فاتورة|غير\s*مسدد|غير\s*محصل)/i.test(question);
+      if (soaIntent || collectedIntent || customerFinancialIntent) {
         const customer = findCustomerFromQuestion(question);
         const resolvedCustomerName = customer?.companyName || customer?.name || findCustomerNameFromQuestion(question);
         if (resolvedCustomerName) {
@@ -490,7 +495,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           const lastPayment = recentPayments.length ? ((isAr ? '\nآخر تحصيل: ' : '\nLast payment: ') + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' EGP') : '';
           const recentOps = [...customerOps]
             .sort((a,b) => String(b.operationDate || '').localeCompare(String(a.operationDate || '')))
-            .slice(0, 5)
+            .slice(0, 10)
             .map(o => isAr
               ? `\\n• حجز ${o.bookingNumber || '—'} | حاوية ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | سعر ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | شاحن: ${o.beneficiaryName || '—'} | ناقل: ${o.trucker || '—'}`
               : `\\n• Booking ${o.bookingNumber || '—'} | Container ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | Rate ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | Shipper: ${o.beneficiaryName || '—'} | Trucker: ${o.trucker || '—'}`
@@ -526,9 +531,9 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       // Natural-language genset location: "فين المولد 452",
       // "المولد 452 فين", "where is genset 452", etc.
-      const gensetLocationIntent = /(?:فين|اين|أين|مكان|موقع|موجود|location|where|locate|find).*(?:مولد|مولدات|genset|gense?t)|(?:مولد|genset|gense?t).*?(?:فين|اين|أين|مكان|موقع|where|location)/i.test(q);
+      const gensetLocationIntent = /(?:فين|اين|أين|مكان|موقع|موجود|عايز\s*اعرف|location|where|locate|find|position).*(?:مولد|مولدات|وحدة|genset|gense?t)|(?:مولد|مولدات|وحدة|genset|gense?t).*?(?:فين|اين|أين|مكان|موقع|موجود|where|location|position)/i.test(q);
       if (gensetLocationIntent) {
-        const id = q.match(/(?:مولد(?:ات)?|GENSETS?|GENSETS?\s*ID)\s*#?\s*([A-Z0-9-]+)/i)?.[1]
+        const id = q.match(/(?:مولد(?:ات)?|وحدة|GENSET(?:S)?|GENSETS?\s*ID)\s*#?\s*([A-Z0-9-]+)/i)?.[1]
           || q.match(/(?:WHERE|LOCATION|LOCATE|FIND|فين|اين|أين|مكان|موقع).*?#?([0-9]{1,6})/i)?.[1];
         if (id) {
           setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(id) }]);
