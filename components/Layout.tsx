@@ -511,7 +511,52 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           return;
         }
         if (soaIntent) {
-          setAiChatMessages(prev => [...prev, { role: 'ai', text: responseIsAr ? 'حدد اسم العميل في السؤال لأعرض كشف الحساب.' : 'Please include the customer name so I can show the Statement of Account.' }]);
+          // A bare "كشف حساب / SOA" should still return useful live data.
+          // Show a company-wide receivables/collections summary instead of
+          // handing the question to the LLM or returning an empty answer.
+          const allPayments = db.getPayments();
+          const names = Array.from(new Set([
+            ...customerProfiles.map(u => u.companyName || u.name),
+            ...operations.map(o => o.customerName),
+            ...invoices.map(i => i.customerName),
+            ...allPayments.map(p => p.customerName)
+          ].filter(Boolean).map(String)));
+          const rows = names.map(name => {
+            const n = normalizeEntityText(name);
+            const ops = operations.filter(o => normalizeEntityText(o.customerName) === n);
+            const invs = invoices.filter(i => normalizeEntityText(i.customerName) === n);
+            const pays = allPayments.filter(p => normalizeEntityText(p.customerName) === n);
+            const billed = invs.reduce((s,i) => s + (Number(i.amount)||0), 0);
+            const collected = pays.reduce((s,p) => s + (Number(p.amount)||0), 0);
+            const unpaid = invs.filter(i => i.status === 'UNPAID').reduce((s,i) => s + (Number(i.amount)||0), 0);
+            const unbilled = ops.filter(o => !o.invoiced).reduce((s,o) => s + (parseFloat(String(o.rate||'0').replace(/,/g,''))||0) + (parseFloat(String(o.vat||'0').replace(/,/g,''))||0), 0);
+            return { name, ops: ops.length, billed, collected, unpaid, unbilled, due: unpaid + unbilled };
+          }).sort((a,b) => b.due - a.due);
+
+          const totalCollected = rows.reduce((s,r) => s + r.collected, 0);
+          const totalBilled = rows.reduce((s,r) => s + r.billed, 0);
+          const totalDue = rows.reduce((s,r) => s + r.due, 0);
+          const visible = rows.slice(0, 30);
+
+          const answer = responseIsAr
+            ? 'كشف الحساب العام\n' +
+              'العملاء: ' + rows.length + '\n' +
+              'إجمالي الفواتير: ' + totalBilled.toLocaleString() + ' جنيه\n' +
+              'إجمالي التحصيل: ' + totalCollected.toLocaleString() + ' جنيه\n' +
+              'إجمالي المستحق: ' + totalDue.toLocaleString() + ' جنيه\n\n' +
+              'تفصيل العملاء:\n' +
+              visible.map(r => '• ' + r.name + ' | عمليات: ' + r.ops + ' | فواتير: ' + r.billed.toLocaleString() + ' | تحصيل: ' + r.collected.toLocaleString() + ' | غير مسدد: ' + r.unpaid.toLocaleString() + ' | غير مفوتر: ' + r.unbilled.toLocaleString()).join('\n') +
+              (rows.length > visible.length ? '\n\nعرض أول ' + visible.length + ' عميل. اكتب "كشف حساب [اسم العميل]" للتفاصيل الكاملة.' : '')
+            : 'GENERAL STATEMENT OF ACCOUNT\n' +
+              'Customers: ' + rows.length + '\n' +
+              'Total invoiced: ' + totalBilled.toLocaleString() + ' EGP\n' +
+              'Total collected: ' + totalCollected.toLocaleString() + ' EGP\n' +
+              'Total due: ' + totalDue.toLocaleString() + ' EGP\n\n' +
+              'Customer breakdown:\n' +
+              visible.map(r => '• ' + r.name + ' | Ops: ' + r.ops + ' | Invoiced: ' + r.billed.toLocaleString() + ' | Collected: ' + r.collected.toLocaleString() + ' | Unpaid: ' + r.unpaid.toLocaleString() + ' | Unbilled: ' + r.unbilled.toLocaleString()).join('\n') +
+              (rows.length > visible.length ? '\n\nShowing first ' + visible.length + ' customers. Ask "SOA [customer name]" for full details.' : '');
+
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
           return;
         }
       }
