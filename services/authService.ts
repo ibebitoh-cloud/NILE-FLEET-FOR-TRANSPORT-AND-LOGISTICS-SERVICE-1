@@ -2,11 +2,15 @@ import { supabase } from './supabaseClient';
 import { User, UserRole } from '../types';
 
 // Maps a Supabase `profiles` row (snake_case) into the app's existing User shape (camelCase)
+const SYSTEM_CREATOR_EMAIL = 'bebito@nilefleet.com';
+
 function mapProfileToUser(profile: any, email: string): User {
+  const normalizedEmail = String(email || profile.email || '').trim().toLowerCase();
   return {
     id: profile.id,
     name: profile.name,
     email: email,
+    isCreator: normalizedEmail === SYSTEM_CREATOR_EMAIL,
     role: profile.role as UserRole,
     companyName: profile.company_name,
     companyNameAr: profile.company_name_ar,
