@@ -156,6 +156,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
   const askNileAi = async () => {
     const question = aiChatInput.trim();
     if (!question || aiChatLoading) return;
+    // DALI replies in the language the user is actually using. This is independent
+    // from the application's UI language, so an Arabic question gets an Arabic answer.
+    const questionHasArabic = /[\u0600-\u06FF]/.test(question);
+    const responseIsAr = questionHasArabic || isAr;
     setAiChatInput('');
     setAiChatMessages(prev => [...prev, { role: 'user', text: question }]);
     setAiChatLoading(true);
@@ -227,12 +231,12 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         const latestOp = opHits[0];
         const latestMaintenance = maintenanceHits[0];
         if (!stock && !latestOp && !latestMaintenance) {
-          return isAr ? `المولد ${id} غير موجود في بيانات الأسطول أو السجل التشغيلي.` : `GENSET ${id} was not found in fleet, operations, or maintenance records.`;
+          return responseIsAr ? `المولد ${id} غير موجود في بيانات الأسطول أو السجل التشغيلي.` : `GENSET ${id} was not found in fleet, operations, or maintenance records.`;
         }
         const stockNumber = stock?.unitNumber || stock?.gensetNumber || id;
         const location = stock?.location || latestOp?.clipOnPort || latestOp?.clipOffPort || latestMaintenance?.location || '—';
         const status = stock?.status || latestOp?.status || latestMaintenance?.status || '—';
-        if (isAr) {
+        if (responseIsAr) {
           return `المولد ${stockNumber}\nالحالة: ${status}\nالموقع: ${location}${latestOp ? `\nالحجز: ${latestOp.bookingNumber || '—'}\nالحاوية: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nآخر صيانة: ${latestMaintenance.serviceDate || '—'}` : ''}`;
         }
         return `GENSET ${stockNumber}\nStatus: ${status}\nLocation: ${location}${latestOp ? `\nBooking: ${latestOp.bookingNumber || '—'}\nContainer: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nLast maintenance: ${latestMaintenance.serviceDate || '—'}` : ''}`;
@@ -500,14 +504,14 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
               ? `\\n• حجز ${o.bookingNumber || '—'} | حاوية ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | سعر ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | شاحن: ${o.beneficiaryName || '—'} | ناقل: ${o.trucker || '—'}`
               : `\\n• Booking ${o.bookingNumber || '—'} | Container ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | Rate ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | Shipper: ${o.beneficiaryName || '—'} | Trucker: ${o.trucker || '—'}`
             ).join('');
-          const answer = isAr
-            ? 'كشف حساب: ' + customerName + '\\nالعمليات: ' + customerOps.length + ' | الفواتير: ' + customerInvoices.length + '\\nإجمالي الفواتير: ' + invoiced.toLocaleString() + ' EGP | المدفوع بالفواتير: ' + paidInvoices.toLocaleString() + ' EGP\\nإجمالي التحصيل: ' + collected.toLocaleString() + ' EGP\\nغير مسدد: ' + unpaid.toLocaleString() + ' EGP | غير مفوتر: ' + unbilled.toLocaleString() + ' EGP\\nالرصيد المستحق: ' + netDue.toLocaleString() + ' EGP' + lastPayment + (recentOps ? '\\nآخر العمليات:' + recentOps : '')
+          const answer = responseIsAr
+            ? 'كشف حساب: ' + customerName + '\\nالعمليات: ' + customerOps.length + ' | الفواتير: ' + customerInvoices.length + '\\nإجمالي الفواتير: ' + invoiced.toLocaleString() + ' جنيه | المدفوع بالفواتير: ' + paidInvoices.toLocaleString() + ' جنيه\\nإجمالي التحصيل: ' + collected.toLocaleString() + ' جنيه\\nغير مسدد: ' + unpaid.toLocaleString() + ' جنيه | غير مفوتر: ' + unbilled.toLocaleString() + ' جنيه\\nالرصيد المستحق: ' + netDue.toLocaleString() + ' جنيه' + (recentPayments.length ? '\\nآخر تحصيل: ' + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' جنيه' : '') + (recentOps ? '\\nالعمليات الأخيرة:' + recentOps : '')
             : 'SOA: ' + customerName + '\\nOperations: ' + customerOps.length + ' | Invoices: ' + customerInvoices.length + '\\nInvoiced: ' + invoiced.toLocaleString() + ' EGP | Paid invoices: ' + paidInvoices.toLocaleString() + ' EGP\\nTotal collected: ' + collected.toLocaleString() + ' EGP\\nUnpaid: ' + unpaid.toLocaleString() + ' EGP | Unbilled: ' + unbilled.toLocaleString() + ' EGP\\nNet due: ' + netDue.toLocaleString() + ' EGP' + lastPayment + (recentOps ? '\\nRecent operations:' + recentOps : '');
           setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
           return;
         }
         if (soaIntent) {
-          setAiChatMessages(prev => [...prev, { role: 'ai', text: isAr ? 'حدد اسم العميل في السؤال لأعرض كشف الحساب.' : 'Please include the customer name so I can show the Statement of Account.' }]);
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: responseIsAr ? 'حدد اسم العميل في السؤال لأعرض كشف الحساب.' : 'Please include the customer name so I can show the Statement of Account.' }]);
           return;
         }
       }
