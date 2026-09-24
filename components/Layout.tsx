@@ -330,25 +330,55 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       };
 
       const findCustomerFromQuestion = (rawQuestion: string) => {
-        const normalizedQuestion = normalizeEntityText(rawQuestion);
-        return customerProfiles
-          .map(customer => {
-            const aliases = getCustomerAliases(customer);
-            const matchedAlias = aliases
-              .filter(alias => alias.length >= 2 && (
-                normalizedQuestion.includes(alias) ||
-                alias.includes(normalizedQuestion)
-              ))
-              .sort((a, b) => b.length - a.length)[0];
-            return matchedAlias ? { customer, score: matchedAlias.length } : null;
-          })
-          .filter(Boolean)
-          .sort((a, b) => (b?.score || 0) - (a?.score || 0))[0]?.customer || null;
+        // Remove the generic SOA wording before resolving the customer.
+        // This prevents words such as "حساب" or "كشف حساب" from accidentally
+        // becoming the matched customer.
+        const customerPart = normalizeEntityText(rawQuestion)
+          .replace(/\\b(?:soa|statement|of|account|customer|كشف|الحساب|حساب|العميل|للعميل|لل|عن|من)\\b/gu, ' ')
+          .replace(/\\s+/g, ' ')
+          .trim();
+
+        if (!customerPart) return null;
+
+        const questionTokens = customerPart.split(' ').filter(Boolean);
+        const scored = customerProfiles.map(customer => {
+          const aliases = getCustomerAliases(customer);
+          let bestScore = 0;
+          for (const alias of aliases) {
+            if (alias.length < 2) continue;
+            const aliasTokens = alias.split(' ').filter(Boolean);
+            const exact = customerPart === alias;
+            const contains = customerPart.includes(alias);
+            const reverse = alias.includes(customerPart);
+            const tokenHits = aliasTokens.filter(token => questionTokens.includes(token)).length;
+
+            // Exact full-name match wins. Partial matching is only allowed
+            // when the user supplied a meaningful token, not generic SOA text.
+            let score = 0;
+            if (exact) score = 10000 + alias.length;
+            else if (contains) score = 7000 + alias.length;
+            else if (tokenHits > 0 && aliasTokens.length <= questionTokens.length + 1) {
+              score = 3000 + (tokenHits * 500) + alias.length;
+            } else if (reverse && questionTokens.length === 1 && customerPart.length >= 3) {
+              score = 1500 + customerPart.length;
+            }
+            bestScore = Math.max(bestScore, score);
+          }
+          return { customer, score: bestScore };
+        });
+
+        const ranked = scored.filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+        if (!ranked.length) return null;
+
+        // Do not guess when two customers have equally strong Arabic aliases.
+        if (ranked.length > 1 && ranked[0].score === ranked[1].score) return null;
+        return ranked[0].customer;
       };
 
       const customerAliasesForAi = customerProfiles.slice(0, 150).map(customer => ({
         english: customer.companyName || customer.name,
-        arabic: customer.companyNameAr || translateEntity(customer.companyName || customer.name, 'ar')
+        arabic: customer.companyNameAr || translateEntity(customer.companyName || customer.name, 'ar'),
+        aliases: getCustomerAliases(customer)
       }));
       const soaIntent = /(?:SOA|STATEMENT OF ACCOUNT|ACCOUNT STATEMENT|CUSTOMER ACCOUNT|كشف\s*حساب|كشف\s*الحساب|حساب العميل|حساب)/i.test(question);
       const collectedIntent = /(?:COLLECTED|RECEIVED|PAYMENTS?|PAID|COLLECTION|تحصيل|المحصل|المقبوض|مدفوعات|دفع)/i.test(question);
