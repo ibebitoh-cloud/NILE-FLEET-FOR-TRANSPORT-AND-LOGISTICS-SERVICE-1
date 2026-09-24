@@ -238,6 +238,37 @@ class SupabaseDB {
   // ─── synchronous getters (return cached data) ───────────────────────────────
 
   getStock(): Genset[] { return _stock; }
+  /** Fresh database lookup used by DALI when the local cache does not contain a genset. */
+  async searchGensetRecords(value: string): Promise<{ stock: Genset[]; operations: Operation[]; maintenance: GensetMaintenanceLog[] }> {
+    const raw = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const digits = raw.replace(/\\D/g, '');
+    const aliases = new Set<string>([raw]);
+    if (digits) {
+      aliases.add(digits);
+      aliases.add(digits.slice(-4).padStart(4, '0'));
+    }
+    const matches = (v: unknown) => {
+      const s = String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (!s) return false;
+      const sd = s.replace(/\\D/g, '');
+      const candidates = new Set<string>([s]);
+      if (sd) {
+        candidates.add(sd);
+        candidates.add(sd.slice(-4).padStart(4, '0'));
+      }
+      return [...aliases].some(a => candidates.has(a));
+    };
+    const [stockRows, operationRows, maintenanceRows] = await Promise.all([
+      query<Genset>('gensets'),
+      query<Operation>('operations'),
+      query<GensetMaintenanceLog>('genset_maintenance_logs')
+    ]);
+    return {
+      stock: stockRows.filter(g => [g.unitNumber, g.id].some(matches)),
+      operations: operationRows.filter(o => matches(o.gensetNumber)),
+      maintenance: maintenanceRows.filter(m => matches(m.gensetNumber))
+    };
+  }
   getReservations(): Reservation[] { return _reservations; }
   getOperations(): Operation[] { return _operations; }
 
