@@ -368,6 +368,32 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         const meaningfulTokens = tokens.filter(t => !intentWords.has(t) && t.length >= 2);
         if (!meaningfulTokens.length) return null;
 
+        // IMPORTANT: SOA/customer questions must never pick a customer merely
+        // because one generic word happens to match. First look for the longest
+        // exact customer name/alias contained in the user's question.
+        const exactCandidates: Array<{ customer: User; alias: string; score: number }> = [];
+        for (const customer of customerProfiles) {
+          for (const alias of getCustomerAliases(customer)) {
+            if (!alias || alias.length < 3) continue;
+            const compactAlias = alias.replace(/\s/g, '');
+            if (normalizedQuestion === alias || compactQuestion === compactAlias) {
+              exactCandidates.push({ customer, alias, score: 200000 + alias.length });
+            } else if (normalizedQuestion.includes(alias) || compactQuestion.includes(compactAlias)) {
+              exactCandidates.push({ customer, alias, score: 150000 + alias.length });
+            }
+          }
+        }
+        if (exactCandidates.length) {
+          exactCandidates.sort((a,b) => b.score - a.score || b.alias.length - a.alias.length);
+          const top = exactCandidates[0];
+          // If two different customers have the same exact alias, do not guess.
+          const tied = exactCandidates.filter(x => x.customer.id !== top.customer.id && x.score === top.score);
+          if (!tied.length) return top.customer;
+        }
+
+        // Fuzzy matching is deliberately conservative. Require at least two
+        // meaningful name tokens, or a unique distinctive token across ALL live
+        // customer names. This prevents "كشف حساب X" from returning another X.
         const scored = customerProfiles.map(customer => {
           const aliases = getCustomerAliases(customer);
           let best = 0;
@@ -375,50 +401,44 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           for (const alias of aliases) {
             const aliasTokens = alias.split(' ').filter(Boolean);
             const aliasSet = new Set(aliasTokens);
-            const exact = normalizedQuestion === alias || compactQuestion === alias.replace(/\s/g, '');
-            const contains = normalizedQuestion.includes(alias) || alias.includes(normalizedQuestion);
-            const hits = meaningfulTokens.filter(t => aliasSet.has(t) || alias.includes(t) || (t.length >= 3 && aliasSet.has(t.slice(0, Math.max(2, t.length - 1))))).length;
+            const hits = meaningfulTokens.filter(t =>
+              aliasSet.has(t) || (t.length >= 3 && alias.includes(t))
+            ).length;
             const meaningfulAliasTokens = aliasTokens.filter(t => !intentWords.has(t));
             const coverage = meaningfulAliasTokens.length ? hits / meaningfulAliasTokens.length : 0;
-
-            let score = 0;
-            if (exact) score = 100000 + alias.length;
-            else if (contains && alias.length >= 3) score = 50000 + alias.length;
-            else if (hits >= 2) score = 10000 + (hits * 2500) + Math.round(coverage * 1000) + Math.min(alias.length, 200);
-            // Never resolve a customer from one weak word. A generic word in an
-            // Arabic/English question must not accidentally select the same customer.
-            else if (hits === 1 && meaningfulTokens.length === 1 && tokens.some(t => t.length >= 4) && aliasTokens.length === 1) {
-              score = 7000 + Math.min(alias.length, 200);
-            }
-
+            const score = hits >= 2
+              ? 10000 + hits * 3000 + Math.round(coverage * 2000) + Math.min(alias.length, 300)
+              : 0;
             if (score > best) { best = score; bestAlias = alias; }
           }
           return { customer, score: best, alias: bestAlias };
-        });
+        }).filter(x => x.score > 0).sort((a,b) => b.score - a.score);
 
-        const ranked = scored.filter(x => x.score > 0).sort((a,b) => b.score - a.score);
-        if (ranked.length && ranked[0].customer) {
-          const top = ranked[0];
-          const second = ranked[1];
-          // Strong match = exact/phrase match. Weak/fuzzy matches are only
-          // accepted when clearly separated from another customer.
-          if (top.score >= 50000) return top.customer;
-          if (top.score >= 10000 && (!second || top.score - second.score >= 4000)) return top.customer;
-          // Do not guess. Returning null lets SOA fall back to the general
-          // statement instead of showing an unrelated customer's account.
+        if (scored.length) {
+          const top = scored[0];
+          const second = scored[1];
+          if (top.score >= 10000 && (!second || top.score - second.score >= 5000)) return top.customer;
         }
-        // Fallback: resolve directly against names stored on operations/invoices/payments.
+
+        // Last fallback: exact/contained match against customer names already
+        // stored in operations, invoices and payments. Again, longest match wins.
         const tx = transactionCustomerNames.map(name => {
           const alias = normalizeEntityText(name);
           const compact = alias.replace(/\s/g, '');
           const exact = normalizedQuestion === alias || compactQuestion === compact;
-          const contains = normalizedQuestion.includes(alias) || alias.includes(normalizedQuestion);
-          const hits = meaningfulTokens.filter(t => alias.includes(t)).length;
-          return { name, score: exact ? 90000 : contains ? 50000 : hits ? 10000 + hits * 2000 : 0 };
+          const contains = normalizedQuestion.includes(alias) || compactQuestion.includes(compact);
+          return { name, alias, score: exact ? 200000 + alias.length : contains ? 150000 + alias.length : 0 };
         }).filter(x => x.score > 0).sort((a,b) => b.score - a.score);
-        if (tx.length && tx[0].score >= 50000) {
-          const matched = customerProfiles.find(c => normalizeEntityText(c.companyName || c.name) === normalizeEntityText(tx[0].name));
-          return matched || null;
+
+        if (tx.length) {
+          const top = tx[0];
+          const sameName = tx.filter(x => normalizeEntityText(x.name) === normalizeEntityText(top.name));
+          if (sameName.length) {
+            const matched = customerProfiles.find(c =>
+              normalizeEntityText(c.companyName || c.name) === normalizeEntityText(top.name)
+            );
+            return matched || null;
+          }
         }
         return null;
       };
