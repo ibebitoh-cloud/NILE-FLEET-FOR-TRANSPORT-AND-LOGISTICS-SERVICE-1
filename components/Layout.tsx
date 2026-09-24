@@ -494,7 +494,11 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           const paidInvoices = customerInvoices.filter(i => i.status === 'PAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
           const collected = customerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
           const historical = Number(customer?.pastOutstandingAmount) || 0;
-          const netDue = historical + unpaid + unbilled;
+          // SOA definition: the customer balance is the amount still due after all
+          // recorded customer payments. Do not treat "pass ship" / shipper text as
+          // the customer identity; the resolved customer record is the authority.
+          const grossDue = historical + unpaid + unbilled;
+          const netDue = Math.max(0, grossDue - collected);
           const recentPayments = [...customerPayments].sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
           const lastPayment = recentPayments.length ? ((isAr ? '\nآخر تحصيل: ' : '\nLast payment: ') + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' EGP') : '';
           const recentOps = [...customerOps]
@@ -505,8 +509,8 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
               : `\\n• Booking ${o.bookingNumber || '—'} | Container ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | Rate ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | Shipper: ${o.beneficiaryName || '—'} | Trucker: ${o.trucker || '—'}`
             ).join('');
           const answer = responseIsAr
-            ? 'كشف حساب: ' + customerName + '\\nالعمليات: ' + customerOps.length + ' | الفواتير: ' + customerInvoices.length + '\\nإجمالي الفواتير: ' + invoiced.toLocaleString() + ' جنيه | المدفوع بالفواتير: ' + paidInvoices.toLocaleString() + ' جنيه\\nإجمالي التحصيل: ' + collected.toLocaleString() + ' جنيه\\nغير مسدد: ' + unpaid.toLocaleString() + ' جنيه | غير مفوتر: ' + unbilled.toLocaleString() + ' جنيه\\nالرصيد المستحق: ' + netDue.toLocaleString() + ' جنيه' + (recentPayments.length ? '\\nآخر تحصيل: ' + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' جنيه' : '') + (recentOps ? '\\nالعمليات الأخيرة:' + recentOps : '')
-            : 'SOA: ' + customerName + '\\nOperations: ' + customerOps.length + ' | Invoices: ' + customerInvoices.length + '\\nInvoiced: ' + invoiced.toLocaleString() + ' EGP | Paid invoices: ' + paidInvoices.toLocaleString() + ' EGP\\nTotal collected: ' + collected.toLocaleString() + ' EGP\\nUnpaid: ' + unpaid.toLocaleString() + ' EGP | Unbilled: ' + unbilled.toLocaleString() + ' EGP\\nNet due: ' + netDue.toLocaleString() + ' EGP' + lastPayment + (recentOps ? '\\nRecent operations:' + recentOps : '');
+            ? 'كشف حساب: ' + customerName + '\\nالمستحق: ' + grossDue.toLocaleString() + ' جنيه | المدفوع: ' + collected.toLocaleString() + ' جنيه\\nالرصيد المتبقي: ' + netDue.toLocaleString() + ' جنيه\\nالفواتير: ' + invoiced.toLocaleString() + ' جنيه | غير مسدد: ' + unpaid.toLocaleString() + ' جنيه | غير مفوتر: ' + unbilled.toLocaleString() + ' جنيه' + (recentPayments.length ? '\\nآخر تحصيل: ' + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' جنيه' : '') + (recentOps ? '\\nالعمليات الأخيرة:' + recentOps : '')
+            : 'SOA: ' + customerName + '\\nDue: ' + grossDue.toLocaleString() + ' EGP | Paid: ' + collected.toLocaleString() + ' EGP\\nRemaining balance: ' + netDue.toLocaleString() + ' EGP\\nInvoiced: ' + invoiced.toLocaleString() + ' EGP | Unpaid: ' + unpaid.toLocaleString() + ' EGP | Unbilled: ' + unbilled.toLocaleString() + ' EGP' + lastPayment + (recentOps ? '\\nRecent operations:' + recentOps : '');
           setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
           return;
         }
