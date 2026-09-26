@@ -1,25 +1,25 @@
 
-import React, { useState, createContext, useContext, useEffect } from 'react';
-import Login from './screens/Login';
-import Dashboard from './screens/Dashboard';
-import Operations from './screens/Operations';
-import StockManagement from './screens/StockManagement';
-import Reservations from './screens/Reservations';
-import Customers from './screens/Customers';
-import CustomerPrices from './screens/CustomerPrices';
-import Financials from './screens/Financials';
-import HistoryLog from './screens/HistoryLog';
-import Intelligence from './screens/Intelligence';
-import Reports from './screens/Reports';
-import CustomerPortal from './screens/CustomerPortal';
-import MasterView from './screens/MasterView';
-import Analytics from './screens/Analytics';
-import UserSettings from './screens/UserSettings';
-import PortGateControl from './screens/PortGateControl';
-import UserMgmt from './screens/UserMgmt';
-import CustomerService from './screens/CustomerService';
-import BookingInvoices from './screens/BookingInvoices';
-import Notifications from './screens/Notifications';
+import React, { lazy, Suspense, useState, createContext, useContext, useEffect } from 'react';
+const Login = lazy(() => import('./screens/Login'));
+const Dashboard = lazy(() => import('./screens/Dashboard'));
+const Operations = lazy(() => import('./screens/Operations'));
+const StockManagement = lazy(() => import('./screens/StockManagement'));
+const Reservations = lazy(() => import('./screens/Reservations'));
+const Customers = lazy(() => import('./screens/Customers'));
+const CustomerPrices = lazy(() => import('./screens/CustomerPrices'));
+const Financials = lazy(() => import('./screens/Financials'));
+const HistoryLog = lazy(() => import('./screens/HistoryLog'));
+const Intelligence = lazy(() => import('./screens/Intelligence'));
+const Reports = lazy(() => import('./screens/Reports'));
+const CustomerPortal = lazy(() => import('./screens/CustomerPortal'));
+const MasterView = lazy(() => import('./screens/MasterView'));
+const Analytics = lazy(() => import('./screens/Analytics'));
+const UserSettings = lazy(() => import('./screens/UserSettings'));
+const PortGateControl = lazy(() => import('./screens/PortGateControl'));
+const UserMgmt = lazy(() => import('./screens/UserMgmt'));
+const CustomerService = lazy(() => import('./screens/CustomerService'));
+const BookingInvoices = lazy(() => import('./screens/BookingInvoices'));
+const Notifications = lazy(() => import('./screens/Notifications'));
 import Layout from './components/Layout';
 import { User, UserRole } from './types';
 import { db } from './services/supabaseDb';
@@ -401,7 +401,9 @@ const App: React.FC = () => {
     return (
       <LanguageContext value={{ lang, setLang }}>
         <ThemeContext value={{ theme, setTheme, scale, setScale, isMuted, setIsMuted, isDark, updateCustomTheme }}>
-          <Login onLogin={handleLogin} />
+          <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>}>
+            <Login onLogin={handleLogin} />
+          </Suspense>
         </ThemeContext>
       </LanguageContext>
     );
@@ -446,7 +448,9 @@ const App: React.FC = () => {
           activeScreen={activeScreen} 
           setActiveScreen={(s) => { setHighlightId(null); setActiveScreen(s); }}
         >
-          {renderScreen()}
+          <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-slate-500">Loading…</div>}>
+            {renderScreen()}
+          </Suspense>
         </Layout>
       </ThemeContext>
     </LanguageContext>

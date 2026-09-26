@@ -710,6 +710,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       const portCounts = operations.reduce((m: Record<string, number>, o) => { const p = o.clipOnPort || '—'; m[p] = (m[p] || 0) + 1; return m; }, {});
       const context = {
         question,
+        recentConversation: aiChatMessages.slice(-6).map(message => ({
+          role: message.role === 'ai' ? 'assistant' : 'user',
+          text: message.text.slice(0, 1200),
+        })),
         totals: { operations: operations.length, invoices: invoices.length, gensets: gensets.length, maintenance: maintenance.length },
         statusCounts,
         portCounts,
@@ -720,7 +724,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         customers: customerAliasesForAi.slice(0, 100),
         recentPayments: db.getPayments().slice(-50).map(p => ({ customerName:p.customerName, amount:p.amount, date:p.date, reference:p.reference }))
       };
-      const prompt = `You are DALI 1.0, Nile Fleet's live command assistant. Understand natural Egyptian Arabic, Modern Standard Arabic, English, Arabizi/transliterated customer names, and mixed Arabic/English. Interpret intent from the whole sentence, not exact keywords. For "فين/أين/مكان/موجود/بتاع" + a genset number, perform a genset location lookup. For "كشف حساب/حساب/مديونية/رصيد/المحصل" + a customer name, perform a customer SOA lookup. Resolve customer names from LIVE customer aliases before answering. For genset location use fleet stock + latest operation + maintenance. For customer SOA use live operations + invoices + payments. Never invent and never say you cannot access data when the data is in the supplied context. Maximum 4 short lines. If the question is factual and data is missing, say so. Arabic question: Arabic answer. Preserve IDs/numbers exactly.\n${creatorContext}\nQ:${question}\nDATA:${JSON.stringify(context)}`;
+      const prompt = `Answer the latest user question directly. Understand natural Egyptian Arabic, Modern Standard Arabic, English, Arabizi/transliterated customer names, and mixed Arabic/English. Use recent conversation only to resolve references in a follow-up; do not let older turns override the latest question. For Nile Fleet facts, use only the supplied live data and say plainly when the needed fact is not present. For general or how-to questions, answer helpfully without forcing an unrelated fleet-data answer. Never invent operational facts. Reply in the latest question's language, preserve IDs/dates/numbers, and keep it concise.\n${creatorContext}\nLATEST QUESTION: ${question}\nLIVE CONTEXT: ${JSON.stringify(context)}`;
       const answer = await runThinkingAudit(prompt, 420);
       setAiChatMessages(prev => [...prev, { role: 'ai', text: answer || (isAr ? 'لم يصل رد من DALI 1.0.' : 'No response from DALI 1.0.') }]);
     } catch (e) {

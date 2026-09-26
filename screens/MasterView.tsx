@@ -529,6 +529,7 @@ const MasterView: React.FC = () => {
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
   const isReadOnly = currentUser.role === UserRole.VIEWER;
   const isAdmin = currentUser.role === UserRole.ADMIN;
+  const canExport = currentUser.permissions?.canExport !== false;
 
   const [operations, setOperations] = useState<Operation[]>(db.getOperations());
   const [searchTerm, setSearchTerm] = useState('');
@@ -1103,6 +1104,150 @@ const MasterView: React.FC = () => {
     setSortConfig({ key, direction });
   };
 
+  const handleExportData = async () => {
+    const XLSX = await import('xlsx-js-style');
+    const headers = [
+      '#', t.bookingNum, t.client, t.trucker, t.shipper,
+      isAr ? 'دخول' : 'IN', isAr ? 'خروج' : 'OUT',
+      isAr ? 'الوجهة' : 'DESTINATION', t.container,
+      isAr ? 'المولد' : 'GENSET', t.rate, t.status,
+      isAr ? 'تاريخ التشغيل' : 'OP DATE', isAr ? 'تاريخ التركيب' : 'CLIP ON',
+      isAr ? 'البضاعة' : 'COMMODITY', isAr ? 'فني التركيب' : 'CLIPPER ON',
+      t.notes, isAr ? 'فاتورة الحجز' : 'BOOKING INVOICE'
+    ];
+    const invoiceByBooking = new Map(invoices.map(invoice => [invoice.bookingNumber, invoice]));
+    const exportRows = filteredAndSortedOps.map((op, index) => {
+      const invoice = invoiceByBooking.get(op.bookingNumber);
+      return [
+        index + 1,
+        op.bookingNumber || '',
+        translateEntity(op.customerName || '', lang),
+        translateEntity(op.trucker || '', lang),
+        translateEntity(op.beneficiaryName || '', lang),
+        translateEntity(op.clipOnPort || '', lang),
+        translateEntity(op.clipOffPort || '', lang),
+        op.destination || '',
+        op.containerNumber || '',
+        op.gensetNumber || '',
+        Number(String(op.rate || '0').replace(/,/g, '')) || 0,
+        translateEntity(op.status || '', lang),
+        op.operationDate || '',
+        op.clipOnDate || '',
+        op.commodity || '',
+        translateEntity(op.clipperName || '', lang),
+        op.notes || '',
+        invoice ? `${invoice.id} | ${translateEntity(invoice.status, lang)} | ${Number(invoice.amount || 0).toLocaleString()} EGP` : (isAr ? 'غير مفوترة' : 'Not invoiced')
+      ];
+    });
+
+    const exportedAt = new Date().toLocaleString(isAr ? 'ar-EG' : 'en-GB');
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ['NILE FLEET COMMAND'],
+      [`${isAr ? 'السجل الرئيسي' : 'MASTER VIEW'}  •  ${isAr ? 'تاريخ التصدير' : 'EXPORTED'}: ${exportedAt}`],
+      [`${isAr ? 'عدد السجلات' : 'RECORDS'}: ${exportRows.length}`],
+      headers,
+      ...exportRows
+    ]);
+    const lastRow = exportRows.length + 4;
+    const lastColumn = headers.length - 1;
+    const lastColumnLetter = XLSX.utils.encode_col(lastColumn);
+    const navy = isDark ? '001224' : '001F3F';
+    const gold = 'C2A378';
+    const border = { style: 'thin', color: { rgb: isDark ? '334155' : 'D8E0E9' } };
+    const baseStyle = {
+      font: { name: 'Arial', sz: 10, color: { rgb: isDark ? 'E2E8F0' : '1E293B' } },
+      alignment: { horizontal: isAr ? 'right' : 'left', vertical: 'center', wrapText: true },
+      border: { top: border, bottom: border, left: border, right: border },
+    };
+
+    sheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: lastColumn } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: lastColumn } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: lastColumn } },
+    ];
+    sheet['!autofilter'] = { ref: `A4:${lastColumnLetter}${lastRow}` };
+    sheet['!cols'] = [
+      { wch: 6 }, { wch: 18 }, { wch: 24 }, { wch: 18 }, { wch: 18 },
+      { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 16 },
+      { wch: 14 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 18 },
+      { wch: 18 }, { wch: 34 }, { wch: 38 }
+    ];
+    sheet['!rows'] = [{ hpt: 28 }, { hpt: 24 }, { hpt: 20 }, { hpt: 26 }];
+
+    for (let c = 0; c <= lastColumn; c++) {
+      const titleCell = sheet[XLSX.utils.encode_cell({ r: 0, c })];
+      if (titleCell) titleCell.s = {
+        fill: { patternType: 'solid', fgColor: { rgb: navy } },
+        font: { name: 'Arial', sz: 16, bold: true, color: { rgb: gold } },
+        alignment: { horizontal: isAr ? 'right' : 'left', vertical: 'center' }
+      };
+      const metaCell = sheet[XLSX.utils.encode_cell({ r: 1, c })];
+      if (metaCell) metaCell.s = {
+        fill: { patternType: 'solid', fgColor: { rgb: navy } },
+        font: { name: 'Arial', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
+        alignment: { horizontal: isAr ? 'right' : 'left', vertical: 'center' }
+      };
+      const countCell = sheet[XLSX.utils.encode_cell({ r: 2, c })];
+      if (countCell) countCell.s = {
+        fill: { patternType: 'solid', fgColor: { rgb: 'F1F5F9' } },
+        font: { name: 'Arial', sz: 9, bold: true, color: { rgb: navy } },
+        alignment: { horizontal: isAr ? 'right' : 'left', vertical: 'center' }
+      };
+      const headerCell = sheet[XLSX.utils.encode_cell({ r: 3, c })];
+      if (headerCell) headerCell.s = {
+        fill: { patternType: 'solid', fgColor: { rgb: navy } },
+        font: { name: 'Arial', sz: 9, bold: true, color: { rgb: gold } },
+        alignment: { horizontal: isAr ? 'right' : 'left', vertical: 'center', wrapText: true },
+        border: { bottom: { style: 'medium', color: { rgb: gold } } }
+      };
+    }
+
+    const portColumnColors: Record<string, { fill: string; text: string }> = isDark ? {
+      DAM: { fill: '123426', text: '6EE7B7' }, ALEX: { fill: '3A3412', text: 'FDE047' },
+      GOUDA: { fill: '172E4F', text: '93C5FD' }, SOKHNA: { fill: '3F2A1C', text: 'FDBA74' },
+      SCCT: { fill: '123044', text: '7DD3FC' }, PSD: { fill: '30204F', text: 'C4B5FD' },
+      MAL: { fill: '183822', text: '86EFAC' }, WORKSHOP: { fill: '253341', text: 'CBD5E1' }
+    } : {
+      DAM: { fill: '98FFD9', text: '004D33' }, ALEX: { fill: 'FFEB3B', text: '5D4037' },
+      GOUDA: { fill: '2196F3', text: 'FFFFFF' }, SOKHNA: { fill: 'FF9800', text: 'FFFFFF' },
+      SCCT: { fill: '87CEEB', text: '003366' }, PSD: { fill: '7E57C2', text: 'FFFFFF' },
+      MAL: { fill: '4CAF50', text: 'FFFFFF' }, WORKSHOP: { fill: '90A4AE', text: 'FFFFFF' }
+    };
+    const statusColors: Record<string, { fill: string; text: string }> = {
+      DONE: { fill: 'D1FAE5', text: '065F46' },
+      'IN PROGRESS': { fill: 'DBEAFE', text: '1E40AF' },
+      'UNDER OPERATE': { fill: 'FEF3C7', text: '92400E' },
+      HOLD: { fill: 'F1F5F9', text: '475569' },
+      CANCEL: { fill: 'FEE2E2', text: '991B1B' }
+    };
+    exportRows.forEach((row, rowIndex) => {
+      const excelRow = rowIndex + 4;
+      for (let c = 0; c <= lastColumn; c++) {
+        const cell = sheet[XLSX.utils.encode_cell({ r: excelRow, c })];
+        if (!cell) continue;
+        cell.s = {
+          ...baseStyle,
+          fill: { patternType: 'solid', fgColor: { rgb: rowIndex % 2 === 0 ? (isDark ? '0F172A' : 'FFFFFF') : (isDark ? '111C2E' : 'F8FAFC') } }
+        };
+        if (c === 5 || c === 6) {
+          const sourcePort = c === 5 ? filteredAndSortedOps[rowIndex]?.clipOnPort : filteredAndSortedOps[rowIndex]?.clipOffPort;
+          const port = portColumnColors[String(sourcePort || '').toUpperCase()];
+          if (port) cell.s = { ...cell.s, fill: { patternType: 'solid', fgColor: { rgb: port.fill } }, font: { ...baseStyle.font, bold: true, color: { rgb: port.text } }, alignment: { ...baseStyle.alignment, horizontal: 'center' } };
+        } else if (c === 11) {
+          const status = statusColors[String(filteredAndSortedOps[rowIndex]?.status || '').toUpperCase()];
+          if (status) cell.s = { ...cell.s, fill: { patternType: 'solid', fgColor: { rgb: status.fill } }, font: { ...baseStyle.font, bold: true, color: { rgb: status.text } }, alignment: { ...baseStyle.alignment, horizontal: 'center' } };
+        } else if (c === 10) {
+          cell.z = '#,##0.00';
+          cell.s = { ...cell.s, font: { ...baseStyle.font, bold: true, color: { rgb: isDark ? '93C5FD' : '1E40AF' } }, alignment: { ...baseStyle.alignment, horizontal: 'right' } };
+        }
+      }
+    });
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, isAr ? 'السجل الرئيسي' : 'Master View');
+    XLSX.writeFile(workbook, `Nile_Fleet_Master_View_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   const dynamicCellStyle = { paddingTop: `${viewPrefs.density}px`, paddingBottom: `${viewPrefs.density}px` };
   const globalScaleStyle = { fontSize: `${(viewPrefs.scale / 100) * 10}px` };
 
@@ -1152,6 +1297,11 @@ const MasterView: React.FC = () => {
           {!isReadOnly && (
             <button onClick={() => setShowAddModal(true)} className="bg-[#001F3F] text-[#C2A378] px-6 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:scale-105 transition-all whitespace-nowrap">
               + {isAr ? 'إدخال جديد' : 'New Entry'}
+            </button>
+          )}
+          {canExport && (
+            <button type="button" onClick={handleExportData} className="bg-emerald-700 text-white px-4 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-emerald-600 hover:scale-105 transition-all whitespace-nowrap flex items-center gap-2" title={isAr ? 'تصدير السجلات المعروضة إلى إكسل' : 'Export the current Master View rows to Excel'}>
+              <span aria-hidden="true">⇩</span> {isAr ? 'تصدير البيانات' : 'Export Data'}
             </button>
           )}
           <DateFilterDropdown 

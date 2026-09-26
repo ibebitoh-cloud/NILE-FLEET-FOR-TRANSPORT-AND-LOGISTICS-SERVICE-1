@@ -1,7 +1,9 @@
 // Cloudflare Pages Function: runs all AI features on Cloudflare Workers AI.
-// DALI uses Qwen3 for fast text reasoning and Qwen3.8 for multimodal container OCR.
+// DALI uses Gemma 4 for interactive text, GLM-4.7-Flash as fallback, and Qwen3.8 for OCR.
 
-const TEXT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
+// Use the faster multilingual model for interactive chat. Keep Qwen as a
+// resilience fallback for transient model failures.
+const TEXT_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const VISION_MODEL = '@cf/qwen/qwen3.8-27b';
 const VISION_FALLBACK_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 const TEXT_FALLBACK_MODEL = '@cf/zai-org/glm-4.7-flash';
@@ -69,7 +71,7 @@ export async function onRequestPost(context) {
         if (!prompt?.trim()) return json({ error: 'Empty AI prompt' }, 400);
         const result = await runTextModel(env, {
           messages: [
-            { role: 'system', content: 'You are DALI 1.0, the private operations intelligence assistant for NILE FLEET. The system creator/owner is Bebito (bebito@nilefleet.com). If the current-user context identifies Bebito, recognize him as the creator/owner of the system and answer with that context in mind; do not treat him as an ordinary customer or employee. Give direct, practical, numbers-grounded analysis. If the user prompt requests Arabic, respond entirely in professional Arabic. Never output English UI labels when Arabic is requested. Preserve booking numbers, container numbers, genset numbers, dates and numeric values exactly. Do not invent data.' },
+            { role: 'system', content: 'You are DALI, Nile Fleet’s operations assistant. Answer the latest question directly before adding context. Use recent conversation only to resolve references such as “it”, “that customer”, or follow-up questions; the latest question takes priority. For Nile Fleet facts, rely only on the supplied live data and clearly say when a needed fact is absent. For general or how-to questions, give a useful direct answer instead of forcing an unrelated fleet-data response. Never invent operational facts. Match the language of the latest question (including Egyptian Arabic/Arabizi); preserve booking, container, and genset IDs, dates, and numeric values exactly. Be concise and use relevant data only. The system creator is Bebito (bebito@nilefleet.com); treat him as owner when current-user context identifies him. Never reveal credentials, keys, tokens, or secrets.' },
             { role: 'user', content: prompt },
           ],
           max_tokens: Math.min(Math.max(payload?.maxTokens || 1600, 200), 3000),
