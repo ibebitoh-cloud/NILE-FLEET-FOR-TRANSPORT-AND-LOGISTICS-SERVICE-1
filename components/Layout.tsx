@@ -374,6 +374,31 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       const compactEntityText = (value: unknown) => normalizeEntityText(value).replace(/\\s+/g, '');
 
+      // Loose phonetic key for mixed Arabic/English customer names.
+      // Matching only: original customer names are never changed.
+      const phoneticEntityText = (value: unknown) => {
+        const arabicToLatin: Record<string, string> = {
+          'ا':'a','ب':'b','ت':'t','ث':'th','ج':'j','ح':'h','خ':'kh','د':'d','ذ':'dh',
+          'ر':'r','ز':'z','س':'s','ش':'sh','ص':'s','ض':'d','ط':'t','ظ':'z','ع':'a',
+          'غ':'gh','ف':'f','ق':'q','ك':'k','ل':'l','م':'m','ن':'n','ه':'h','و':'w',
+          'ي':'y','ء':'a','ؤ':'w','ئ':'y'
+        };
+        return normalizeEntityText(value).split('').map(ch => arabicToLatin[ch] || ch).join('').replace(/[^a-z0-9]/g, '');
+      };
+
+      const phoneticDistance = (a: string, b: string) => {
+        if (!a || !b) return 999;
+        const prev = Array.from({length: b.length + 1}, (_, i) => i);
+        for (let i = 1; i <= a.length; i++) {
+          const cur = [i];
+          for (let j = 1; j <= b.length; j++) {
+            cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+          }
+          for (let j = 0; j <= b.length; j++) prev[j] = cur[j];
+        }
+        return prev[b.length];
+      };
+
       const getCustomerAliases = (customer: User) => {
         const aliases = new Set<string>();
         const add = (v: unknown) => {
@@ -469,6 +494,22 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           if (top.score >= 10000 && (!second || top.score - second.score >= 5000)) return top.customer;
         }
 
+        // Arabic spelling fallback when the exact translation is not in the dictionary.
+        const questionPhonetic = phoneticEntityText(meaningfulTokens.join(' '));
+        if (questionPhonetic.length >= 4) {
+          const candidates = customerProfiles.map(customer => {
+            let distance = 999;
+            for (const alias of getCustomerAliases(customer)) {
+              distance = Math.min(distance, phoneticDistance(questionPhonetic, phoneticEntityText(alias)));
+            }
+            return { customer, distance };
+          }).sort((a,b) => a.distance - b.distance);
+          const top = candidates[0];
+          const second = candidates[1];
+          const threshold = Math.max(2, Math.floor(questionPhonetic.length * 0.30));
+          if (top && top.distance <= threshold && (!second || second.distance - top.distance >= 2)) return top.customer;
+        }
+
         // Last fallback: exact/contained match against customer names already
         // stored in operations, invoices and payments. Again, longest match wins.
         const tx = transactionCustomerNames.map(name => {
@@ -556,6 +597,19 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           })
           .filter(x => x.hits.length === 1);
         if (distinctive.length === 1) return distinctive[0].hits[0];
+        // Same fallback for transaction-only customer names.
+        const questionPhonetic = phoneticEntityText(tokens.join(' '));
+        if (questionPhonetic.length >= 4) {
+          const candidates = transactionCustomerNames.map(name => ({
+            name,
+            distance: phoneticDistance(questionPhonetic, phoneticEntityText(translateEntity(String(name), 'ar') || name))
+          })).sort((a,b) => a.distance - b.distance);
+          const top = candidates[0];
+          const second = candidates[1];
+          const threshold = Math.max(2, Math.floor(questionPhonetic.length * 0.30));
+          if (top && top.distance <= threshold && (!second || second.distance - top.distance >= 2)) return top.name;
+        }
+
         return null;
       };
 
