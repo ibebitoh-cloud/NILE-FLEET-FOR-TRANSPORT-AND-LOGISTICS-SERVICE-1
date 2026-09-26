@@ -175,11 +175,12 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       const q = question.toUpperCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
 
       // FAST PATH: factual operational questions never go through the LLM.
-      const idMatch = q.match(/(?:GENSET|GENSETS|مولد|مولدات|GENSET\s*ID)\s*#?\s*([A-Z0-9-]+)/i);
-      const bookingMatch = q.match(/(?:BOOKING|BOOKING NO|BOOKING NUMBER|حجز)\s*#?\s*([A-Z0-9-]+)/i);
-      const containerMatch = q.match(/(?:CONTAINER|CONT|حاويه|حاوية)\s*#?\s*([A-Z0-9]{4,12})/i);
+      const idMatch = q.match(/(?:GENSETS?|مولد(?:ات)?|وحدة)(?:\s+(?:NO\.?|NUMBER|ID|رقم))?\s*#?\s*([A-Z0-9][A-Z0-9-]*)/i);
+      const bookingMatch = q.match(/(?:BOOKING(?:\s+(?:NO\.?|NUMBER|ID))?|حجز(?:\s*رقم)?)\s*#?\s*([A-Z0-9][A-Z0-9-]*)/i);
+      const containerMatch = q.match(/(?:CONTAINER|CONT|حاويه|حاوية)(?:\s+(?:NO\.?|NUMBER|ID|رقم))?\s*#?\s*([A-Z0-9]{4,12})/i);
       const searchMatch = q.match(/(?:SEARCH|FIND|WHERE IS|LOCATE|LOOK FOR|ابحث|فين|اين|أين)\s*#?\s*([A-Z0-9-]+)/i);
       const countWords = /HOW MANY|HOW MUCH|NUMBER OF|كام|عدد|كم/.test(q);
+      const isIdentifier = (value?: string) => Boolean(value && /\d/.test(value));
 
       const normalizeId = (value: unknown) => String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
       const numericId = (value: unknown) => normalizeId(value).replace(/\D/g, '');
@@ -249,7 +250,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         const wantsHistory = /HISTORY|LOG|PREVIOUS|PAST|HISTOR|سجل|سجلات|تاريخ|سابق|العمليات|رحلات/.test(qText);
 
         const stockNumber = stock?.unitNumber || stock?.gensetNumber || id;
-        const location = stock?.location || latestOp?.clipOnPort || latestOp?.clipOffPort || latestMaintenance?.location || '—';
+        const location = latestOp?.clipOffPort || stock?.location || latestOp?.clipOnPort || latestMaintenance?.location || '—';
         const status = stock?.status || latestOp?.status || latestMaintenance?.status || '—';
 
         if (wantsHistory) {
@@ -258,10 +259,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
             return responseIsAr
               ? `${index + 1}. ${dateValue(op) || '—'} | حجز ${op.bookingNumber || '—'} | حاوية ${op.containerNumber || '—'} | ${route} | ${op.status || '—'}`
               : `${index + 1}. ${dateValue(op) || '—'} | Booking ${op.bookingNumber || '—'} | Container ${op.containerNumber || '—'} | ${route} | ${op.status || '—'}`;
-          }).join('\\n');
+          }).join('\n');
           return responseIsAr
-            ? `المولد ${stockNumber} — سجل التشغيل\\nعدد الرحلات: ${completedTrips}\\nالموقع الحالي: ${location}\\nالحالة: ${status}${history ? `\\n\\n${history}` : '\\nلا توجد عمليات سابقة مسجلة.'}`
-            : `GENSET ${stockNumber} — Operation Log\\nTrips: ${completedTrips}\\nCurrent location: ${location}\\nStatus: ${status}${history ? `\\n\\n${history}` : '\\nNo previous operations recorded.'}`;
+              ? `المولد ${stockNumber} — سجل التشغيل\nعدد الرحلات: ${completedTrips}\nالموقع الحالي: ${location}\nالحالة: ${status}${history ? `\n\n${history}` : '\nلا توجد عمليات سابقة مسجلة.'}`
+              : `GENSET ${stockNumber} — Operation Log\nTrips: ${completedTrips}\nCurrent location: ${location}\nStatus: ${status}${history ? `\n\n${history}` : '\nNo previous operations recorded.'}`;
         }
 
         if (wantsTripCount) {
@@ -276,8 +277,9 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         return `GENSET ${stockNumber}\\nStatus: ${status}\\nLocation: ${location}${latestOp ? `\\nBooking: ${latestOp.bookingNumber || '—'}\\nContainer: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\\nLast maintenance: ${latestMaintenance.serviceDate || '—'}` : ''}`;
       };
 
-      if (idMatch) {
-        const answer = await answerGenset(idMatch[1], question);
+      const matchedGensetId = idMatch?.[1];
+      if (matchedGensetId && isIdentifier(matchedGensetId)) {
+        const answer = await answerGenset(matchedGensetId, question);
         setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
         return;
       }
@@ -301,8 +303,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         }
       }
 
-      if (bookingMatch || containerMatch) {
-        const value = (bookingMatch?.[1] || containerMatch?.[1] || '').toUpperCase();
+      const matchedBookingId = bookingMatch?.[1];
+      const matchedContainerId = containerMatch?.[1];
+      if (isIdentifier(matchedBookingId) || isIdentifier(matchedContainerId)) {
+        const value = (matchedBookingId || matchedContainerId || '').toUpperCase();
         const hits = operations.filter(o =>
           String(o.bookingNumber || '').toUpperCase() === value ||
           String(o.containerNumber || '').toUpperCase() === value
@@ -315,15 +319,23 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       }
 
       // Fast count/status questions.
-      if (countWords && /GENSET|مولد|STOCK|مخزون|MAINTENANCE|صيانة|PREORDER|UNDER OPERATE|تحت التشغيل/.test(q)) {
+      const hasRelativePeriod = /TODAY|YESTERDAY|THIS WEEK|LAST WEEK|THIS MONTH|LAST MONTH|THIS YEAR|LAST YEAR|امبارح|النهارده|هذا الشهر|الشهر الماضي|هذا العام|السنه الماضيه|الأسبوع|الاسبوع/.test(q);
+      if (countWords && !hasRelativePeriod && /GENSET|مولد|STOCK|مخزون|MAINTENANCE|صيانة|PREORDER|UNDER OPERATE|تحت التشغيل/.test(q)) {
         const portMatch = q.match(/DAM|ALEX|GOUDA|SOKHNA|SCCT|PSD|MAL/);
         let list = gensets;
         if (portMatch) list = list.filter(g => String(g.location || '').toUpperCase() === portMatch[0]);
         const maintenanceCount = list.filter(g => g.status === 'MAINTENANCE').length;
         const stockCount = list.filter(g => g.status === 'IN_STOCK').length;
+        const wantsMaintenance = /MAINTENANCE|صيانة/.test(q);
+        const wantsStock = /IN STOCK|AVAILABLE|STOCK|مخزون|متاح/.test(q);
+        const wantsAssigned = /CLIPPED ON|CLIPPED_ON|ASSIGNED|DEPLOYED|مركب|تعيين/.test(q);
+        const assignedCount = list.filter(g => g.status === GensetStatus.CLIPPED_ON).length;
+        const requestedCount = wantsMaintenance ? maintenanceCount : wantsStock ? stockCount : wantsAssigned ? assignedCount : list.length;
+        const labelEn = wantsMaintenance ? 'Gensets in maintenance' : wantsStock ? 'Gensets in stock' : wantsAssigned ? 'Assigned gensets' : 'Total gensets';
+        const labelAr = wantsMaintenance ? 'المولدات في الصيانة' : wantsStock ? 'المولدات في المخزون' : wantsAssigned ? 'المولدات المخصصة' : 'إجمالي المولدات';
         const answer = isAr
-          ? `العدد: ${list.length}\nالمخزون: ${stockCount}\nالصيانة: ${maintenanceCount}${portMatch ? `\nالميناء: ${portMatch[0]}` : ''}`
-          : `Total: ${list.length}\nIn stock: ${stockCount}\nMaintenance: ${maintenanceCount}${portMatch ? `\nPort: ${portMatch[0]}` : ''}`;
+          ? `${labelAr}: ${requestedCount}${portMatch ? `\nالميناء: ${portMatch[0]}` : ''}`
+          : `${labelEn}: ${requestedCount}${portMatch ? `\nPort: ${portMatch[0]}` : ''}`;
         setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
         return;
       }
@@ -555,6 +567,13 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         const opName = normalizeEntityText(op.customerName);
         return getCustomerAliases(customer).some(alias => opName === alias || (alias.length >= 4 && opName.includes(alias)));
       };
+      const customerMatchesNamedRecord = (customer: User | null, customerName: unknown, customerId: unknown) => {
+        if (customer && String(customerId || '') === String(customer.id)) return true;
+        const recordName = normalizeEntityText(customerName);
+        if (!recordName) return false;
+        if (customer) return getCustomerAliases(customer).some(alias => recordName === alias || (alias.length >= 4 && recordName.includes(alias)));
+        return false;
+      };
 
       const customerAliasesForAi = customerProfiles.slice(0, 150).map(customer => ({
         english: customer.companyName || customer.name,
@@ -572,8 +591,8 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           const customerOps = customer
             ? operations.filter(o => customerMatchesOperation(customer, o))
             : operations.filter(o => normalizeEntityText(o.customerName) === normalizeEntityText(customerName));
-          const customerInvoices = invoices.filter(i => (customer && String(i.customerId || '') === String(customer.id)) || normalizeEntityText(i.customerName) === normalizeEntityText(customerName));
-          const customerPayments = db.getPayments().filter(p => (customer && String(p.customerId || '') === String(customer.id)) || normalizeEntityText(p.customerName) === normalizeEntityText(customerName));
+          const customerInvoices = invoices.filter(i => customerMatchesNamedRecord(customer, i.customerName, i.customerId) || normalizeEntityText(i.customerName) === normalizeEntityText(customerName));
+          const customerPayments = db.getPayments().filter(p => customerMatchesNamedRecord(customer, p.customerName, p.customerId) || normalizeEntityText(p.customerName) === normalizeEntityText(customerName));
           const unbilled = customerOps.filter(o => !o.invoiced).reduce((s, o) => s + (parseFloat(String(o.rate || '0').replace(/,/g,'')) || 0) + (parseFloat(String(o.vat || '0').replace(/,/g,'')) || 0), 0);
           const invoiced = customerInvoices.reduce((s, i) => s + (Number(i.amount) || 0), 0);
           const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
@@ -584,19 +603,20 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           // recorded customer payments. Do not treat "pass ship" / shipper text as
           // the customer identity; the resolved customer record is the authority.
           const grossDue = historical + unpaid + unbilled;
-          const netDue = Math.max(0, grossDue - collected);
+          // Payments already reduce invoice balances/status and historical balance in addPayment.
+          const netDue = grossDue;
           const recentPayments = [...customerPayments].sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
           const lastPayment = recentPayments.length ? ((responseIsAr ? '\nآخر تحصيل: ' : '\nLast payment: ') + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' EGP') : '';
           const recentOps = [...customerOps]
             .sort((a,b) => String(b.operationDate || '').localeCompare(String(a.operationDate || '')))
             .slice(0, 10)
             .map(o => responseIsAr
-              ? `\\n• حجز ${o.bookingNumber || '—'} | حاوية ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | سعر ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | شاحن: ${o.beneficiaryName || '—'} | ناقل: ${o.trucker || '—'}`
-              : `\\n• Booking ${o.bookingNumber || '—'} | Container ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | Rate ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | Shipper: ${o.beneficiaryName || '—'} | Trucker: ${o.trucker || '—'}`
+              ? `\n• حجز ${o.bookingNumber || '—'} | حاوية ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | سعر ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | شاحن: ${o.beneficiaryName || '—'} | ناقل: ${o.trucker || '—'}`
+              : `\n• Booking ${o.bookingNumber || '—'} | Container ${o.containerNumber || '—'} | ${o.clipOnPort || '—'} → ${o.clipOffPort || '—'} | Rate ${Number(String(o.rate || '0').replace(/,/g,'')) || 0} EGP | Shipper: ${o.beneficiaryName || '—'} | Trucker: ${o.trucker || '—'}`
             ).join('');
           const answer = responseIsAr
-            ? 'كشف حساب: ' + customerName + '\\nالمستحق: ' + grossDue.toLocaleString() + ' جنيه | المدفوع: ' + collected.toLocaleString() + ' جنيه\\nالرصيد المتبقي: ' + netDue.toLocaleString() + ' جنيه\\nالفواتير: ' + invoiced.toLocaleString() + ' جنيه | غير مسدد: ' + unpaid.toLocaleString() + ' جنيه | غير مفوتر: ' + unbilled.toLocaleString() + ' جنيه' + (recentPayments.length ? '\\nآخر تحصيل: ' + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' جنيه' : '') + (recentOps ? '\\nالعمليات الأخيرة:' + recentOps : '')
-            : 'SOA: ' + customerName + '\\nDue: ' + grossDue.toLocaleString() + ' EGP | Paid: ' + collected.toLocaleString() + ' EGP\\nRemaining balance: ' + netDue.toLocaleString() + ' EGP\\nInvoiced: ' + invoiced.toLocaleString() + ' EGP | Unpaid: ' + unpaid.toLocaleString() + ' EGP | Unbilled: ' + unbilled.toLocaleString() + ' EGP' + lastPayment + (recentOps ? '\\nRecent operations:' + recentOps : '');
+            ? 'كشف حساب: ' + customerName + '\nالمستحق: ' + grossDue.toLocaleString() + ' جنيه | المدفوع: ' + collected.toLocaleString() + ' جنيه\nالرصيد المتبقي: ' + netDue.toLocaleString() + ' جنيه\nالفواتير: ' + invoiced.toLocaleString() + ' جنيه | غير مسدد: ' + unpaid.toLocaleString() + ' جنيه | غير مفوتر: ' + unbilled.toLocaleString() + ' جنيه' + (recentPayments.length ? '\nآخر تحصيل: ' + recentPayments[0].date + ' — ' + Number(recentPayments[0].amount || 0).toLocaleString() + ' جنيه' : '') + (recentOps ? '\nالعمليات الأخيرة:' + recentOps : '')
+            : 'SOA: ' + customerName + '\nDue: ' + grossDue.toLocaleString() + ' EGP | Paid: ' + collected.toLocaleString() + ' EGP\nRemaining balance: ' + netDue.toLocaleString() + ' EGP\nInvoiced: ' + invoiced.toLocaleString() + ' EGP | Unpaid: ' + unpaid.toLocaleString() + ' EGP | Unbilled: ' + unbilled.toLocaleString() + ' EGP' + lastPayment + (recentOps ? '\nRecent operations:' + recentOps : '');
           setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
           return;
         }
@@ -700,7 +720,8 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         const id = q.match(/(?:مولد(?:ات)?|وحدة|GENSET(?:S)?|GENSETS?\s*ID)\s*(?:#|رقم|رقم\s*)?\s*(?:بتاع|رقم)?\s*([A-Z0-9-]+)/i)?.[1]
           || q.match(/(?:WHERE|LOCATION|LOCATE|FIND|فين|اين|أين|مكان|موقع|موجود|عايز\s*مكان|عايز\s*اعرف|وريني|دلني).*?#?([0-9]{1,6})/i)?.[1];
         if (id) {
-          setAiChatMessages(prev => [...prev, { role: 'ai', text: answerGenset(id) }]);
+          const answer = await answerGenset(id, question);
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
           return;
         }
       }
