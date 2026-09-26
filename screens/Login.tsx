@@ -1,5 +1,5 @@
 
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext } from 'react';
 import { ThemeContext, LanguageContext } from '../App';
 import { translations } from '../translations';
 
@@ -13,30 +13,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [fullName, setFullName] = useState('');
-  
-  // Secret Trigger State
-  const [showSecret, setShowSecret] = useState(false);
-  const [pastedKey, setPastedKey] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isRegistering) {
-      alert(isAr ? "تم إرسال طلب التسجيل. بانتظار موافقة المسؤول." : "Registration request transmitted. Awaiting administrator approval.");
-      setIsRegistering(false);
-    } else {
-      onLogin(email, password);
-    }
-  };
-
-  const handleActivateAi = () => {
-    if (pastedKey.trim()) {
-      localStorage.setItem('CUSTOM_API_KEY', pastedKey.trim());
-      alert(isAr ? "تم تفعيل المفتاح بنجاح" : "AI Node Key Activated.");
-      setShowSecret(false);
-      setPastedKey('');
-    }
+    onLogin(email, password);
   };
 
   const AnimatedText = ({ text, colorClass = "text-white", baseDelay = 0 }: { text: string, colorClass?: string, baseDelay?: number }) => {
@@ -121,7 +101,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           <div className="max-w-md w-full mx-auto space-y-10 relative z-10">
             <div className="space-y-3 text-center lg:text-start relative">
               <h3 className={`text-4xl lg:text-5xl font-black uppercase italic tracking-tighter leading-[0.9] ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>
-                {isRegistering ? <>{isAr ? 'تسجيل' : 'NEW'} <br/> <span className="text-[#C2A378]">{isAr ? 'هوية جديدة' : 'ACCOUNT'}</span></> : <>{isAr ? 'مرحباً بكم في' : 'WELCOME TO'} <br/> <span className="text-[#C2A378]">{isAr ? 'أسطول النيل' : 'NILE FLEET'}</span></>}
+                <>{isAr ? 'مرحباً بكم في' : 'WELCOME TO'} <br/> <span className="text-[#C2A378]">{isAr ? 'أسطول النيل' : 'NILE FLEET'}</span></>
               </h3>
               <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#C2A378] italic">
                 SHERIF HEGAZY
@@ -129,13 +109,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5 text-start">
-              {isRegistering && (
-                <div className="group">
-                  <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 px-1 group-focus-within:text-[#C2A378] transition-colors">Full Legal Name</label>
-                  <input type="text" required className="w-full px-6 py-4 rounded-xl border-2 outline-none transition-all text-sm font-bold bg-[var(--input-bg)] border-[var(--border-primary)] text-[var(--text-primary)] focus:border-[var(--accent)]" placeholder="NAME" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-                </div>
-              )}
-              
               <div className="group">
                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 px-1 group-focus-within:text-[#C2A378] transition-colors">{t.networkIdentity}</label>
                 <input type="email" required className="w-full px-6 py-4 rounded-xl border-2 outline-none transition-all text-sm font-bold bg-[var(--input-bg)] border-[var(--border-primary)] text-[var(--text-primary)] focus:border-[var(--accent)]" placeholder="EMAIL" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -146,22 +119,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
 
               <button type="submit" className="w-full bg-[#001F3F] hover:bg-[#002b57] text-white font-black py-6 rounded-2xl transition-all uppercase tracking-[0.4em] text-[10px] shadow-2xl active:scale-[0.98] mt-4 relative overflow-hidden group/btn border border-white/5">
-                <span className="relative z-10">{isRegistering ? 'INITIALIZE IDENTITY' : t.initializeCommand}</span>
+                <span className="relative z-10">{t.initializeCommand}</span>
                 <div className="absolute inset-0 bg-[#C2A378] translate-y-full group-hover/btn:translate-y-0 transition-transform duration-500 opacity-20"></div>
               </button>
             </form>
 
             <div className="flex flex-col gap-4 items-center">
-               <button type="button" onClick={() => setIsRegistering(!isRegistering)} className="text-[8px] font-black uppercase text-slate-400 hover:text-[#C2A378] tracking-[0.3em] transition-all border-b border-transparent hover:border-[#C2A378]">{isRegistering ? 'RETURN TO LOGIN' : t.requestNode}</button>
+               <p className="text-[8px] font-black uppercase text-slate-400 tracking-[0.2em] text-center">{isAr ? 'لطلب حساب، تواصل مع مسؤول النظام.' : 'Contact your administrator to request an account.'}</p>
             </div>
             
             <div className="relative pt-6 border-t border-slate-100 dark:border-white/5">
                <div className="flex flex-col items-center gap-1 select-none transition-all mx-auto w-fit text-center font-sans">
-                  <div 
-                    onClick={() => setShowSecret(true)}
-                    className="bg-slate-50 dark:bg-slate-800/50 px-10 py-3 rounded-full border-2 border-slate-100 dark:border-white/10 transition-all shadow-sm cursor-pointer hover:border-[#C2A378] hover:scale-105 active:scale-95 group/bebito"
-                  >
-                     <p className="text-[8px] font-black uppercase tracking-[0.6em] text-slate-400 group-hover/bebito:text-[#C2A378] py-1 leading-none">
+                  <div className="bg-slate-50 dark:bg-slate-800/50 px-10 py-3 rounded-full border-2 border-slate-100 dark:border-white/10 shadow-sm">
+                     <p className="text-[8px] font-black uppercase tracking-[0.6em] text-slate-400 py-1 leading-none">
                        POWERED BY BEBITO
                      </p>
                   </div>
@@ -171,30 +141,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
       </div>
 
-      {/* SECRET AI ACTIVATION MODAL */}
-      {showSecret && (
-        <div className="fixed inset-0 z-[1000] bg-[#001F3F]/95 backdrop-blur-2xl flex items-center justify-center p-6">
-           <div className="bg-white dark:bg-slate-900 rounded-[3rem] border-[10px] border-slate-900 shadow-2xl max-w-lg w-full p-10 space-y-8 animate-in zoom-in-95">
-              <div className="text-center">
-                 <div className="w-16 h-16 bg-[#C2A378] rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6 shadow-xl">🧠</div>
-                 <h3 className="text-2xl font-black italic uppercase tracking-tighter text-[#001F3F] dark:text-white">Secret Protocol Node</h3>
-                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mt-2">Enter Strategic AI Intelligence Key</p>
-              </div>
-              <div className="space-y-4">
-                 <textarea 
-                   className={`w-full h-32 p-6 rounded-3xl border-2 outline-none font-mono text-xs font-bold transition-all ${isDark ? 'bg-slate-800 border-slate-700 text-[#C2A378] focus:border-[#C2A378]' : 'bg-slate-50 border-slate-100 text-blue-900 focus:border-blue-400'}`}
-                   placeholder="Paste Key Here..."
-                   value={pastedKey}
-                   onChange={e => setPastedKey(e.target.value)}
-                 />
-                 <div className="flex gap-4">
-                    <button onClick={() => setShowSecret(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest text-slate-400 border border-transparent hover:text-rose-500">Cancel</button>
-                    <button onClick={handleActivateAi} className="flex-[2] bg-[#001F3F] text-[#C2A378] py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl hover:bg-slate-800 border border-[#C2A378]/20 transition-all">Confirm Activation</button>
-                 </div>
-              </div>
-           </div>
-        </div>
-      )}
     </div>
   );
 };

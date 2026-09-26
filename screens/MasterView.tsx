@@ -1115,7 +1115,7 @@ const MasterView: React.FC = () => {
       isAr ? 'البضاعة' : 'COMMODITY', isAr ? 'فني التركيب' : 'CLIPPER ON',
       t.notes, isAr ? 'فاتورة الحجز' : 'BOOKING INVOICE'
     ];
-    const invoiceByBooking = new Map(invoices.map(invoice => [invoice.bookingNumber, invoice]));
+    const invoiceByBooking = new Map<string, Invoice>(invoices.map(invoice => [invoice.bookingNumber, invoice]));
     const exportRows = filteredAndSortedOps.map((op, index) => {
       const invoice = invoiceByBooking.get(op.bookingNumber);
       return [

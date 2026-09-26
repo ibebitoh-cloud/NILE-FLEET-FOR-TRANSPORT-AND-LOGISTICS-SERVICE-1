@@ -12,20 +12,11 @@ const HistoryLog: React.FC = () => {
 
   const refresh = () => setLogs([...db.getAuditLogs()]);
 
-  const handleUndo = () => {
-    const success = db.undo();
-    if (success) {
-      alert(lang === 'ar' ? 'تم التراجع عن آخر عملية' : 'Last action undone successfully.');
-      refresh();
-    } else {
-      alert(lang === 'ar' ? 'لا يوجد ما يمكن التراجع عنه' : 'No history to undo.');
-    }
-  };
-
-  const handleFinalize = () => {
-    if (confirm(lang === 'ar' ? 'هل أنت متأكد من تصفير السجل؟ سيتم اعتماد جميع البيانات الحالية.' : 'Are you sure? This will finalize all current data and clear the action history.')) {
-      db.restartHistory();
-      refresh();
+  const handleFinalize = async () => {
+    if (confirm(lang === 'ar' ? 'هل تريد حذف سجل النشاط نهائياً؟ لن يتم حذف بيانات التشغيل.' : 'Permanently clear the activity log? Operational records will not be deleted.')) {
+      const cleared = await db.restartHistory();
+      if (cleared) refresh();
+      else alert(lang === 'ar' ? `تعذر حذف سجل النشاط. ${db.getLastDbError()}` : `Could not clear activity log. ${db.getLastDbError()}`);
     }
   };
 
@@ -34,12 +25,14 @@ const HistoryLog: React.FC = () => {
       <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
            <h3 className="text-2xl font-black text-[#001F3F] uppercase tracking-tight">System Action Recorder</h3>
-           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Review activity or revert errors before finalization</p>
+           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">{lang === 'ar' ? 'راجع سجل النشاط. التراجع عن التغييرات غير متاح.' : 'Review activity. Undo is unavailable.'}</p>
         </div>
         <div className="flex gap-4">
           <button 
-            onClick={handleUndo}
-            className="bg-amber-100 text-amber-700 px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-200 transition-all flex items-center gap-2"
+            type="button"
+            disabled
+            title={lang === 'ar' ? 'التراجع غير متاح للسجلات المحفوظة في قاعدة البيانات.' : 'Undo is unavailable for database-backed records.'}
+            className="bg-slate-100 text-slate-400 px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest cursor-not-allowed flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
             {t.undo}

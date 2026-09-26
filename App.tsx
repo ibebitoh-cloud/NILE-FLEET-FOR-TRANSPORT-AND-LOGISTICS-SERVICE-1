@@ -312,7 +312,7 @@ const App: React.FC = () => {
             .filter(n => n.nodeType === Node.ELEMENT_NODE || n.nodeType === Node.TEXT_NODE)
             .slice(0, 20);
           for (const root of roots) {
-            if (root.nodeType === Node.ELEMENT_NODE) translateRoot(root);
+          if (root.nodeType === Node.ELEMENT_NODE) translateRoot(root as Element);
             else {
               const text = root as Text;
               const value = text.nodeValue || '';

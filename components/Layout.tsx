@@ -1,6 +1,6 @@
 
 import React, { useContext, useState, useEffect, useRef } from 'react';
-import { User, UserRole, SystemNotification } from '../types';
+import { User, UserRole, SystemNotification, GensetStatus } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity, dynamicTranslations } from '../translations';
 import { db } from '../services/supabaseDb';
@@ -249,7 +249,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         const wantsTripCount = /HOW MANY|HOW MUCH|NUMBER OF|TRIPS?|OPERATIONS?|رحل|رحلة|رحلات|كام|عدد|كم|عملية|عمليه|عمليات|اشتغل|شغل/.test(qText);
         const wantsHistory = /HISTORY|LOG|PREVIOUS|PAST|HISTOR|سجل|سجلات|تاريخ|سابق|العمليات|رحلات/.test(qText);
 
-        const stockNumber = stock?.unitNumber || stock?.gensetNumber || id;
+        const stockNumber = stock?.unitNumber || id;
         const location = latestOp?.clipOffPort || stock?.location || latestOp?.clipOnPort || latestMaintenance?.location || '—';
         const status = stock?.status || latestOp?.status || latestMaintenance?.status || '—';
 

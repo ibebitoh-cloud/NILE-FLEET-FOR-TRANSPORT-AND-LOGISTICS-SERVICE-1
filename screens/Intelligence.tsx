@@ -232,7 +232,7 @@ ${JSON.stringify(viewData)}`;
         { label: isAr ? 'الموانئ النشطة' : 'ACTIVE PORTS', value: analytics.portStats.filter(p => p.active > 0).length, icon: '⚓' },
         { label: isAr ? 'تشغيل نشط' : 'ACTIVE OPS', value: analytics.activeOps.length, icon: '⚡' },
         { label: isAr ? 'مكتمل' : 'COMPLETED', value: analytics.completedOps.length, icon: '✓' },
-        { label: isAr ? 'وقود مسجل' : 'FUEL LOGGED', value: `${Object.values(gasByPort).reduce((s, v) => s + safeFuel(v), 0).toLocaleString()} L`, icon: '⛽' }
+        { label: isAr ? 'وقود مسجل' : 'FUEL LOGGED', value: `${Object.values(gasByPort).reduce<number>((s, v) => s + safeFuel(v), 0).toLocaleString()} L`, icon: '⛽' }
       ]
     : activeView === 'UNIT'
     ? [
@@ -245,14 +245,14 @@ ${JSON.stringify(viewData)}`;
     ? [
         { label: isAr ? 'رصيد الوقود' : 'FUEL BALANCE', value: money(oktan.balance), icon: '⛽' },
         { label: isAr ? 'التغطية' : 'COVERAGE', value: `${oktan.daysRemaining || 0} ${isAr ? 'يوم' : 'days'}`, icon: '📅' },
-        { label: isAr ? 'استهلاك مسجل' : 'LOGGED CONSUMPTION', value: `${Object.values(gasByPort).reduce((s, v) => s + safeFuel(v), 0).toLocaleString()} L`, icon: '🔥' },
+        { label: isAr ? 'استهلاك مسجل' : 'LOGGED CONSUMPTION', value: `${Object.values(gasByPort).reduce<number>((s, v) => s + safeFuel(v), 0).toLocaleString()} L`, icon: '🔥' },
         { label: isAr ? 'المولدات المسجلة' : 'UNITS WITH FUEL', value: gasByUnit.length, icon: '⚙️' }
       ]
     : [
         { label: isAr ? 'إجمالي العمليات' : 'TOTAL OPS', value: ops.length, icon: '📋' },
         { label: isAr ? 'نشط الآن' : 'ACTIVE NOW', value: analytics.activeOps.length, icon: '⚡' },
         { label: isAr ? 'نسبة الإنجاز' : 'COMPLETION', value: pct(analytics.completionRate), icon: '✓' },
-        { label: isAr ? 'بيانات ناقصة' : 'MISSING DATA', value: Object.values(analytics.missingData).reduce((s, v) => s + v, 0), icon: '🧹' }
+        { label: isAr ? 'بيانات ناقصة' : 'MISSING DATA', value: Object.values(analytics.missingData).reduce<number>((s, v) => s + Number(v || 0), 0), icon: '🧹' }
       ];
 
   const portRows = analytics.portStats;

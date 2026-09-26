@@ -61,14 +61,8 @@ const UserMgmt: React.FC = () => {
   const [showMatrixModal, setShowMatrixModal] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [authAdvice, setAuthAdvice] = useState('');
-  const [isAiLinked, setIsAiLinked] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // SECURE AUDITING STATES
-  const [geofenceAlarm, setGeofenceAlarm] = useState<any | null>(null);
-  const [isolationTestStatus, setIsolationTestStatus] = useState<'IDLE' | 'TESTING' | 'PASSED'>('IDLE');
-  const [isolationLog, setIsolationLog] = useState<string[]>([]);
-  const [rotationBroadcastState, setRotationBroadcastState] = useState<'IDLE' | 'SENDING' | 'SENT'>('IDLE');
   const [activeTab, setActiveTab] = useState<'HYGIENE' | 'ISOLATION' | 'ROTATION' | 'GEOFENCE'>('HYGIENE');
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
@@ -79,16 +73,6 @@ const UserMgmt: React.FC = () => {
   const refreshData = () => {
     setUsers([...db.getUsers()]);
   };
-
-  useEffect(() => {
-    const checkAiStatus = async () => {
-      if (window.aistudio?.hasSelectedApiKey) {
-        const linked = await window.aistudio.hasSelectedApiKey();
-        setIsAiLinked(linked);
-      }
-    };
-    checkAiStatus();
-  }, []);
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
@@ -244,7 +228,7 @@ const UserMgmt: React.FC = () => {
       alert(lang === 'ar' ? 'حساب منشئ النظام محمي ولا يمكن حذفه.' : 'The system creator account is protected and cannot be deleted.');
       return;
     }
-    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف ملف المستخدم نهائياً؟' : 'Are you sure you want to delete this user profile permanently?')) {
+    if (window.confirm(lang === 'ar' ? 'هل تريد إلغاء صلاحية هذا المستخدم ومنعه من تسجيل الدخول؟' : 'Revoke this user’s access and block future sign-ins?')) {
       const deleted = await db.deleteUser(userId);
       if (!deleted) {
         alert(lang === 'ar' ? 'تعذر حذف المستخدم من قاعدة البيانات.' : 'User could not be deleted from the database.');
@@ -353,44 +337,10 @@ const UserMgmt: React.FC = () => {
       const result = await runThinkingAudit(prompt, 4000);
       setAuthAdvice(result || 'Audit engine returned empty results.');
     } catch (e: any) {
-      setAuthAdvice(`Audit Node Error: Processing capacity reached. System isolations verified secure offline.`);
+      setAuthAdvice(`Access review unavailable: ${e?.message || 'AI service request failed.'}`);
     } finally {
       setIsThinking(false);
     }
-  };
-
-  // Compliance simulators
-  const triggerIsolationCheck = () => {
-    setIsolationTestStatus('TESTING');
-    setIsolationLog(['[+] Initiating Cross-Company Isolation Scan...', '[+] Checking database query context rules...']);
-    setTimeout(() => {
-      setIsolationLog(prev => [...prev, '[+] Checking CUSTOMER roles access levels...', '[!] Isolated test: MAERSK query received...']);
-    }, 800);
-    setTimeout(() => {
-      setIsolationLog(prev => [...prev, '[✓] PASS: MAERSK is strictly isolated from Viewing MSC data.', '[!] Isolated test: MSC query received...']);
-    }, 1600);
-    setTimeout(() => {
-      setIsolationLog(prev => [...prev, '[✓] PASS: MSC is strictly isolated from Viewing MAERSK data.', '[+] Verification logic passed successfully.', '[✓] MONTHLY Isolation Audit STATUS: 100% SECURE']);
-      setIsolationTestStatus('PASSED');
-    }, 2400);
-  };
-
-  const triggerRotationBroadcast = () => {
-    setRotationBroadcastState('SENDING');
-    setTimeout(() => {
-      setRotationBroadcastState('SENT');
-      alert('SUCCESS: Password rotation broadcast alerts dispatched. Forced expired user passwords will require standard renewal on next log.');
-    }, 1200);
-  };
-
-  const triggerGeofenceSimulation = () => {
-    setGeofenceAlarm({
-      operator: 'Ahmed Alexandria (Gate Operator)',
-      attemptedIp: '197.88.22.41',
-      attemptedLoc: 'Suez Inland Hub (External)',
-      assignedHubs: 'Alexandria Hub (ALEX)',
-      timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19)
-    });
   };
 
   const labelClass = "text-[10px] font-black uppercase text-slate-400 block mb-2 tracking-widest font-mono";
@@ -399,29 +349,6 @@ const UserMgmt: React.FC = () => {
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-500 text-start pb-24 text-[var(--text-primary)]">
       
-      {/* GEOFENCE ALARM BANNER */}
-      {geofenceAlarm && (
-        <div className="bg-rose-600 outline outline-4 outline-rose-900 border-4 border-white text-white p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl animate-bounce">
-          <div className="flex items-center gap-5">
-            <span className="text-4xl">🚨</span>
-            <div>
-              <h4 className="text-sm font-black uppercase tracking-widest text-[#FFF]">CRITICAL SEC_GEOFENCE MISMATCH ALARM</h4>
-              <p className="text-xs font-bold text-rose-100 mt-1">
-                Operator <span className="underline font-black">{geofenceAlarm.operator}</span> (Assigned: {geofenceAlarm.assignedHubs}) triggered alert attempting login from unauthorized IP region: <strong className="text-white">{geofenceAlarm.attemptedLoc} ({geofenceAlarm.attemptedIp})</strong>.
-              </p>
-              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300 mt-1">✓ Access strictly blocked. Incident log archived in security vault.</p>
-            </div>
-          </div>
-          <button 
-            type="button"
-            onClick={() => setGeofenceAlarm(null)} 
-            className="bg-white text-rose-600 px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-rose-100 transition-colors shrink-0"
-          >
-            Dismiss Incident Warning
-          </button>
-        </div>
-      )}
-
       {/* HEADER BAR */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
         <div>
@@ -519,7 +446,7 @@ const UserMgmt: React.FC = () => {
                             type="button"
                             onClick={() => handleDeleteUser(u.id)}
                             className="p-2.5 bg-rose-50 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-600 hover:text-white transition-all"
-                            title="Delete Identity"
+                            title="Revoke user access"
                           >
                             ✕
                           </button>
@@ -553,7 +480,7 @@ const UserMgmt: React.FC = () => {
                       <div className="flex flex-wrap gap-1.5 items-center">
                         {isSA ? (
                           <span className="px-3 py-1 bg-amber-500/10 text-amber-500 rounded-xl font-mono font-black text-[8px] tracking-wider uppercase border border-amber-500/20">
-                            🔒 Service Token: {u.apiKeys?.[0]}
+                            🔒 {u.apiKeys?.length ? 'API token configured' : 'No API token configured'}
                           </span>
                         ) : (
                           <div className="px-3 py-1 bg-slate-900 text-[#C2A378] rounded-xl font-mono font-black text-[9px] tracking-widest shadow-inner">
@@ -571,10 +498,11 @@ const UserMgmt: React.FC = () => {
                       {!isReadOnly && isAdmin && currentUser.id !== u.id && (
                         <button 
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             const nextState = !u.revoked;
-                            db.updateUser(u.id, { revoked: nextState });
-                            refreshData();
+                            const saved = await db.updateUser(u.id, { revoked: nextState });
+                            if (saved) refreshData();
+                            else alert(lang === 'ar' ? 'تعذر تحديث صلاحية المستخدم.' : 'Could not update user access.');
                           }}
                           className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all border ${
                             u.revoked 
@@ -632,8 +560,8 @@ const UserMgmt: React.FC = () => {
            {/* SECURE AUDITING MULTI-TAB PANEL */}
            <div className="bg-white dark:bg-slate-800 rounded-[3rem] border border-slate-100 dark:border-slate-700 p-8 shadow-sm text-start space-y-6">
               <div className="border-b border-slate-100 dark:border-slate-700 pb-4 font-black">
-                <h3 className="text-base text-slate-850 dark:text-white uppercase tracking-tight">Active Compliance Vault</h3>
-                <p className="text-[9px] text-[#C2A378] uppercase tracking-wider mt-1 font-mono">Audit verification tabs for certified port logs</p>
+                <h3 className="text-base text-slate-850 dark:text-white uppercase tracking-tight">Security Status</h3>
+                <p className="text-[9px] text-[#C2A378] uppercase tracking-wider mt-1 font-mono">Security features and checks currently available in this app</p>
               </div>
 
               {/* Tabs list */}
@@ -647,24 +575,9 @@ const UserMgmt: React.FC = () => {
               {/* Tab Content A: Account Hygiene */}
               {activeTab === 'HYGIENE' && (
                 <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="bg-emerald-500/5 border border-emerald-500/20 p-5 rounded-3xl space-y-3.5">
-                    <div className="flex items-center gap-3">
-                       <span className="text-emerald-500 text-lg">✓</span>
-                       <h5 className="text-[11px] font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-widest font-mono">DE-IDENTIFY METRIC: PASS</h5>
-                    </div>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-                      All generic administrative labels removed completely. Swapped to corporate physical directory profile of <strong className="text-slate-800 dark:text-white font-black">Mostafa Ibrahim (COO)</strong>.
-                    </p>
-                  </div>
-
-                  <div className="bg-emerald-500/5 border border-emerald-500/20 p-5 rounded-3xl space-y-3.5">
-                    <div className="flex items-center gap-3">
-                       <span className="text-emerald-500 text-lg">✓</span>
-                       <h5 className="text-[11px] font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-widest font-mono">SERVICE ACCOUNT RULE: ENFORCED</h5>
-                    </div>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-                      Service Accounts strictly restricted to API tokens. Standard password logins prohibited. Restricted API keys (<code className="font-mono text-amber-500 text-[9px] bg-amber-500/10 px-1.5 py-0.5 rounded shadow-sm font-black">nf_live_sec_key_3847a9</code>) required.
-                    </p>
+                  <div className="bg-amber-500/5 border border-amber-500/20 p-5 rounded-3xl space-y-2">
+                    <h5 className="text-[11px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest font-mono">No security audit result available</h5>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">This page does not verify identity de-identification, service-account restrictions, MFA enforcement, or password policy. Do not treat it as a security certification.</p>
                   </div>
                 </div>
               )}
@@ -672,109 +585,21 @@ const UserMgmt: React.FC = () => {
               {/* Tab Content B: Customer Isolation */}
               {activeTab === 'ISOLATION' && (
                 <div className="space-y-4 animate-in fade-in duration-300">
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold uppercase tracking-wide">
-                    ⚠️ Multi-Tenant isolation restricts CUSTOMER roles from viewing foreign records (e.g. MAERSK vs. MSC). Log audit executed monthly.
-                  </p>
-                  
-                  {isolationTestStatus === 'IDLE' && (
-                    <button 
-                      type="button"
-                      onClick={triggerIsolationCheck}
-                      className="w-full bg-slate-900 text-white hover:bg-black py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow transition-all"
-                    >
-                      Run Monthly Isolation Diagnostics
-                    </button>
-                  )}
-
-                  {isolationTestStatus === 'TESTING' && (
-                    <div className="p-5 bg-slate-800 dark:bg-slate-900 rounded-3xl space-y-2 border border-blue-500/25 text-white">
-                      <div className="flex items-center gap-3 text-blue-400 animate-pulse">
-                         <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping"></span>
-                         <span className="text-[9px] font-black uppercase tracking-widest">Scanning Tenant Bridges...</span>
-                      </div>
-                      <div className="space-y-1 font-mono text-[8px] font-semibold text-slate-300">
-                        {isolationLog.map((log, i) => <p key={i}>{log}</p>)}
-                      </div>
-                    </div>
-                  )}
-
-                  {isolationTestStatus === 'PASSED' && (
-                    <div className="p-5 bg-emerald-500/10 rounded-3xl space-y-3.5 border border-emerald-500/30">
-                      <div className="flex items-center justify-between text-emerald-600">
-                         <span className="text-[10px] font-black uppercase tracking-widest">Isolation Audit Approved</span>
-                         <span className="bg-emerald-100 text-emerald-800 px-3 py-0.5 rounded-full text-[8px] font-black font-mono">STRICT PASS</span>
-                      </div>
-                      <div className="space-y-1 font-mono text-[8px] font-semibold text-slate-600 dark:text-slate-400 text-start">
-                        {isolationLog.map((log, i) => <p key={i}>{log}</p>)}
-                      </div>
-                      <button 
-                        type="button"
-                        onClick={() => setIsolationTestStatus('IDLE')}
-                        className="text-[9px] font-black text-[#C2A378] uppercase underline tracking-wide"
-                      >
-                        Reset Diagnostics
-                      </button>
-                    </div>
-                  )}
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">This screen has no tenant-isolation test. Customer data access must be verified with real customer accounts and Supabase row-level security policies.</p>
                 </div>
               )}
 
               {/* Tab Content C: Credential Rotation */}
               {activeTab === 'ROTATION' && (
                 <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="bg-slate-50 dark:bg-slate-900 p-5 rounded-3xl space-y-3.5 border border-slate-100 dark:border-slate-800">
-                     <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono">Rotation Cycles Status</h5>
-                     <div className="grid grid-cols-3 gap-2 text-center">
-                       <div className="bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700">
-                         <p className="text-[14px] font-black text-[#C2A378] leading-none">30 d</p>
-                         <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-1">ADMIN + MFA</p>
-                       </div>
-                       <div className="bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700">
-                         <p className="text-[14px] font-black text-slate-600 dark:text-slate-300 leading-none">60 d</p>
-                         <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-1">OPERATORS</p>
-                       </div>
-                       <div className="bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700">
-                         <p className="text-[14px] font-black text-slate-600 dark:text-slate-300 leading-none">90 d</p>
-                         <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-1">CUSTOMERS</p>
-                       </div>
-                     </div>
-                  </div>
-
-                  <button 
-                     type="button"
-                     disabled={rotationBroadcastState === 'SENDING'}
-                     onClick={triggerRotationBroadcast}
-                     className="w-full bg-[#001F3F] text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow transition-all disabled:opacity-50"
-                  >
-                    {rotationBroadcastState === 'SENDING' ? 'Dispatched reminders...' : 'Enforce & Dispatched Rotation Reminders'}
-                  </button>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">Password expiration, forced rotation, and reminder delivery are not configured by this app. No rotation reminders have been sent.</p>
                 </div>
               )}
 
               {/* Tab Content D: Geofencing Control Link */}
               {activeTab === 'GEOFENCE' && (
                 <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="bg-slate-50 dark:bg-slate-900 p-5 rounded-3xl space-y-3.5 border border-slate-100 dark:border-slate-800">
-                     <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Gate Operators Geofence Policies</h5>
-                     <div className="space-y-2 text-[9px] font-bold text-slate-500">
-                       <div className="flex justify-between items-center border-b pb-2 border-slate-100 dark:border-slate-700">
-                         <span>Ahmed Fawzy (Operator)</span>
-                         <span className="text-slate-800 dark:text-slate-200 font-black font-mono">Alexandria Hub (ALEX)</span>
-                       </div>
-                       <div className="flex justify-between items-center border-b pb-2 border-slate-100 dark:border-slate-700">
-                         <span>Ahmed Ali (Operator)</span>
-                         <span className="text-slate-800 dark:text-slate-200 font-black font-mono">Damietta Hub (DAM)</span>
-                       </div>
-                     </div>
-                  </div>
-
-                  <button 
-                    type="button"
-                    onClick={triggerGeofenceSimulation}
-                    className="w-full bg-rose-600 hover:bg-rose-700 text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow shadow-rose-200 transition-all font-mono"
-                  >
-                    Simulate Mismatched Out-of-Fence Operator Login
-                  </button>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">IP-based login geofencing and incident logging are not implemented here. Assigned port access shown in user profiles does not mean login location is enforced.</p>
                 </div>
               )}
            </div>
@@ -1181,7 +1006,7 @@ const UserMgmt: React.FC = () => {
                          <div className="border-t border-rose-200 dark:border-rose-900 pt-4 flex justify-between items-center">
                            <div>
                              <p className="text-xs font-bold text-rose-600">Delete User Identity Profile</p>
-                             <p className="text-[9px] text-slate-400">Permanently remove this user identity from the system database.</p>
+                             <p className="text-[9px] text-slate-400">Revoke access so this profile can no longer sign in. The profile remains in the database.</p>
                            </div>
                            <button 
                              type="button"

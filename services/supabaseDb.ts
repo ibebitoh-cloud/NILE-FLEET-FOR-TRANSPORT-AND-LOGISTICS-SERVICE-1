@@ -758,14 +758,16 @@ class SupabaseDB {
     return true;
   }
 
-  async deleteUser(id: string): Promise<void> {
+  async deleteUser(id: string): Promise<boolean> {
     // The Supabase admin API (full account deletion) requires a service-role key,
     // which must never be exposed in browser code. So we revoke access instead —
     // this is a real, persisted change (blocks login), unlike a client-side admin call.
-    await update('profiles', id, { revoked: true });
+    const saved = await update('profiles', id, { revoked: true });
+    if (!saved) return false;
     _users = _users.filter(u => u.id !== id);
     await auditLog('USER', `Deleted user profile ${id}`);
     dispatchChange();
+    return true;
   }
 
   async addUser(user: User): Promise<void> {
@@ -1159,9 +1161,16 @@ class SupabaseDB {
     dispatchChange();
   }
 
-  restartHistory(): void {
+  async restartHistory(): Promise<boolean> {
+    const { error } = await supabase.from('audit_log').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) {
+      _lastDbError = `audit_log: ${error.message}`;
+      console.error('[supabaseDb] clear audit history:', error.message);
+      return false;
+    }
     _auditLogs = [];
     dispatchChange();
+    return true;
   }
 
   undo(): boolean {
