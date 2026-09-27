@@ -237,6 +237,7 @@ const Financials: React.FC = () => {
   const [invoices, setInvoices] = useState(db.getInvoices());
   const [operations, setOperations] = useState(db.getOperations());
   const [users, setUsers] = useState(db.getUsers());
+  const [payments, setPayments] = useState(db.getPayments());
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedInvIds, setSelectedInvIds] = useState<Set<string>>(new Set());
   const [showProLedger, setShowProLedger] = useState(false);
@@ -248,6 +249,12 @@ const Financials: React.FC = () => {
   const [customerSearch, setCustomerSearch] = useState('');
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [showPaymentsRegister, setShowPaymentsRegister] = useState(false);
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [paymentDraft, setPaymentDraft] = useState<Payment | null>(null);
+  const [paymentManageError, setPaymentManageError] = useState('');
+  const [paymentManageSaving, setPaymentManageSaving] = useState(false);
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
   const isReadOnly = currentUser.role === UserRole.VIEWER;
@@ -256,6 +263,7 @@ const Financials: React.FC = () => {
     setInvoices([...db.getInvoices()]);
     setOperations([...db.getOperations()]);
     setUsers([...db.getUsers()]);
+    setPayments([...db.getPayments()]);
     if (selectedUser) {
       const updatedUser = db.getUsers().find(u => u.id === selectedUser.id);
       if (updatedUser) setSelectedUser(updatedUser);
@@ -316,6 +324,67 @@ const Financials: React.FC = () => {
     });
   }, [customers, customerSearch, invoices, operations]);
 
+  const visiblePayments = useMemo(() => {
+    const q = normalizeCustomerName(paymentSearch);
+    return [...payments]
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+      .filter(payment => {
+        const customer = users.find(user => user.id === payment.customerId);
+        const fields = [payment.customerName, customer?.companyName, customer?.name, payment.date, payment.reference, payment.id, payment.type, payment.amount];
+        return !q || fields.some(value => normalizeCustomerName(String(value ?? '')).includes(q));
+      });
+  }, [payments, paymentSearch, users]);
+
+  const openPaymentEditor = (payment: Payment) => {
+    setEditingPayment(payment);
+    setPaymentDraft({ ...payment });
+    setPaymentManageError('');
+  };
+
+  const savePaymentEdit = async () => {
+    if (!editingPayment || !paymentDraft || paymentManageSaving) return;
+    const amount = Number(paymentDraft.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentManageError(isAr ? 'أدخل مبلغاً صحيحاً أكبر من صفر.' : 'Enter a valid amount greater than zero.');
+      return;
+    }
+    const hasAllocations = db.getPaymentAllocations().some(allocation => allocation.paymentId === editingPayment.id);
+    if (hasAllocations && amount !== Number(editingPayment.amount)) {
+      setPaymentManageError(isAr ? 'لا يمكن تغيير مبلغ دفعة موزعة على فواتير. احذفها ثم سجّل الدفعة بالمبلغ الصحيح.' : 'This receipt is allocated to invoices. Delete it and record a new receipt to change its amount safely.');
+      return;
+    }
+    setPaymentManageSaving(true);
+    const saved = await db.updatePayment({ ...paymentDraft, amount });
+    if (!saved) {
+      setPaymentManageError(db.getLastDbError() || (isAr ? 'تعذر تحديث الدفعة.' : 'Could not update this receipt.'));
+      setPaymentManageSaving(false);
+      return;
+    }
+    setEditingPayment(null);
+    setPaymentDraft(null);
+    setPaymentManageSaving(false);
+    refreshData();
+  };
+
+  const removePayment = async (payment: Payment) => {
+    const hasAllocations = db.getPaymentAllocations().some(allocation => allocation.paymentId === payment.id);
+    const message = hasAllocations
+      ? `Delete the ${Number(payment.amount || 0).toLocaleString()} EGP receipt from ${payment.customerName}? Its invoice and historical balance allocations will be reversed.`
+      : `Delete the ${Number(payment.amount || 0).toLocaleString()} EGP receipt from ${payment.customerName}? This older receipt has no saved allocation details, so the receipt will be removed but past balances cannot be recalculated automatically.`;
+    if (!window.confirm(message)) return;
+    setPaymentManageError('');
+    setPaymentManageSaving(true);
+    const removed = await db.deletePayment(payment.id);
+    if (!removed) {
+      setPaymentManageError(db.getLastDbError() || (isAr ? 'تعذر حذف الدفعة.' : 'Could not delete this receipt.'));
+      setPaymentManageSaving(false);
+      return;
+    }
+    if (editingPayment?.id === payment.id) { setEditingPayment(null); setPaymentDraft(null); }
+    setPaymentManageSaving(false);
+    refreshData();
+  };
+
   return (
     <div className={`max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 text-start pb-32 ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
       
@@ -348,9 +417,14 @@ const Financials: React.FC = () => {
         {/* CUSTOMER SELECTION SIDEBAR */}
         <div className="xl:w-[380px] space-y-6 shrink-0">
           <div className={`p-8 rounded-[3.5rem] border shadow-2xl h-full flex flex-col ${isDark ? 'bg-slate-900 border-white/5' : 'bg-white border-slate-100'}`}>
-             <div className="flex items-center gap-3 mb-10">
-                <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center text-xl shadow-lg shadow-blue-500/20">💳</div>
-                <h3 className="text-xl font-black uppercase italic tracking-tighter">{t.partnerPortfolios}</h3>
+             <div className="flex items-center justify-between gap-3 mb-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center text-xl shadow-lg shadow-blue-500/20">💳</div>
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter">{t.partnerPortfolios}</h3>
+                </div>
+                <button onClick={() => { setShowPaymentsRegister(true); setPaymentManageError(''); }} className="shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-3 text-[9px] font-black uppercase tracking-wider text-white shadow-lg transition-colors">
+                  💰 {isAr ? 'كل المقبوضات' : 'Received money'} <span className="ml-1 rounded-full bg-white/20 px-2 py-0.5">{payments.length}</span>
+                </button>
              </div>
              
              <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-2">
@@ -597,6 +671,67 @@ const Financials: React.FC = () => {
                  </button>
               </div>
            </div>
+        </div>
+      )}
+
+      {showPaymentsRegister && (
+        <div className={`fixed inset-0 z-[600] flex items-center justify-center bg-slate-950/80 p-3 backdrop-blur-md sm:p-6 ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
+          <div className={`flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border shadow-2xl ${isDark ? 'border-slate-700 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-900'}`}>
+            <div className="flex items-center justify-between gap-4 bg-slate-900 p-5 text-white sm:p-7">
+              <div>
+                <h2 className="text-xl font-black uppercase tracking-wide text-emerald-300 sm:text-2xl">{isAr ? 'سجل جميع المقبوضات' : 'All received payments'}</h2>
+                <p className="mt-1 text-xs font-bold text-slate-300">{payments.length} {isAr ? 'دفعة مسجلة' : 'receipts'} · EGP {payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0).toLocaleString()} {isAr ? 'إجمالي' : 'total received'}</p>
+              </div>
+              <button onClick={() => { setShowPaymentsRegister(false); setEditingPayment(null); setPaymentDraft(null); }} aria-label={isAr ? 'إغلاق' : 'Close'} className="rounded-xl px-4 py-2 text-2xl font-bold text-white hover:bg-white/10">×</button>
+            </div>
+            <div className="border-b border-slate-200 p-4 dark:border-slate-700 sm:p-5">
+              <input value={paymentSearch} onChange={event => setPaymentSearch(event.target.value)} placeholder={isAr ? 'ابحث بالعميل أو التاريخ أو المرجع أو المبلغ' : 'Search customer, date, reference, amount, or method'} className={`w-full rounded-xl border px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 ${isDark ? 'border-slate-700 bg-slate-800 text-white' : 'border-slate-200 bg-slate-50'}`} />
+            </div>
+            {paymentManageError && <div role="alert" className="mx-4 mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-700 sm:mx-5">{paymentManageError}</div>}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="sticky top-0 bg-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                  <tr><th className="px-4 py-3">Customer</th><th className="px-4 py-3">Date / reference</th><th className="px-4 py-3">Method</th><th className="px-4 py-3 text-right">Amount</th><th className="px-4 py-3 text-center">Allocation</th><th className="px-4 py-3 text-right">Actions</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {visiblePayments.map(payment => {
+                    const customer = users.find(user => user.id === payment.customerId);
+                    const allocationCount = db.getPaymentAllocations().filter(allocation => allocation.paymentId === payment.id).length;
+                    return <tr key={payment.id} className="hover:bg-emerald-50/50 dark:hover:bg-slate-800/60">
+                      <td className="px-4 py-4"><div className="font-black">{translateEntity(customer?.companyName || customer?.name || payment.customerName || 'Unknown customer', lang)}</div><div className="mt-1 text-[10px] text-slate-400">{payment.customerId}</div></td>
+                      <td className="px-4 py-4"><div className="font-bold">{payment.date || '—'}</div><div className="mt-1 text-xs text-slate-500">{payment.reference || payment.id}</div></td>
+                      <td className="px-4 py-4"><span className="rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">{payment.type}</span></td>
+                      <td className="px-4 py-4 text-right font-black text-emerald-700 dark:text-emerald-300">EGP {Number(payment.amount || 0).toLocaleString()}</td>
+                      <td className="px-4 py-4 text-center text-xs font-bold text-slate-500">{allocationCount ? `${allocationCount} ${isAr ? 'تخصيص' : 'allocations'}` : (isAr ? 'قديم' : 'Legacy')}</td>
+                      <td className="px-4 py-4 text-right">
+                        {!isReadOnly && <div className="flex justify-end gap-2"><button disabled={paymentManageSaving} onClick={() => openPaymentEditor(payment)} className="rounded-lg border border-blue-200 px-3 py-2 text-[10px] font-black uppercase text-blue-700 hover:bg-blue-50 disabled:opacity-50">{isAr ? 'تعديل' : 'Edit'}</button><button disabled={paymentManageSaving} onClick={() => removePayment(payment)} className="rounded-lg border border-rose-200 px-3 py-2 text-[10px] font-black uppercase text-rose-700 hover:bg-rose-50 disabled:opacity-50">{isAr ? 'حذف' : 'Delete'}</button></div>}
+                      </td>
+                    </tr>;
+                  })}
+                  {visiblePayments.length === 0 && <tr><td colSpan={6} className="px-4 py-14 text-center font-bold text-slate-400">{isAr ? 'لا توجد دفعات مطابقة.' : 'No received payments match your search.'}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-slate-200 p-4 text-xs font-semibold text-slate-500 dark:border-slate-700">{isAr ? 'تظهر هنا دفعات جميع العملاء، بما فيها الدفعات القديمة.' : 'This register includes receipts from every customer, including older records.'}</div>
+          </div>
+        </div>
+      )}
+
+      {editingPayment && paymentDraft && (
+        <div className={`fixed inset-0 z-[700] flex items-center justify-center bg-slate-950/70 p-4 ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
+          <div className={`w-full max-w-lg rounded-3xl p-6 shadow-2xl ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
+            <h3 className="text-xl font-black">{isAr ? 'تعديل بيانات المقبوض' : 'Edit received payment'}</h3>
+            <p className="mt-1 text-sm font-semibold text-slate-500">{translateEntity(editingPayment.customerName, lang)} · {editingPayment.id}</p>
+            <div className="mt-6 grid gap-4">
+              <label className="text-xs font-black uppercase text-slate-500">{isAr ? 'المبلغ (جنيه)' : 'Amount (EGP)'}<input type="number" min="0.01" step="0.01" disabled={db.getPaymentAllocations().some(allocation => allocation.paymentId === editingPayment.id)} value={paymentDraft.amount} onChange={event => setPaymentDraft({ ...paymentDraft, amount: Number(event.target.value) })} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-bold disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800" /></label>
+              <label className="text-xs font-black uppercase text-slate-500">{isAr ? 'التاريخ' : 'Date'}<input type="date" value={paymentDraft.date} onChange={event => setPaymentDraft({ ...paymentDraft, date: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-bold dark:border-slate-700 dark:bg-slate-800" /></label>
+              <label className="text-xs font-black uppercase text-slate-500">{isAr ? 'المرجع' : 'Reference'}<input value={paymentDraft.reference} onChange={event => setPaymentDraft({ ...paymentDraft, reference: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-bold dark:border-slate-700 dark:bg-slate-800" /></label>
+              <label className="text-xs font-black uppercase text-slate-500">{isAr ? 'طريقة الدفع' : 'Payment method'}<select value={paymentDraft.type} onChange={event => setPaymentDraft({ ...paymentDraft, type: event.target.value as Payment['type'] })} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-bold dark:border-slate-700 dark:bg-slate-800"><option value="CASH">Cash</option><option value="BANK">Bank</option><option value="ADVANCE">Advance</option></select></label>
+            </div>
+            {db.getPaymentAllocations().some(allocation => allocation.paymentId === editingPayment.id) && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">{isAr ? 'تم توزيع هذه الدفعة على فواتير؛ لتغيير المبلغ احذفها ثم سجّلها بالمبلغ الصحيح.' : 'This receipt has been applied to invoices. To change its amount, delete it and record a replacement so balances stay correct.'}</p>}
+            {paymentManageError && <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-700">{paymentManageError}</p>}
+            <div className="mt-6 flex justify-end gap-3"><button onClick={() => { setEditingPayment(null); setPaymentDraft(null); setPaymentManageError(''); }} className="rounded-xl px-4 py-3 text-sm font-bold text-slate-500">{isAr ? 'إلغاء' : 'Cancel'}</button><button disabled={paymentManageSaving} onClick={savePaymentEdit} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{paymentManageSaving ? (isAr ? 'جارٍ الحفظ' : 'Saving…') : (isAr ? 'حفظ التغييرات' : 'Save changes')}</button></div>
+          </div>
         </div>
       )}
 

@@ -701,8 +701,17 @@ class SupabaseDB {
   }
 
   async updatePayment(payment: Payment): Promise<boolean> {
-    if (_paymentAllocations.some(allocation => allocation.paymentId === payment.id)) {
-      _lastDbError = 'This payment has allocations. Reverse or reallocate it before editing the payment details.';
+    const existing = _payments.find(item => item.id === payment.id);
+    if (!existing) {
+      _lastDbError = 'Payment was not found in the loaded records.';
+      return false;
+    }
+    if (existing.customerId !== payment.customerId) {
+      _lastDbError = 'A receipt cannot be moved to another customer. Delete it and record a new receipt for the correct customer.';
+      return false;
+    }
+    if (_paymentAllocations.some(allocation => allocation.paymentId === payment.id) && Number(existing.amount) !== Number(payment.amount)) {
+      _lastDbError = 'This payment has invoice allocations. Its amount cannot be changed until it is reallocated.';
       return false;
     }
     const saved = await update<Payment>('payments', payment.id, {
