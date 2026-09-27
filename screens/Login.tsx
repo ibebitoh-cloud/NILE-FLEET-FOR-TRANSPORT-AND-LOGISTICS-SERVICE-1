@@ -92,7 +92,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <h2 className="text-5xl font-black leading-tight uppercase tracking-tighter italic">
                   {isAr ? <span className="text-white">قوة المولدات.</span> : <><AnimatedText text="GENSET" baseDelay={0.2} /> <br/><AnimatedText text="POWER." colorClass="text-[#C2A378]" baseDelay={0.6} /></>}
                 </h2>
-                <span aria-hidden="true" className="signal-glitch pointer-events-none absolute left-0 top-1/2 text-5xl font-black uppercase tracking-tighter italic text-rose-400/70">GENSET POWER.</span>
               </div>
               <p className="text-slate-300 text-[10px] font-bold uppercase tracking-[0.4em] max-w-sm leading-relaxed border-l-2 border-[#C2A378]/30 pl-6">{t.coldChain}</p>
             </div>
