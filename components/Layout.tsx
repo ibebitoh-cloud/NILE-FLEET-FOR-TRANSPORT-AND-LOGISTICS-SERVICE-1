@@ -432,7 +432,8 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         'العميل','للعميل','عميل','شركة','شركه','مؤسسة','مؤسسه','من','عن','اعرض','اعرضلي',
         'عايز','اريد','محتاج','هات','اعطني','اعرض','قولي','قوللي','وريني','رصيد','الرصيد',
         'مستحق','المستحق','مديونية','تحصيل','تحصيلات','المحصل','المقبوض','دفع','مدفوع',
-        'فاتورة','فواتير','عملية','عمليه','عمليات','حجز','حجوزات','بيان'
+        'فاتورة','فواتير','عملية','عمليه','عمليات','حجز','حجوزات','بيان',
+        'for','of','the','a','an','any','all','every','general','overall','companywide'
       ]);
 
       const findCustomerFromQuestion = (rawQuestion: string) => {
@@ -675,6 +676,17 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           return;
         }
         if (soaIntent) {
+          const explicitAllCustomers = /\b(?:all|every|general|overall|companywide|any)\b|كل\s*(?:العملاء|عميل)|جميع\s*العملاء|اجمالي\s*العملاء|كشف\s*الحساب\s*العام/i.test(question);
+          const unresolvedCustomerTokens = normalizeEntityText(question)
+            .split(' ')
+            .filter(token => token.length >= 2 && !intentWords.has(token));
+          if (unresolvedCustomerTokens.length > 0 && !explicitAllCustomers) {
+            const clarification = responseIsAr
+              ? 'لم أتمكن من مطابقة اسم العميل بثقة. أرسل الاسم المسجل للعميل كما يظهر في النظام لأعرض كشف حسابه.'
+              : 'I could not confidently match that customer. Please use the customer name as it appears in the system so I can show the correct statement.';
+            setAiChatMessages(prev => [...prev, { role: 'ai', text: clarification }]);
+            return;
+          }
           // A bare "كشف حساب / SOA" should still return useful live data.
           // Show a company-wide receivables/collections summary instead of
           // handing the question to the LLM or returning an empty answer.
