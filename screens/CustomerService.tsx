@@ -168,10 +168,10 @@ const CustomerService: React.FC = () => {
             <button onClick={() => setActiveTab('PORTS')} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'PORTS' ? 'bg-[#C2A378] text-[#001F3F]' : 'text-slate-400 hover:text-white'}`}>{isAr ? 'المواقع' : 'PORTS'}</button>
             <button onClick={() => setActiveTab('FAQ')} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'FAQ' ? 'bg-[#C2A378] text-[#001F3F]' : 'text-slate-400 hover:text-white'}`}>{isAr ? 'الإرشادات' : 'GUIDELINES'}</button>
          </div>
-         {isAdmin && (
-           {!isReadOnly && isAdmin && <button onClick={() => openAdd(activeTab === 'CONTACTS' ? 'CONTACT' : activeTab === 'PORTS' ? 'PORT' : 'FAQ')} className="relative z-10 bg-white/10 hover:bg-white/20 text-[#C2A378] border border-[#C2A378]/30 px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all">
+         {isAdmin && !isReadOnly && (
+           <button onClick={() => openAdd(activeTab === 'CONTACTS' ? 'CONTACT' : activeTab === 'PORTS' ? 'PORT' : 'FAQ')} className="relative z-10 bg-white/10 hover:bg-white/20 text-[#C2A378] border border-[#C2A378]/30 px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all">
              + {isAr ? 'إضافة' : 'Add New'}
-           </button>}
+           </button>
          )}
       </div>
 
