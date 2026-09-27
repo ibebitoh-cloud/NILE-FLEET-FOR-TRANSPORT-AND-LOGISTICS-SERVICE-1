@@ -1,6 +1,6 @@
 import React, { useContext, useMemo, useEffect, useState } from 'react';
 import { db } from '../services/supabaseDb';
-import { UserRole, User } from '../types';
+import { UserRole, User, hasReadOnlyAccess } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
 
@@ -15,7 +15,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const { isDark } = useContext(ThemeContext);
   const t = translations[lang];
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
-  const isReadOnly = currentUser.role === UserRole.VIEWER;
+  const isReadOnly = hasReadOnlyAccess(currentUser);
   const [, setDataVersion] = useState(0);
 
   useEffect(() => {

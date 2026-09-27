@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useContext, useEffect } from 'react';
 import { db } from '../services/supabaseDb';
-import { User, UserRole, Location, UserPermissions } from '../types';
+import { User, UserRole, Location, UserPermissions, hasReadOnlyAccess } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translateEntity } from '../translations';
 import { runThinkingAudit } from '../services/aiService';
@@ -18,6 +18,7 @@ const ALL_SYSTEM_SCREENS = [
   { id: 'customer-prices', label: 'Customer Price Matrix', icon: '💰', category: 'Commercial' },
   { id: 'booking-invoices', label: 'Booking Invoices', icon: '🧾', category: 'Commercial' },
   { id: 'financials', label: 'Financials & Payments', icon: '🏦', category: 'Financials' },
+  { id: 'analytics', label: 'Analytics Dashboard', icon: '📈', category: 'Analytics' },
   { id: 'intelligence', label: 'AI Intelligence Hub', icon: '🧠', category: 'Analytics' },
   { id: 'reports', label: 'Audit Reports & Analytics', icon: '📝', category: 'Analytics' },
   { id: 'user-mgmt', label: 'User & Access Management', icon: '👤', category: 'Administration' },
@@ -41,6 +42,49 @@ const ALL_ACTION_PERMISSIONS: { key: keyof UserPermissions; label: string; icon:
   { key: 'canKillAccess', label: 'Revoke User Access', icon: '⛔', desc: 'Allow disabling a user account' },
   { key: 'canBypassGeofence', label: 'Security Override', icon: '🛡️', desc: 'Allow approved security exceptions' },
 ];
+
+const getRoleDefaultScreenIds = (role: UserRole): string[] => {
+  if (role === UserRole.ADMIN) return ALL_SYSTEM_SCREENS.map(screen => screen.id);
+  if (role === UserRole.GATE_OPERATOR) return ['port-gate', 'notifications', 'support', 'user-settings'];
+  if (role === UserRole.MANAGER) return ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials', 'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'];
+  if (role === UserRole.CUSTOMER) return ['cust-reservations', 'cust-invoices', 'notifications', 'support'];
+  return ['dashboard', 'master-view', 'reports', 'intelligence', 'notifications', 'support', 'system-log'];
+};
+
+const getReadOnlyScreenIds = (role: UserRole): string[] => {
+  if (role === UserRole.ADMIN || role === UserRole.MANAGER || role === UserRole.VIEWER) {
+    return ['dashboard', 'master-view', 'reports', 'intelligence', 'notifications', 'support', 'system-log'];
+  }
+  return ['notifications', 'support'];
+};
+
+const getRoleDefaultPermissions = (role: UserRole): UserPermissions => ({
+  isReadOnly: false,
+  canCreate: role === UserRole.ADMIN || role === UserRole.GATE_OPERATOR || role === UserRole.CUSTOMER,
+  canEdit: role === UserRole.ADMIN || role === UserRole.GATE_OPERATOR,
+  canDelete: role === UserRole.ADMIN,
+  canExport: true,
+  canViewFinancials: role === UserRole.ADMIN || role === UserRole.CUSTOMER,
+  canManagePrices: role === UserRole.ADMIN,
+  canApproveBookings: role === UserRole.ADMIN,
+  canManageUsers: role === UserRole.ADMIN,
+  canKillAccess: role === UserRole.ADMIN,
+  canBypassGeofence: role === UserRole.ADMIN,
+});
+
+const READ_ONLY_PERMISSIONS: UserPermissions = {
+  isReadOnly: true,
+  canCreate: false,
+  canEdit: false,
+  canDelete: false,
+  canExport: false,
+  canViewFinancials: false,
+  canManagePrices: false,
+  canApproveBookings: false,
+  canManageUsers: false,
+  canKillAccess: false,
+  canBypassGeofence: false,
+};
 
 const ALL_LOCATIONS = Object.values(Location);
 
@@ -66,7 +110,7 @@ const UserMgmt: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'HYGIENE' | 'ISOLATION' | 'ROTATION' | 'GEOFENCE'>('HYGIENE');
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
-  const isReadOnly = currentUser.role === UserRole.VIEWER;
+  const isReadOnly = hasReadOnlyAccess(currentUser);
   const isCreator = String(currentUser.email || '').trim().toLowerCase() === 'bebito@nilefleet.com' || currentUser.isCreator === true;
   const isAdmin = isCreator || currentUser.role === UserRole.ADMIN || currentUser.permissions?.canManageUsers;
 
@@ -100,6 +144,7 @@ const UserMgmt: React.FC = () => {
       assignedPorts: [Location.ALEX, Location.DAM],
       allowedScreens: ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials',  'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'],
       permissions: {
+        isReadOnly: false,
         canCreate: true,
         canEdit: true,
         canDelete: false,
@@ -141,6 +186,7 @@ const UserMgmt: React.FC = () => {
           : ['dashboard', 'master-view', 'reports', 'intelligence', 'support']
       ),
       permissions: {
+        isReadOnly: u.permissions?.isReadOnly ?? false,
         canCreate: u.permissions?.canCreate ?? (u.role === UserRole.ADMIN || u.role === UserRole.GATE_OPERATOR || u.role === UserRole.CUSTOMER),
         canEdit: u.permissions?.canEdit ?? (u.role === UserRole.ADMIN || u.role === UserRole.GATE_OPERATOR),
         canDelete: u.permissions?.canDelete ?? (u.role === UserRole.ADMIN),
@@ -165,7 +211,7 @@ const UserMgmt: React.FC = () => {
         editingUser.role = UserRole.ADMIN;
         editingUser.jobTitle = 'SYSTEM DIRECTOR';
         editingUser.department = 'NILE FLEET COMMAND';
-        editingUser.permissions = { canCreate:true, canEdit:true, canDelete:true, canExport:true, canViewFinancials:true, canManagePrices:true, canApproveBookings:true, canManageUsers:true, canKillAccess:true, canBypassGeofence:true };
+        editingUser.permissions = { isReadOnly:false, canCreate:true, canEdit:true, canDelete:true, canExport:true, canViewFinancials:true, canManagePrices:true, canApproveBookings:true, canManageUsers:true, canKillAccess:true, canBypassGeofence:true };
         editingUser.allowedScreens = ALL_SYSTEM_SCREENS.map(s => s.id);
       }
       const saved = await db.updateUser(editingUser.id, editingUser);
@@ -259,6 +305,7 @@ const UserMgmt: React.FC = () => {
 
   const toggleScreenAccess = (screenId: string) => {
     if (!editingUser) return;
+    if (editingUser.permissions?.isReadOnly && !getReadOnlyScreenIds(editingUser.role).includes(screenId)) return;
     const current: string[] = editingUser.allowedScreens || [];
     const exists = current.includes(screenId);
     const updated = exists ? current.filter(s => s !== screenId) : [...current, screenId];
@@ -268,23 +315,17 @@ const UserMgmt: React.FC = () => {
   const setScreenPreset = (preset: 'ALL' | 'ROLE' | 'READONLY' | 'CLEAR') => {
     if (!editingUser) return;
     if (preset === 'ALL') {
-      setEditingUser({ ...editingUser, allowedScreens: ALL_SYSTEM_SCREENS.map(s => s.id) });
+      setEditingUser({ ...editingUser, allowedScreens: ALL_SYSTEM_SCREENS.map(s => s.id), permissions: { ...editingUser.permissions, ...getRoleDefaultPermissions(UserRole.ADMIN) } });
     } else if (preset === 'CLEAR') {
       setEditingUser({ ...editingUser, allowedScreens: [] });
     } else if (preset === 'READONLY') {
-      setEditingUser({ ...editingUser, allowedScreens: ['dashboard', 'master-view', 'reports', 'intelligence', 'notifications', 'support', 'system-log'] });
+      setEditingUser({
+        ...editingUser,
+        allowedScreens: getReadOnlyScreenIds(editingUser.role),
+        permissions: { ...editingUser.permissions, ...READ_ONLY_PERMISSIONS },
+      });
     } else if (preset === 'ROLE') {
-      if (editingUser.role === UserRole.ADMIN) {
-        setEditingUser({ ...editingUser, allowedScreens: ALL_SYSTEM_SCREENS.map(s => s.id) });
-      } else if (editingUser.role === UserRole.GATE_OPERATOR) {
-        setEditingUser({ ...editingUser, allowedScreens: ['port-gate', 'notifications', 'support', 'user-settings'] });
-      } else if (editingUser.role === UserRole.MANAGER) {
-        setEditingUser({ ...editingUser, allowedScreens: ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials',  'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'] });
-      } else if (editingUser.role === UserRole.CUSTOMER) {
-        setEditingUser({ ...editingUser, allowedScreens: ['cust-reservations', 'cust-invoices', 'notifications', 'support'] });
-      } else {
-        setEditingUser({ ...editingUser, allowedScreens: ['dashboard', 'master-view', 'reports', 'intelligence', 'notifications', 'support'] });
-      }
+      setEditingUser({ ...editingUser, allowedScreens: getRoleDefaultScreenIds(editingUser.role), permissions: { ...editingUser.permissions, ...getRoleDefaultPermissions(editingUser.role) } });
     }
   };
 
@@ -846,7 +887,7 @@ const UserMgmt: React.FC = () => {
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 gap-3">
                       <div>
                         <h4 className="text-sm font-black text-slate-800 dark:text-white uppercase">Screen & Module Access Matrix</h4>
-                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">Check every screen module this user is granted access to in the sidebar navigation.</p>
+                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">Choose the screens this user can open. Read-Only also disables changes; Clear removes all screen access.</p>
                       </div>
                       <div className="flex flex-wrap gap-1.5 shrink-0">
                         <button 
@@ -866,7 +907,8 @@ const UserMgmt: React.FC = () => {
                         <button 
                           type="button" 
                           onClick={() => setScreenPreset('READONLY')}
-                          className="px-2.5 py-1.5 bg-amber-600 text-white rounded-xl text-[8px] font-black uppercase tracking-wider"
+                          aria-pressed={editingUser.permissions?.isReadOnly === true}
+                          className={`px-2.5 py-1.5 bg-amber-600 text-white rounded-xl text-[8px] font-black uppercase tracking-wider ${editingUser.permissions?.isReadOnly ? 'ring-2 ring-amber-300 ring-offset-1' : ''}`}
                         >
                           👁️ Read-Only
                         </button>
@@ -883,11 +925,15 @@ const UserMgmt: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       {ALL_SYSTEM_SCREENS.map(screen => {
                         const isAllowed = editingUser.allowedScreens?.includes(screen.id);
+                        const isLockedByReadOnly = editingUser.permissions?.isReadOnly === true && !getReadOnlyScreenIds(editingUser.role).includes(screen.id);
                         return (
-                          <div 
+                          <button
+                            type="button"
                             key={screen.id} 
+                            disabled={isLockedByReadOnly}
                             onClick={() => toggleScreenAccess(screen.id)}
-                            className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                            aria-pressed={!!isAllowed}
+                            className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all flex items-center justify-between ${isLockedByReadOnly ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${
                               isAllowed 
                                 ? 'bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-400 shadow-sm' 
                                 : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-slate-400'
@@ -903,7 +949,7 @@ const UserMgmt: React.FC = () => {
                              <span className={`w-5 h-5 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${isAllowed ? 'bg-emerald-600 text-white' : 'border border-slate-300'}`}>
                                {isAllowed ? '✓' : ''}
                              </span>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>

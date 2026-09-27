@@ -29,6 +29,13 @@ import { discoveryQueue, registerDynamicTranslations, translateUiText } from './
 import { translateBusinessEntities, getSafeApiKey } from './services/aiService';
 
 type Language = 'en' | 'ar';
+const getDefaultAllowedScreens = (role: UserRole): string[] => {
+  if (role === UserRole.ADMIN) return ['dashboard', 'analytics', 'master-view', 'port-gate', 'operations', 'booking-invoices', 'intelligence', 'reports', 'stock', 'reservations', 'customers', 'user-mgmt', 'customer-prices', 'financials', 'support', 'notifications', 'system-log', 'user-settings'];
+  if (role === UserRole.MANAGER) return ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials', 'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'];
+  if (role === UserRole.VIEWER) return ['dashboard', 'master-view', 'reports', 'intelligence', 'notifications', 'support', 'system-log'];
+  if (role === UserRole.GATE_OPERATOR) return ['port-gate', 'notifications', 'support', 'user-settings'];
+  return ['cust-reservations', 'cust-invoices', 'notifications', 'support', 'user-settings'];
+};
 export type ThemeMode = 'black' | 'white' | 'yellow' | 'navy' | 'forest' | 'sahara' | 'cyber' | 'slate' | 'midnight' | 'rose' | 'emerald-vibrant' | 'ocean' | 'lava' | 'phantom' | 'mint' | 'copper' | 'arctic' | 'toxic' | 'nile' | 'carbon' | 'royal' | 'sandstorm' | 'corporate' | 'crimson' | 'custom';
 
 interface LanguageContextType {
@@ -183,27 +190,30 @@ const App: React.FC = () => {
       'notifications', 'system-log', 'user-settings', 'cust-reservations',
       'cust-invoices'
     ]);
-    const role = String(user?.role || '').toUpperCase();
-    const isInternal = role === String(UserRole.ADMIN) || role === String(UserRole.VIEWER);
-    const isGate = role === String(UserRole.GATE_OPERATOR);
-    const homeScreen = isInternal ? 'dashboard' : isGate ? 'port-gate' : 'cust-reservations';
-    const roleScreens = isInternal
-      ? ['dashboard', 'port-gate', 'master-view', 'operations', 'notifications', 'booking-invoices', 'intelligence', 'reports', 'stock', 'reservations', 'customers', 'user-mgmt', 'customer-prices', 'financials', 'support', 'system-log', 'analytics', 'user-settings']
-      : isGate
-        ? ['port-gate', 'notifications', 'support', 'user-settings']
-        : ['cust-reservations', 'notifications', 'cust-invoices', 'support', 'user-settings'];
-    const permittedScreens = user?.allowedScreens?.length
+    const role = user?.role || UserRole.CUSTOMER;
+    const roleScreens = getDefaultAllowedScreens(role);
+    const homeScreen = roleScreens.includes('dashboard') ? 'dashboard' : roleScreens.includes('port-gate') ? 'port-gate' : 'cust-reservations';
+    const permittedScreens = Array.isArray(user?.allowedScreens)
       ? new Set(user.allowedScreens.filter(screen => allScreens.has(screen)))
       : new Set(roleScreens);
     const syncFromUrl = () => {
       const screen = window.location.hash.slice(1).split('?')[0];
       if (!user) return;
-      const destination = permittedScreens.has(screen) ? screen : homeScreen;
-      if (screen !== destination) window.location.hash = destination;
+      const destination = permittedScreens.has(screen)
+        ? screen
+        : permittedScreens.has(homeScreen)
+          ? homeScreen
+          : permittedScreens.values().next().value || 'no-access';
+      if (destination === 'no-access') {
+        if (window.location.hash) window.location.hash = '';
+      } else if (screen !== destination) {
+        window.location.hash = destination;
+      }
       setActiveScreen(destination);
       setOpenScreens(current => {
         const permittedOpen = current.filter(openScreen => permittedScreens.has(openScreen));
-        return permittedOpen.includes(destination) ? permittedOpen : [...permittedOpen, destination];
+        if (destination === 'no-access' || permittedOpen.includes(destination)) return permittedOpen;
+        return [...permittedOpen, destination];
       });
     };
     window.addEventListener('hashchange', syncFromUrl);
@@ -574,26 +584,18 @@ const App: React.FC = () => {
   }
 
   const canAccessScreen = (screen: string): boolean => {
-    if (user.allowedScreens?.length) return user.allowedScreens.includes(screen);
-
-    const role = String(user.role).toUpperCase();
-    const defaultScreens = role === String(UserRole.ADMIN) || role === String(UserRole.VIEWER)
-      ? ['dashboard', 'analytics', 'master-view', 'port-gate', 'operations', 'booking-invoices', 'intelligence', 'reports', 'stock', 'reservations', 'customers', 'user-mgmt', 'customer-prices', 'financials', 'support', 'notifications', 'system-log', 'user-settings']
-      : role === String(UserRole.GATE_OPERATOR)
-        ? ['port-gate', 'notifications', 'support', 'user-settings']
-        : ['cust-reservations', 'cust-invoices', 'notifications', 'support', 'user-settings'];
-
-    return defaultScreens.includes(screen);
+    if (screen === 'no-access') return true;
+    if (Array.isArray(user.allowedScreens)) return user.allowedScreens.includes(screen);
+    return getDefaultAllowedScreens(user.role).includes(screen);
   };
 
   const renderScreen = (screen: string) => {
     if (!canAccessScreen(screen)) {
-      return user.role === UserRole.CUSTOMER
-        ? <CustomerPortal user={user} type="reservations" />
-        : <Dashboard onNavigate={navigateTo} />;
+      return <div role="status" className="rounded-2xl border border-amber-300 bg-amber-50 p-6 text-sm font-bold text-amber-900">{lang === 'ar' ? 'ليس لديك صلاحية للوصول إلى هذه الشاشة.' : 'You do not have access to this screen.'}</div>;
     }
 
     switch (screen) {
+      case 'no-access': return <div role="status" className="mx-auto mt-16 max-w-lg rounded-2xl border border-amber-300 bg-amber-50 p-8 text-center text-sm font-bold text-amber-900">{lang === 'ar' ? 'لم يتم تعيين أي شاشات لهذا الحساب. تواصل مع مسؤول النظام.' : 'No screens are assigned to this account. Contact your administrator.'}</div>;
       case 'dashboard': return <Dashboard onNavigate={navigateTo} />;
       case 'analytics': return <Analytics />;
       case 'master-view': return <MasterView />;
@@ -634,12 +636,16 @@ const App: React.FC = () => {
     const homeScreen = user.role === UserRole.GATE_OPERATOR
       ? 'port-gate'
       : user.role === UserRole.CUSTOMER ? 'cust-reservations' : 'dashboard';
-    const nextScreens = remaining.length ? remaining : [homeScreen];
+    const nextScreen = remaining.length
+      ? remaining[remaining.length - 1]
+      : canAccessScreen(homeScreen)
+        ? homeScreen
+        : 'no-access';
+    const nextScreens = remaining.length ? remaining : nextScreen === 'no-access' ? [] : [nextScreen];
     setOpenScreens(nextScreens);
     if (activeScreen === screen) {
-      const nextScreen = nextScreens[nextScreens.length - 1];
       setActiveScreen(nextScreen);
-      window.location.hash = nextScreen;
+      window.location.hash = nextScreen === 'no-access' ? '' : nextScreen;
     }
   };
 
@@ -655,7 +661,7 @@ const App: React.FC = () => {
           onCloseScreen={closeScreenTab}
         >
           <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-slate-500">Loading…</div>}>
-            {openScreens.map(screen => (
+            {(openScreens.length ? openScreens : ['no-access']).map(screen => (
               <div key={screen} hidden={screen !== activeScreen} className="min-h-full">
                 {renderScreen(screen)}
               </div>

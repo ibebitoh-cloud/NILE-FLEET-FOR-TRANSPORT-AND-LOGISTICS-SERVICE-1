@@ -2,7 +2,7 @@
 import React, { useContext, useState, useMemo, useEffect } from 'react';
 import { LanguageContext, ThemeContext } from '../App';
 import { translateEntity } from '../translations';
-import { UserRole, User, SystemNotification } from '../types';
+import { UserRole, User, SystemNotification, hasReadOnlyAccess } from '../types';
 import { db } from '../services/supabaseDb';
 
 const Notifications: React.FC = () => {
@@ -12,7 +12,8 @@ const Notifications: React.FC = () => {
   const isAr = lang === 'ar';
   
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
-  const isAdmin = currentUser.role === UserRole.ADMIN;
+  const isReadOnly = hasReadOnlyAccess(currentUser);
+  const isAdmin = currentUser.role === UserRole.ADMIN && !isReadOnly;
 
   const [activeTab, setActiveTab] = useState<'INBOX' | 'COMMAND'>('INBOX');
   const [notifications, setNotifications] = useState<SystemNotification[]>(db.getNotifications(currentUser));
@@ -39,6 +40,7 @@ const Notifications: React.FC = () => {
   }, [currentUser.id]);
 
   const handleBroadcast = async () => {
+    if (isReadOnly || !isAdmin) return;
     if (!forceMsgEn.trim() || !forceMsgAr.trim()) {
         alert(isAr ? 'يرجى إدخال الرسالة باللغتين' : 'Please enter message in both languages');
         return;
@@ -62,6 +64,7 @@ const Notifications: React.FC = () => {
   };
 
   const handleClearHistory = async () => {
+    if (isReadOnly) return;
     if (confirm(isAr ? 'هل أنت متأكد من كتم جميع التنبيهات النشطة؟' : 'Dismiss all active notifications?')) {
       const saved = await db.clearAllNotifications();
       if (!saved) {
@@ -112,9 +115,9 @@ const Notifications: React.FC = () => {
            <div className="flex justify-between items-center px-4">
               <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#001F3F] dark:text-white">{isAr ? 'أحدث التنبيهات' : 'Inbox Activity'}</h3>
               {isAdmin && (
-                <button onClick={handleClearHistory} className="text-[10px] font-black uppercase text-rose-500 hover:text-rose-700 underline decoration-dotted transition-colors">
+                {!isReadOnly && <button onClick={handleClearHistory} className="text-[10px] font-black uppercase text-rose-500 hover:text-rose-700 underline decoration-dotted transition-colors">
                   {isAr ? 'مسح الأرشيف' : 'Wipe Archive'}
-                </button>
+                </button>}
               )}
            </div>
 
@@ -152,10 +155,10 @@ const Notifications: React.FC = () => {
                            </td>
                            <td className="p-6 text-center">
                               {n.active ? (
-                                <button onClick={async () => {
+                                !isReadOnly ? <button onClick={async () => {
                                 const saved = await db.dismissNotification(n.id);
                                 if (!saved) alert(isAr ? 'تعذر تحديث حالة التنبيه.' : 'Could not update notification status.');
-                              }} className="text-blue-500 hover:text-blue-700 font-black uppercase text-[9px] underline decoration-dotted">Dismiss</button>
+                              }} className="text-blue-500 hover:text-blue-700 font-black uppercase text-[9px] underline decoration-dotted">Dismiss</button> : <span className="text-slate-300 uppercase italic">Active</span>
                               ) : (
                                 <span className="text-slate-300 uppercase italic">Seen</span>
                               )}

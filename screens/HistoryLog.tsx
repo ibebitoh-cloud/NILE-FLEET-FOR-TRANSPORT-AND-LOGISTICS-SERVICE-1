@@ -3,16 +3,19 @@ import React, { useState, useContext, useEffect } from 'react';
 import { db } from '../services/supabaseDb';
 import { LanguageContext } from '../App';
 import { translations } from '../translations';
-import { AuditEntry } from '../types';
+import { AuditEntry, User, hasReadOnlyAccess } from '../types';
 
 const HistoryLog: React.FC = () => {
   const { lang } = useContext(LanguageContext);
   const t = translations[lang];
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}') as User;
+  const isReadOnly = hasReadOnlyAccess(currentUser);
   const [logs, setLogs] = useState<AuditEntry[]>(db.getAuditLogs());
 
   const refresh = () => setLogs([...db.getAuditLogs()]);
 
   const handleFinalize = async () => {
+    if (isReadOnly) return;
     if (confirm(lang === 'ar' ? 'هل تريد حذف سجل النشاط نهائياً؟ لن يتم حذف بيانات التشغيل.' : 'Permanently clear the activity log? Operational records will not be deleted.')) {
       const cleared = await db.restartHistory();
       if (cleared) refresh();
@@ -37,12 +40,12 @@ const HistoryLog: React.FC = () => {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
             {t.undo}
           </button>
-          <button 
+          {!isReadOnly && <button
             onClick={handleFinalize}
             className="bg-[#001F3F] text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-[#002b57] transition-all shadow-xl shadow-blue-900/20"
           >
             {t.finalize}
-          </button>
+          </button>}
         </div>
       </div>
 

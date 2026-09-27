@@ -3,7 +3,7 @@ import React, { useContext, useState, useMemo, useEffect } from 'react';
 import { LanguageContext, ThemeContext } from '../App';
 import { translateEntity } from '../translations';
 import { db } from '../services/supabaseDb';
-import { SupportContact, FAQItem, PortInfo, Location, UserRole, User } from '../types';
+import { SupportContact, FAQItem, PortInfo, Location, UserRole, User, hasReadOnlyAccess } from '../types';
 
 const CustomerService: React.FC = () => {
   const { lang } = useContext(LanguageContext);
@@ -11,7 +11,8 @@ const CustomerService: React.FC = () => {
   const isAr = lang === 'ar';
   
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
-  const isAdmin = currentUser.role === UserRole.ADMIN;
+  const isReadOnly = hasReadOnlyAccess(currentUser);
+  const isAdmin = currentUser.role === UserRole.ADMIN && !isReadOnly;
 
   const [activeTab, setActiveTab] = useState<'CONTACTS' | 'FAQ' | 'PORTS'>('CONTACTS');
   const [contacts, setContacts] = useState<SupportContact[]>(db.getSupportContacts());
@@ -56,6 +57,7 @@ const CustomerService: React.FC = () => {
   }, []);
 
   const openAdd = (type: typeof showModal) => {
+    if (isReadOnly || !isAdmin) return;
     setEditingId(null);
     setFormData({});
     setActionError('');
@@ -79,6 +81,7 @@ const CustomerService: React.FC = () => {
   };
 
   const openEdit = (type: typeof showModal, item: any) => {
+    if (isReadOnly || !isAdmin) return;
     setEditingId(item.id);
     setFormData({ ...item });
     setActionError('');
@@ -86,7 +89,7 @@ const CustomerService: React.FC = () => {
   };
 
   const handleDelete = async (type: string, id: string) => {
-    if (!isAdmin) return;
+    if (isReadOnly || !isAdmin) return;
     if (!confirm(isAr ? 'حذف هذا العنصر نهائياً؟' : 'Purge this item permanently?')) return;
     setActionError('');
     const saved = type === 'CONTACT' ? await db.deleteSupportContact(id)
@@ -98,7 +101,7 @@ const CustomerService: React.FC = () => {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin || formSaving) return;
+    if (isReadOnly || !isAdmin || formSaving) return;
     setActionError('');
     setFormSaving(true);
 
@@ -166,9 +169,9 @@ const CustomerService: React.FC = () => {
             <button onClick={() => setActiveTab('FAQ')} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'FAQ' ? 'bg-[#C2A378] text-[#001F3F]' : 'text-slate-400 hover:text-white'}`}>{isAr ? 'الإرشادات' : 'GUIDELINES'}</button>
          </div>
          {isAdmin && (
-           <button onClick={() => openAdd(activeTab === 'CONTACTS' ? 'CONTACT' : activeTab === 'PORTS' ? 'PORT' : 'FAQ')} className="relative z-10 bg-white/10 hover:bg-white/20 text-[#C2A378] border border-[#C2A378]/30 px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all">
+           {!isReadOnly && isAdmin && <button onClick={() => openAdd(activeTab === 'CONTACTS' ? 'CONTACT' : activeTab === 'PORTS' ? 'PORT' : 'FAQ')} className="relative z-10 bg-white/10 hover:bg-white/20 text-[#C2A378] border border-[#C2A378]/30 px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all">
              + {isAr ? 'إضافة' : 'Add New'}
-           </button>
+           </button>}
          )}
       </div>
 
@@ -193,8 +196,8 @@ const CustomerService: React.FC = () => {
                <div key={c.id} className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-xl group hover:scale-[1.02] transition-all relative">
                   {isAdmin && (
                     <div className="absolute top-4 right-4 flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button aria-label={isAr ? 'تعديل جهة الاتصال' : 'Edit contact'} onClick={() => openEdit('CONTACT', c)} className="p-2 bg-blue-50 dark:bg-slate-800 text-blue-600 rounded-lg">✎</button>
-                      <button aria-label={isAr ? 'حذف جهة الاتصال' : 'Delete contact'} onClick={() => handleDelete('CONTACT', c.id)} className="p-2 bg-rose-50 dark:bg-slate-800 text-rose-600 rounded-lg">✕</button>
+                      {!isReadOnly && isAdmin && <><button aria-label={isAr ? 'تعديل جهة الاتصال' : 'Edit contact'} onClick={() => openEdit('CONTACT', c)} className="p-2 bg-blue-50 dark:bg-slate-800 text-blue-600 rounded-lg">✎</button>
+                      <button aria-label={isAr ? 'حذف جهة الاتصال' : 'Delete contact'} onClick={() => handleDelete('CONTACT', c.id)} className="p-2 bg-rose-50 dark:bg-slate-800 text-rose-600 rounded-lg">✕</button></>}
                     </div>
                   )}
                   <div className="flex items-center gap-6 mb-8">
@@ -230,8 +233,8 @@ const CustomerService: React.FC = () => {
                 <div key={p.id} className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-white/5 shadow-xl group hover:shadow-2xl transition-all relative">
                    {isAdmin && (
                     <div className="absolute top-6 right-6 flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button aria-label={isAr ? 'تعديل بيانات الموقع' : 'Edit yard'} onClick={() => openEdit('PORT', p)} className="p-2 bg-blue-50 dark:bg-slate-800 text-blue-600 rounded-lg">✎</button>
-                      <button aria-label={isAr ? 'حذف بيانات الموقع' : 'Delete yard'} onClick={() => handleDelete('PORT', p.id)} className="p-2 bg-rose-50 dark:bg-slate-800 text-rose-600 rounded-lg">✕</button>
+                      {!isReadOnly && isAdmin && <><button aria-label={isAr ? 'تعديل بيانات الموقع' : 'Edit yard'} onClick={() => openEdit('PORT', p)} className="p-2 bg-blue-50 dark:bg-slate-800 text-blue-600 rounded-lg">✎</button>
+                      <button aria-label={isAr ? 'حذف بيانات الموقع' : 'Delete yard'} onClick={() => handleDelete('PORT', p.id)} className="p-2 bg-rose-50 dark:bg-slate-800 text-rose-600 rounded-lg">✕</button></>}
                     </div>
                   )}
                    <div className="flex justify-between items-start mb-8">
@@ -272,8 +275,8 @@ const CustomerService: React.FC = () => {
                <div key={f.id} className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 group relative">
                   {isAdmin && (
                     <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => openEdit('FAQ', f)} className="p-2 bg-blue-50 dark:bg-slate-800 text-blue-600 rounded-lg">✎</button>
-                      <button onClick={() => handleDelete('FAQ', f.id)} className="p-2 bg-rose-50 dark:bg-slate-800 text-rose-600 rounded-lg">✕</button>
+                      {!isReadOnly && isAdmin && <><button onClick={() => openEdit('FAQ', f)} className="p-2 bg-blue-50 dark:bg-slate-800 text-blue-600 rounded-lg">✎</button>
+                      <button onClick={() => handleDelete('FAQ', f.id)} className="p-2 bg-rose-50 dark:bg-slate-800 text-rose-600 rounded-lg">✕</button></>}
                     </div>
                   )}
                   <h4 className="font-black text-blue-600 uppercase text-sm mb-2">{isAr ? 'س:' : 'Q:'} {isAr ? (f.questionAr || f.question) : f.question}</h4>

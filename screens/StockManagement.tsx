@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useContext, useEffect } from 'react';
 import { db } from '../services/supabaseDb';
-import { Location, GensetStatus, Genset, User, UserRole, GensetMaintenanceLog, MaintenanceServiceType } from '../types';
+import { Location, GensetStatus, Genset, User, UserRole, GensetMaintenanceLog, MaintenanceServiceType, hasReadOnlyAccess } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
 import { PORT_STYLING } from '../constants';
@@ -29,7 +29,7 @@ const StockManagement: React.FC = () => {
   const isAr = lang === 'ar';
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
-  const isReadOnly = currentUser.role === UserRole.VIEWER;
+  const isReadOnly = hasReadOnlyAccess(currentUser);
   const isAdmin = currentUser.role === UserRole.ADMIN;
 
   const [activeTab, setActiveTab] = useState<'visual' | 'inventory' | 'maintenance'>('visual');

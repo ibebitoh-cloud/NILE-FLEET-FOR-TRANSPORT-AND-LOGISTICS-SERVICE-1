@@ -3,7 +3,7 @@ import React, { useState, useMemo, useContext, useEffect } from 'react';
 import { db } from '../services/supabaseDb';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
-import { Invoice, User, UserRole, Operation, InvoiceSettings, Payment } from '../types';
+import { Invoice, User, UserRole, Operation, InvoiceSettings, Payment, hasReadOnlyAccess } from '../types';
 import InvoiceView from '../components/InvoiceView';
 
 const normalizeCustomerName = (value?: string) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
@@ -249,7 +249,7 @@ const Financials: React.FC = () => {
   const [paymentManageSaving, setPaymentManageSaving] = useState(false);
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
-  const isReadOnly = currentUser.role === UserRole.VIEWER;
+  const isReadOnly = hasReadOnlyAccess(currentUser);
 
   const refreshData = () => {
     setInvoices([...db.getInvoices()]);

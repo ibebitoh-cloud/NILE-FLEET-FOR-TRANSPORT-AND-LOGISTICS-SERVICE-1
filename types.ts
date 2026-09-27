@@ -133,6 +133,8 @@ export interface PaymentAllocation {
 }
 
 export interface UserPermissions {
+  /** Explicitly restricts the account to viewing screens without data-changing actions. */
+  isReadOnly?: boolean;
   canCreate?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
@@ -181,6 +183,9 @@ export interface User {
   allowedScreens?: string[];
   permissions?: UserPermissions;
 }
+
+export const hasReadOnlyAccess = (user?: Pick<User, 'role' | 'permissions'> | null): boolean =>
+  user?.role === UserRole.VIEWER || user?.permissions?.isReadOnly === true;
 
 export interface CustomerPrice {
   id: string;

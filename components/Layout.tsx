@@ -969,7 +969,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     setIsMobileMenuOpen(false);
   }, [activeScreen]);
 
-  const isInternal = user.role === UserRole.ADMIN || user.role === UserRole.VIEWER;
+  const isInternal = user.role === UserRole.ADMIN || user.role === UserRole.MANAGER || user.role === UserRole.VIEWER;
   const isGate = user.role === UserRole.GATE_OPERATOR;
   
   const dashboardId = isInternal ? 'dashboard' : (isGate ? 'port-gate' : 'cust-reservations');
@@ -982,6 +982,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     { id: 'operations', label: t.operations, icon: '🚛' },
     { id: 'notifications', label: isAr ? 'التنبيهات' : 'NOTIFICATIONS', icon: '🔔' },
     { id: 'booking-invoices', label: lang === 'ar' ? 'فواتير الحجوزات' : 'BOOKING INVOICES', icon: '🧾' },
+    { id: 'analytics', label: t.analytics, icon: '📈' },
     { id: 'intelligence', label: t.intelligence, icon: '🧠' },
     { id: 'reports', label: t.reports, icon: '📝' },
     { id: 'stock', label: t.gensetStock, icon: '⚡' },
@@ -1004,6 +1005,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     { id: 'operations', label: t.operations, icon: '🚛' },
     { id: 'notifications', label: isAr ? 'التنبيهات' : 'NOTIFICATIONS', icon: '🔔' },
     { id: 'booking-invoices', label: lang === 'ar' ? 'فواتير الحجوزات' : 'BOOKING INVOICES', icon: '🧾' },
+    { id: 'analytics', label: t.analytics, icon: '📈' },
     { id: 'intelligence', label: t.intelligence, icon: '🧠' },
     { id: 'reports', label: t.reports, icon: '📝' },
     { id: 'stock', label: t.gensetStock, icon: '⚡' },
@@ -1026,9 +1028,16 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     { id: 'support', label: t.support, icon: '🎧' },
   ]);
 
-  const menu = (user.allowedScreens && Array.isArray(user.allowedScreens) && user.allowedScreens.length > 0)
+  const roleDefaultScreenIds = user.role === UserRole.MANAGER
+    ? ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials', 'intelligence', 'reports', 'notifications', 'system-log']
+    : user.role === UserRole.VIEWER
+      ? ['dashboard', 'master-view', 'reports', 'intelligence', 'notifications', 'support', 'system-log']
+      : null;
+  const menu = Array.isArray(user.allowedScreens)
     ? allPossibleMenuItems.filter(item => user.allowedScreens?.includes(item.id))
-    : defaultMenu;
+    : roleDefaultScreenIds
+      ? allPossibleMenuItems.filter(item => roleDefaultScreenIds.includes(item.id))
+      : defaultMenu;
 
   const isTerminal = isDark;
   
@@ -1360,7 +1369,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
               {(isFullscreen || isPseudoFullscreen) ? '✕' : '⛶'}
             </button>
             <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className={`px-2.5 py-1 rounded-lg border flex items-center gap-1 transition-all ${isTerminal ? 'border-[#C2A37844] bg-white/5 text-[#C2A378]' : 'border-slate-200 bg-white'}`}><span className="font-black text-[9px] uppercase">{lang === 'en' ? 'AR' : 'EN'}</span></button>
-            {!isHome && (
+            {!isHome && activeScreen !== 'no-access' && (
               <button 
                 onClick={() => setActiveScreen(dashboardId)} 
                 className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center gap-1 border border-rose-500"

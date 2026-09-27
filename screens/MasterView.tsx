@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useContext, useEffect, useRef } from 'react';
 import { db } from '../services/supabaseDb';
-import { Operation, Location, GensetStatus, UserRole, User, CustomerPrice, Invoice } from '../types';
+import { Operation, Location, GensetStatus, UserRole, User, CustomerPrice, Invoice, hasReadOnlyAccess } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
 import { PORT_STYLING } from '../constants';
@@ -527,7 +527,7 @@ const MasterView: React.FC = () => {
   const isAr = lang === 'ar';
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
-  const isReadOnly = currentUser.role === UserRole.VIEWER;
+  const isReadOnly = hasReadOnlyAccess(currentUser);
   const isAdmin = currentUser.role === UserRole.ADMIN;
   const canExport = currentUser.permissions?.canExport !== false;
 

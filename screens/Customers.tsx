@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useContext, useEffect } from 'react';
 import { db } from '../services/supabaseDb';
-import { UserRole, User, Operation, Invoice, CustomerPrice, Location } from '../types';
+import { UserRole, User, Operation, Invoice, CustomerPrice, Location, hasReadOnlyAccess } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
 import { PORT_STYLING } from '../constants';
@@ -403,7 +403,7 @@ const Customers: React.FC = () => {
   const t = translations[lang];
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
-  const isReadOnly = currentUser.role === UserRole.VIEWER;
+  const isReadOnly = hasReadOnlyAccess(currentUser);
 
   const [users, setUsers] = useState<User[]>(db.getUsers());
   const [selectedCust, setSelectedCust] = useState<User | null>(null);
