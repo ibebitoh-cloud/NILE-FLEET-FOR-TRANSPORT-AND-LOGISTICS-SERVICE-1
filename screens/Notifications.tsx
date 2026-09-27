@@ -115,9 +115,9 @@ const Notifications: React.FC = () => {
            <div className="flex justify-between items-center px-4">
               <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#001F3F] dark:text-white">{isAr ? 'أحدث التنبيهات' : 'Inbox Activity'}</h3>
               {isAdmin && (
-                {!isReadOnly && <button onClick={handleClearHistory} className="text-[10px] font-black uppercase text-rose-500 hover:text-rose-700 underline decoration-dotted transition-colors">
+                <button onClick={handleClearHistory} className="text-[10px] font-black uppercase text-rose-500 hover:text-rose-700 underline decoration-dotted transition-colors">
                   {isAr ? 'مسح الأرشيف' : 'Wipe Archive'}
-                </button>}
+                </button>
               )}
            </div>
 
