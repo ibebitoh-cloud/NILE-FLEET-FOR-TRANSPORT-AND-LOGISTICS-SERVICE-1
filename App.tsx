@@ -23,6 +23,7 @@ const Notifications = lazy(() => import('./screens/Notifications'));
 import Layout from './components/Layout';
 import { User, UserRole } from './types';
 import { db } from './services/supabaseDb';
+import { supabase } from './services/supabaseClient';
 import { loginWithPassword, logout as supabaseLogout, getCurrentSessionUser } from './services/authService';
 import { discoveryQueue, registerDynamicTranslations, translateUiText } from './translations';
 import { translateBusinessEntities, getSafeApiKey } from './services/aiService';
@@ -99,29 +100,70 @@ const App: React.FC = () => {
     localStorage.setItem('app_lang', lang);
   }, [lang]);
 
-  // Bootstrap: load live data and verify the real Supabase session.
-  // localStorage is only a UI cache and must never be treated as authentication.
+  // Authentication is authoritative. localStorage is only a UI cache and is never
+  // treated as proof of identity or authorization.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err)),
-      getCurrentSessionUser().catch(err => {
+
+    const applySessionUser = async () => {
+      const sessionUser = await getCurrentSessionUser().catch(err => {
         console.error('Failed to verify Supabase session:', err);
         return null;
-      })
-    ]).then(([, sessionUser]) => {
+      });
+
       if (cancelled) return;
+
       if (sessionUser) {
         setUser(sessionUser);
         localStorage.setItem('user', JSON.stringify(sessionUser));
-        setActiveScreen(sessionUser.role === UserRole.GATE_OPERATOR ? 'port-gate' : (sessionUser.role === UserRole.CUSTOMER ? 'cust-reservations' : 'dashboard'));
+
+        // Load protected business data only after authentication succeeds.
+        await db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err));
+
+        if (sessionUser.revoked) {
+          await supabaseLogout();
+          setUser(null);
+          localStorage.removeItem('user');
+        } else {
+          setActiveScreen(
+            sessionUser.role === UserRole.GATE_OPERATOR
+              ? 'port-gate'
+              : sessionUser.role === UserRole.CUSTOMER
+                ? 'cust-reservations'
+                : 'dashboard'
+          );
+        }
       } else {
         setUser(null);
         localStorage.removeItem('user');
       }
-      setAuthChecked(true);
+
+      if (!cancelled) setAuthChecked(true);
+    };
+
+    applySessionUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'INITIAL_SESSION') return;
+
+      window.setTimeout(() => {
+        if (cancelled) return;
+
+        if (event === 'SIGNED_OUT') {
+          setUser(null);
+          localStorage.removeItem('user');
+          setAuthChecked(true);
+          return;
+        }
+
+        applySessionUser();
+      }, 0);
     });
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const getIsDark = (currentTheme: ThemeMode): boolean => {
@@ -423,21 +465,28 @@ const App: React.FC = () => {
   }, [user?.id]);
 
   const handleLogin = async (email: string, pass: string) => {
-    const result = await loginWithPassword(email, pass);
+    const result = await loginWithPassword(email.trim(), pass);
     if (result.user) {
       const u = result.user;
       setUser(u);
       localStorage.setItem('user', JSON.stringify(u));
-      setActiveScreen(u.role === UserRole.GATE_OPERATOR ? 'port-gate' : (u.role !== UserRole.CUSTOMER ? 'dashboard' : 'cust-reservations'));
+      await db.loadAll().catch(err => console.error('Failed to load data after login:', err));
+      setActiveScreen(
+        u.role === UserRole.GATE_OPERATOR
+          ? 'port-gate'
+          : u.role === UserRole.CUSTOMER
+            ? 'cust-reservations'
+            : 'dashboard'
+      );
     } else if (result.error === 'REVOKED') {
       alert(lang === 'ar' ? 'تم تعليق هذا الحساب من قبل الإدارة' : 'This account access has been suspended/revoked by system administrator.');
     } else {
-      alert(lang === 'ar' ? 'فشل المصادقة' : 'Authentication failed');
+      alert(lang === 'ar' ? (result.error || 'فشل المصادقة') : (result.error || 'Authentication failed'));
     }
   };
 
-  const handleLogout = useCallback(() => {
-    supabaseLogout();
+  const handleLogout = useCallback(async () => {
+    await supabaseLogout();
     setUser(null);
     localStorage.removeItem('user');
   }, []);
