@@ -11,10 +11,12 @@ interface LayoutProps {
   onLogout: () => void;
   activeScreen: string;
   setActiveScreen: (screen: string) => void;
+  openScreens: string[];
+  onCloseScreen: (screen: string) => void;
   children: React.ReactNode;
 }
 
-const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActiveScreen, children }) => {
+const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActiveScreen, openScreens, onCloseScreen, children }) => {
   const { lang, setLang } = useContext(LanguageContext);
   const { theme, setTheme, isMuted, setIsMuted, isDark } = useContext(ThemeContext);
   const t = translations[lang];
@@ -27,6 +29,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<SystemNotification[]>(db.getActiveNotifications(user));
   const mainContentRef = useRef<HTMLElement>(null);
+  const screenScrollPositions = useRef(new Map<string, number>());
   const [activePortGateTab, setActivePortGateTab] = useState<'GATE' | 'TRANSIT' | 'UPCOMING'>(() => (sessionStorage.getItem('portGateTab') as any) || 'GATE');
   const [isPortGateSubmenuCollapsed, setIsPortGateSubmenuCollapsed] = useState<boolean>(() => sessionStorage.getItem('portGateSubmenuCollapsed') === 'true');
   const [activeInvoicesTab, setActiveInvoicesTab] = useState<'ALL' | 'NEED_ISSUE' | 'PAST_DUE'>(() => (sessionStorage.getItem('invoicesTab') as any) || 'ALL');
@@ -961,7 +964,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
   useEffect(() => {
     if (mainContentRef.current) {
-      mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      mainContentRef.current.scrollTop = screenScrollPositions.current.get(activeScreen) || 0;
     }
     setIsMobileMenuOpen(false);
   }, [activeScreen]);
@@ -1322,7 +1325,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       </div>
 
       {/* MAIN CONTENT */}
-      <main ref={mainContentRef} className={`flex-1 overflow-y-auto custom-scrollbar relative flex flex-col transition-colors duration-500 ${forceBanners.length > 0 ? 'mt-8' : ''}`} style={{ backgroundColor: 'var(--bg-primary)' }}>
+      <main ref={mainContentRef} onScroll={() => screenScrollPositions.current.set(activeScreen, mainContentRef.current?.scrollTop || 0)} className={`flex-1 overflow-y-auto custom-scrollbar relative flex flex-col transition-colors duration-500 ${forceBanners.length > 0 ? 'mt-8' : ''}`} style={{ backgroundColor: 'var(--bg-primary)' }}>
         <header className="h-14 border-b flex items-center px-4 lg:px-6 justify-between sticky top-0 z-[40] shadow-sm backdrop-blur-md transition-colors no-print" style={{ backgroundColor: 'var(--rail-bg)', borderBottomColor: 'var(--border-primary)' }}>
           <div className="flex items-center gap-3">
             <div className="w-1 h-5 bg-[#C2A378] rounded-full shadow-[0_0_8px_#C2A378]"></div>
@@ -1379,6 +1382,19 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
             </div>
           )}
         </header>
+
+        <div className={`flex items-center gap-1 px-3 lg:px-6 py-2 overflow-x-auto border-b no-print ${isTerminal ? 'bg-[#001224] border-white/5' : 'bg-slate-50 border-slate-200'}`} role="tablist" aria-label={isAr ? 'الصفحات المفتوحة' : 'Open pages'}>
+          {openScreens.map(screen => {
+            const label = screen.replace(/-/g, ' ');
+            const isSelected = activeScreen === screen;
+            return (
+              <div key={screen} role="presentation" className={`flex shrink-0 items-center rounded-lg border text-[9px] font-black uppercase tracking-wider ${isSelected ? 'bg-[#001F3F] text-white border-[#C2A378]/60' : isTerminal ? 'bg-white/5 text-slate-300 border-white/10' : 'bg-white text-slate-500 border-slate-200'}`}>
+                <button role="tab" aria-selected={isSelected} onClick={() => setActiveScreen(screen)} className="px-3 py-2 whitespace-nowrap">{label}</button>
+                <button type="button" onClick={() => onCloseScreen(screen)} className="px-2 py-2 opacity-70 hover:opacity-100 hover:text-rose-400" aria-label={`${isAr ? 'إغلاق' : 'Close'} ${label}`} title={isAr ? 'إغلاق الصفحة' : 'Close page'}>×</button>
+              </div>
+            );
+          })}
+        </div>
 
         <div className="p-4 lg:p-6 flex-1">
           {children}

@@ -25,7 +25,6 @@ import { User, UserRole } from './types';
 import { db } from './services/supabaseDb';
 import { supabase } from './services/supabaseClient';
 import { loginWithPassword, logout as supabaseLogout, getCurrentSessionUser } from './services/authService';
-import { supabase } from './services/supabaseClient';
 import { discoveryQueue, registerDynamicTranslations, translateUiText } from './translations';
 import { translateBusinessEntities, getSafeApiKey } from './services/aiService';
 
@@ -89,7 +88,16 @@ const App: React.FC = () => {
 
   const [customThemeKey, setCustomThemeKey] = useState<number>(0);
 
-  const [activeScreen, setActiveScreen] = useState<string>(user?.role === UserRole.GATE_OPERATOR ? 'port-gate' : 'dashboard');
+  const [activeScreen, setActiveScreen] = useState<string>(() => window.location.hash.slice(1).split('?')[0] || 'dashboard');
+  const [openScreens, setOpenScreens] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('openScreens') || '[]');
+      const current = window.location.hash.slice(1).split('?')[0];
+      return Array.from(new Set([...(Array.isArray(saved) ? saved.filter((screen): screen is string => typeof screen === 'string') : []), current || 'dashboard']));
+    } catch {
+      return [window.location.hash.slice(1).split('?')[0] || 'dashboard'];
+    }
+  });
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem('app_lang');
@@ -193,6 +201,10 @@ const App: React.FC = () => {
       const destination = permittedScreens.has(screen) ? screen : homeScreen;
       if (screen !== destination) window.location.hash = destination;
       setActiveScreen(destination);
+      setOpenScreens(current => {
+        const permittedOpen = current.filter(openScreen => permittedScreens.has(openScreen));
+        return permittedOpen.includes(destination) ? permittedOpen : [...permittedOpen, destination];
+      });
     };
     window.addEventListener('hashchange', syncFromUrl);
     if (user) syncFromUrl();
@@ -528,8 +540,13 @@ const App: React.FC = () => {
   const navigateTo = useCallback((screen: string, id?: string) => {
     setHighlightId(id || null);
     setActiveScreen(screen);
+    setOpenScreens(current => current.includes(screen) ? current : [...current, screen]);
     window.location.hash = screen;
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem('openScreens', JSON.stringify(openScreens));
+  }, [openScreens]);
 
   if (!authChecked) {
     return (
@@ -569,14 +586,14 @@ const App: React.FC = () => {
     return defaultScreens.includes(screen);
   };
 
-  const renderScreen = () => {
-    if (!canAccessScreen(activeScreen)) {
+  const renderScreen = (screen: string) => {
+    if (!canAccessScreen(screen)) {
       return user.role === UserRole.CUSTOMER
         ? <CustomerPortal user={user} type="reservations" />
         : <Dashboard onNavigate={navigateTo} />;
     }
 
-    switch (activeScreen) {
+    switch (screen) {
       case 'dashboard': return <Dashboard onNavigate={navigateTo} />;
       case 'analytics': return <Analytics />;
       case 'master-view': return <MasterView />;
@@ -608,7 +625,22 @@ const App: React.FC = () => {
   const setScreenFromLayout = (screen: string) => {
     setHighlightId(null);
     setActiveScreen(screen);
+    setOpenScreens(current => current.includes(screen) ? current : [...current, screen]);
     window.location.hash = screen;
+  };
+
+  const closeScreenTab = (screen: string) => {
+    const remaining = openScreens.filter(openScreen => openScreen !== screen);
+    const homeScreen = user.role === UserRole.GATE_OPERATOR
+      ? 'port-gate'
+      : user.role === UserRole.CUSTOMER ? 'cust-reservations' : 'dashboard';
+    const nextScreens = remaining.length ? remaining : [homeScreen];
+    setOpenScreens(nextScreens);
+    if (activeScreen === screen) {
+      const nextScreen = nextScreens[nextScreens.length - 1];
+      setActiveScreen(nextScreen);
+      window.location.hash = nextScreen;
+    }
   };
 
   return (
@@ -619,9 +651,15 @@ const App: React.FC = () => {
           onLogout={handleLogout} 
           activeScreen={activeScreen} 
           setActiveScreen={setScreenFromLayout}
+          openScreens={openScreens}
+          onCloseScreen={closeScreenTab}
         >
           <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-slate-500">Loading…</div>}>
-            {renderScreen()}
+            {openScreens.map(screen => (
+              <div key={screen} hidden={screen !== activeScreen} className="min-h-full">
+                {renderScreen(screen)}
+              </div>
+            ))}
           </Suspense>
         </Layout>
       </ThemeContext>

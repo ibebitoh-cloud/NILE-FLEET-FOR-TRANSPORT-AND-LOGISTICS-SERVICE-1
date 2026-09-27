@@ -50,29 +50,49 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           100% { opacity: 0; transform: translateY(-20px) rotateX(90deg) scale(0.8); }
         }
         .letter-anim { opacity: 0; animation: gearShuffle 6s cubic-bezier(0.4, 0, 0.2, 1) infinite; backface-visibility: hidden; perspective: 1000px; display: inline-block; transform-origin: center center; }
+        @keyframes filmScan { 0%, 100% { transform: translateY(-120%); opacity: 0; } 12%, 78% { opacity: .34; } 58% { transform: translateY(120vh); opacity: 0; } }
+        @keyframes filmFlicker { 0%, 96%, 98%, 100% { opacity: 0; } 96.5%, 97.5% { opacity: .22; } }
+        @keyframes signalGlitch { 0%, 92%, 94%, 100% { transform: translateX(0); clip-path: inset(45% 0 48%); } 92.5% { transform: translateX(8px); clip-path: inset(22% 0 70%); } 93% { transform: translateX(-5px); clip-path: inset(73% 0 15%); } }
+        .film-scanline { animation: filmScan 8s ease-in-out infinite; }
+        .film-flicker { animation: filmFlicker 9s steps(1) infinite; }
+        .signal-glitch { animation: signalGlitch 7s steps(1) infinite; }
       `}</style>
 
       <div className="w-full h-screen grid grid-cols-1 lg:grid-cols-12 overflow-hidden relative z-10">
+        <div className="absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
+          <video
+            className="h-full w-full object-cover"
+            src="/genmark-clip-on-gc5-genset.mp4"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#001F3F]/65 via-[#001F3F]/45 to-[#071521]/55"></div>
+          <div className="absolute inset-0 opacity-[0.12] bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_3px,rgba(220,230,240,0.22)_4px)]"></div>
+          <div className="film-scanline absolute -inset-x-8 top-0 h-24 bg-gradient-to-b from-transparent via-[#C2A378]/30 to-transparent"></div>
+          <div className="film-flicker absolute inset-0 bg-[#C2A378]/20 mix-blend-screen"></div>
+          <div className="absolute inset-0 shadow-[inset_0_0_160px_rgba(0,0,0,0.7)]"></div>
+        </div>
         
         {/* LEFT PANEL */}
-        <div className="hidden lg:flex lg:col-span-7 bg-[#001F3F] relative flex-col justify-center p-20 overflow-hidden border-r border-white/5">
-          <div className="absolute inset-0 z-0">
-            <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80&w=2000" className="w-full h-full object-cover opacity-20 grayscale scale-110" alt="Fleet" />
-            <div className="absolute inset-0 bg-gradient-to-br from-[#001F3F] via-[#001F3F]/80 to-transparent"></div>
-          </div>
-          <div className="relative z-10">
+        <div className="absolute inset-0 z-0 lg:relative lg:inset-auto lg:col-span-7 flex flex-col justify-center p-8 lg:p-20 overflow-hidden border-r border-white/5">
+          <div className="relative z-10 hidden lg:block">
             <div className="mb-16">
-              <p className="text-[#C2A378] text-[10px] font-black uppercase tracking-[0.6em] mb-6 animate-pulse">{t.secureTerminal}</p>
+              <p className="text-[#C2A378] text-[10px] font-black uppercase tracking-[0.6em] mb-6 animate-pulse">{t.secureTerminal} <span className="ml-3 inline-flex items-center gap-2 tracking-[0.25em]"><span className="h-1.5 w-1.5 rounded-full bg-rose-400 shadow-[0_0_10px_#fb7185]"></span>REC&nbsp; 00:08:24</span></p>
               <div className="flex items-center gap-5"><img src="/nile-fleet-logo.png" className="h-20 w-20 object-contain" alt="Nile Fleet" /><h1 className="text-7xl font-black text-white tracking-tighter uppercase italic leading-none">NILE <span className="text-[#C2A378]">FLEET</span></h1></div>
               <p className="text-xs font-black uppercase tracking-[0.25em] text-[#C2A378] italic mt-3">
                 SHERIF HEGAZY
               </p>
             </div>
             <div className="space-y-6">
-              <div>
+              <div className="relative">
                 <h2 className="text-5xl font-black leading-tight uppercase tracking-tighter italic">
                   {isAr ? <span className="text-white">قوة المولدات.</span> : <><AnimatedText text="GENSET" baseDelay={0.2} /> <br/><AnimatedText text="POWER." colorClass="text-[#C2A378]" baseDelay={0.6} /></>}
                 </h2>
+                <span aria-hidden="true" className="signal-glitch pointer-events-none absolute left-0 top-1/2 text-5xl font-black uppercase tracking-tighter italic text-rose-400/70">GENSET POWER.</span>
               </div>
               <p className="text-slate-300 text-[10px] font-bold uppercase tracking-[0.4em] max-w-sm leading-relaxed border-l-2 border-[#C2A378]/30 pl-6">{t.coldChain}</p>
             </div>
@@ -80,7 +100,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
 
         {/* RIGHT PANEL */}
-        <div className={`col-span-full lg:col-span-5 flex flex-col justify-center px-8 lg:px-16 relative z-10 transition-colors duration-1000 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+        <div className={`col-span-full lg:col-span-5 min-h-screen flex flex-col justify-center px-8 lg:px-16 relative z-10 backdrop-blur-sm transition-colors duration-1000 ${isDark ? 'bg-slate-900/60' : 'bg-white/65'}`}>
           {/* Top Bar for Language Switcher */}
           <div className="absolute top-6 right-6 lg:top-8 lg:right-8 z-20 flex items-center gap-2">
             <button
