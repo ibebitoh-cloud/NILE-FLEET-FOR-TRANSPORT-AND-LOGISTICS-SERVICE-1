@@ -3,9 +3,6 @@
 ALTER TABLE public.gensets
   ADD COLUMN IF NOT EXISTS gas_liters numeric NOT NULL DEFAULT 50;
 
-UPDATE public.gensets
-SET gas_liters = 50;
-
 -- Keep the profile fields required by the secure account-creation endpoint
 -- available even when older database migrations have not yet been applied.
 ALTER TABLE public.profiles

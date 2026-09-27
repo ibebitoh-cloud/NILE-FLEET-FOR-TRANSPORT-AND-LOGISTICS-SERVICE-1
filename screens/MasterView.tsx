@@ -547,6 +547,15 @@ const MasterView: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
+  useEffect(() => {
+    const closeStagingOnNavigation = () => {
+      const destination = window.location.hash.slice(1).split('?')[0];
+      if (destination && destination !== 'master-view') setShowAddModal(false);
+    };
+    window.addEventListener('hashchange', closeStagingOnNavigation);
+    return () => window.removeEventListener('hashchange', closeStagingOnNavigation);
+  }, []);
+
   // Invoice state handlers
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -594,7 +603,9 @@ const MasterView: React.FC = () => {
     }
   };
   
-  const todayDate = new Date().toISOString().split('T')[0];
+  const nowForDate = new Date();
+  const todayDate = new Date(nowForDate.getTime() - nowForDate.getTimezoneOffset() * 60_000)
+    .toISOString().slice(0, 10);
 
   const [stagedOps, setStagedOps] = useState<any[]>([
     { customerName: '', bookingNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, destination: '', trucker: '', beneficiaryName: '', quantity: 1 }
@@ -856,8 +867,8 @@ const MasterView: React.FC = () => {
         rate: parts[4] || '0',
         beneficiaryName: parts[5] || '',
         trucker: parts[6] || '',
-        operationDate: todayDate,
-        clipOnDate: todayDate,
+        operationDate: parts[7] || todayDate,
+        clipOnDate: parts[8] || todayDate,
         status: 'UNDER OPERATE',
         clipOnPort: Location.ALEX,
         clipOffPort: Location.ALEX,
@@ -887,7 +898,7 @@ const MasterView: React.FC = () => {
   };
 
   const stagingColumnDefaults: Record<string, number> = {
-    row: 48, quantity: 74, customer: 190, booking: 170, date: 145,
+    row: 48, quantity: 74, customer: 190, booking: 170, operationDate: 145, clipOnDate: 145,
     inPort: 145, outPort: 145, destination: 190, rate: 120,
     shipper: 170, trucker: 170, commodity: 160, actions: 128
   };
@@ -896,7 +907,8 @@ const MasterView: React.FC = () => {
     { key: 'quantity', label: isAr ? 'الكمية' : 'Qty' },
     { key: 'customer', label: t.client },
     { key: 'booking', label: t.bookingNum },
-    { key: 'date', label: t.date },
+    { key: 'operationDate', label: isAr ? 'تاريخ العملية' : 'Operation Date' },
+    { key: 'clipOnDate', label: isAr ? 'تاريخ التركيب' : 'Clip On Date' },
     { key: 'inPort', label: isAr ? 'ميناء الدخول' : 'In Hub' },
     { key: 'outPort', label: isAr ? 'ميناء الخروج' : 'Out Hub' },
     { key: 'destination', label: isAr ? 'الوجهة' : 'Destination' },
@@ -1657,7 +1669,7 @@ const MasterView: React.FC = () => {
              <div className={`p-8 flex justify-between items-center shrink-0 ${isDark ? 'bg-slate-950 text-white' : 'bg-slate-900 text-white'}`}>
                 <div className="text-start">
                   <h3 className="text-2xl font-black italic uppercase tracking-tighter text-[#C2A378]">{isAr ? 'حقن بيانات السجل المجمع' : 'Bulk Manifest Staging'}</h3>
-                  <p className="text-[9px] font-bold tracking-wide text-slate-300">{isAr ? 'أدخل البيانات يدوياً أو الصق صفوفاً مفصولة بعلامات تبويب.' : 'Enter rows manually or paste tab-separated data.'}</p>
+                  <p className="text-[9px] font-bold tracking-wide text-slate-300">{isAr ? 'أدخل البيانات يدوياً أو الصق صفوفاً مفصولة بعلامات تبويب. أضف تاريخ العملية ثم تاريخ التركيب كآخر عمودين اختياريين.' : 'Enter rows manually or paste tab-separated data. Optionally append Operation Date, then Clip On Date.'}</p>
                 </div>
                 <div className="flex gap-4">
                    <textarea 
@@ -1689,6 +1701,7 @@ const MasterView: React.FC = () => {
                              {isAr && <p className={`text-[8px] font-bold mt-1 ${isDark ? 'text-sky-300' : 'text-blue-700'}`}>{translateEntity(o.customerName, 'ar')}</p>}
                            </td>
                            <td className="p-2"><input className={`${stagingFieldClass} uppercase`} value={o.bookingNumber} onChange={e => updateStagedRow(idx, 'bookingNumber', e.target.value.toUpperCase())} /></td>
+                           <td className="p-2"><input type="date" className={stagingFieldClass} style={{ colorScheme: isDark ? 'dark' : 'light' }} value={o.operationDate || todayDate} onChange={e => updateStagedRow(idx, 'operationDate', e.target.value)} /></td>
                            <td className="p-2"><input type="date" className={stagingFieldClass} style={{ colorScheme: isDark ? 'dark' : 'light' }} value={o.clipOnDate} onChange={e => updateStagedRow(idx, 'clipOnDate', e.target.value)} /></td>
                            <td className="p-2">
                               <select className={stagingFieldClass} value={o.clipOnPort} onChange={e => updateStagedRow(idx, 'clipOnPort', e.target.value as any)}>

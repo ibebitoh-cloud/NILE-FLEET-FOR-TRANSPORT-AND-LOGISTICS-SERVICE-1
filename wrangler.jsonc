@@ -3,6 +3,9 @@
   "name": "nile-fleet-1",
   "main": "./worker.js",
   "compatibility_date": "2026-09-18",
+  "vars": {
+    "SUPABASE_URL": "https://mlxsafyubdsssugyiarx.supabase.co"
+  },
   "ai": {
     "binding": "AI"
   },
