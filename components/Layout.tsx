@@ -629,6 +629,39 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         if (customer) return getCustomerAliases(customer).some(alias => recordName === alias || (alias.length >= 4 && recordName.includes(alias)));
         return false;
       };
+      // Financial statements use registered names and IDs only. Fuzzy/phonetic
+      // translations can point two different customer names at the same account.
+      const getSoaCustomerAliases = (customer: User) => Array.from(new Set(
+        [customer.companyName, customer.companyNameAr, customer.name]
+          .map(normalizeEntityText)
+          .filter(alias => alias.length >= 3)
+      ));
+      const resolveSoaCustomer = (rawQuestion: string) => {
+        const normalizedQuestion = normalizeEntityText(rawQuestion);
+        const candidates: Array<{ owner: string; customer: User | null; name: string; alias: string }> = [];
+        for (const customer of customerProfiles) {
+          for (const alias of getSoaCustomerAliases(customer)) {
+            candidates.push({ owner: String(customer.id), customer, name: customer.companyName || customer.name, alias });
+          }
+        }
+        for (const name of transactionCustomerNames) {
+          const normalizedName = normalizeEntityText(name);
+          if (normalizedName.length < 3) continue;
+          // A profile already represents this transaction name; don't make a
+          // second candidate for the same customer.
+          if (customerProfiles.some(customer => getSoaCustomerAliases(customer).includes(normalizedName))) continue;
+          candidates.push({ owner: `name:${normalizedName}`, customer: null, name, alias: normalizedName });
+        }
+        const matches = candidates.filter(({ alias }) => (` ${normalizedQuestion} `).includes(` ${alias} `))
+          .sort((a, b) => b.alias.length - a.alias.length);
+        if (!matches.length) return { customer: null, customerName: null, ambiguous: false };
+        const longest = matches[0].alias.length;
+        const bestMatches = matches.filter(match => match.alias.length === longest);
+        const owners = Array.from(new Set(bestMatches.map(match => match.owner)));
+        if (owners.length > 1) return { customer: null, customerName: null, ambiguous: true };
+        const selected = bestMatches[0];
+        return { customer: selected.customer, customerName: selected.name, ambiguous: false };
+      };
 
       const customerAliasesForAi = customerProfiles.slice(0, 150).map(customer => ({
         english: customer.companyName || customer.name,
@@ -639,15 +672,24 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       const collectedIntent = /(?:COLLECTED|RECEIVED|PAYMENTS?|PAID|COLLECTION|MONEY\s*RECEIVED|تحصيل|التحصيل|تحصيلات|المحصل|المقبوض|المقبوضات|مدفوعات|الدفع|دفعات|فلوس)/i.test(question);
       const customerFinancialIntent = /(?:BALANCE|DUE|OUTSTANDING|DEBT|INVOICED|UNPAID|رصيد|مستحق|مستحقات|مديونية|فواتير|فاتورة|غير\s*مسدد|غير\s*محصل)/i.test(question);
       if (soaIntent || collectedIntent || customerFinancialIntent) {
-        const customer = findCustomerFromQuestion(question);
-        const resolvedCustomerName = customer?.companyName || customer?.name || findCustomerNameFromQuestion(question);
+        const soaMatch = soaIntent ? resolveSoaCustomer(question) : null;
+        if (soaMatch?.ambiguous) {
+          const clarification = responseIsAr
+            ? 'وجدت أكثر من عميل بهذا الاسم. اكتب الاسم الكامل المسجل للعميل لعرض كشف الحساب الصحيح.'
+            : 'More than one customer matches that name. Please use the full registered customer name so I can show the correct statement.';
+          setAiChatMessages(prev => [...prev, { role: 'ai', text: clarification }]);
+          return;
+        }
+        const customer = soaMatch?.customer || null;
+        const resolvedCustomerName = soaMatch?.customerName || (soaIntent ? null : findCustomerFromQuestion(question)?.companyName || findCustomerFromQuestion(question)?.name || findCustomerNameFromQuestion(question));
         if (resolvedCustomerName) {
           const customerName = resolvedCustomerName;
-          const customerOps = customer
-            ? operations.filter(o => customerMatchesOperation(customer, o))
-            : operations.filter(o => normalizeEntityText(o.customerName) === normalizeEntityText(customerName));
-          const customerInvoices = invoices.filter(i => customerMatchesNamedRecord(customer, i.customerName, i.customerId) || normalizeEntityText(i.customerName) === normalizeEntityText(customerName));
-          const customerPayments = db.getPayments().filter(p => customerMatchesNamedRecord(customer, p.customerName, p.customerId) || normalizeEntityText(p.customerName) === normalizeEntityText(customerName));
+          const customerNameAliases = customer ? getSoaCustomerAliases(customer) : [normalizeEntityText(customerName)];
+          const matchesSoaCustomer = (recordName: unknown, recordId: unknown) =>
+            Boolean(customer && String(recordId || '') === String(customer.id)) || customerNameAliases.includes(normalizeEntityText(recordName));
+          const customerOps = operations.filter(o => matchesSoaCustomer(o.customerName, o.customerId));
+          const customerInvoices = invoices.filter(i => matchesSoaCustomer(i.customerName, i.customerId));
+          const customerPayments = db.getPayments().filter(p => matchesSoaCustomer(p.customerName, p.customerId));
           const unbilled = customerOps.filter(o => !o.invoiced).reduce((s, o) => s + (parseFloat(String(o.rate || '0').replace(/,/g,'')) || 0) + (parseFloat(String(o.vat || '0').replace(/,/g,'')) || 0), 0);
           const invoiced = customerInvoices.reduce((s, i) => s + (Number(i.amount) || 0), 0);
           const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
