@@ -473,6 +473,12 @@ const App: React.FC = () => {
   }
 
   const renderScreen = () => {
+    if (!canAccessScreen(activeScreen)) {
+      return user.role === UserRole.CUSTOMER
+        ? <CustomerPortal user={user} type="reservations" />
+        : <Dashboard onNavigate={navigateTo} />;
+    }
+
     switch (activeScreen) {
       case 'dashboard': return <Dashboard onNavigate={navigateTo} />;
       case 'analytics': return <Analytics />;
