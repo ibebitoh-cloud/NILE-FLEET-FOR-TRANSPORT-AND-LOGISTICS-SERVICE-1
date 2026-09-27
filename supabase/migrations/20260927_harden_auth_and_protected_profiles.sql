@@ -54,3 +54,27 @@ with check (
       and coalesce(p.revoked, false) = false
   )
 );
+
+
+-- Prevent privilege escalation through self-profile updates.
+create or replace function public.protect_profile_identity_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() = old.id and old.role not in ('ADMIN', 'MANAGER') then
+    new.role := old.role;
+    new.revoked := old.revoked;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.protect_profile_identity_fields() from public, anon, authenticated;
+
+drop trigger if exists protect_profile_identity_fields on public.profiles;
+create trigger protect_profile_identity_fields
+before update on public.profiles
+for each row execute function public.protect_profile_identity_fields();
