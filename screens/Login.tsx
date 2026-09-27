@@ -94,6 +94,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </h2>
               </div>
               <p className="text-slate-300 text-[10px] font-bold uppercase tracking-[0.4em] max-w-sm leading-relaxed border-l-2 border-[#C2A378]/30 pl-6">{t.coldChain}</p>
+              <div className="mt-8 grid grid-cols-2 gap-x-8 gap-y-3 max-w-sm text-[8px] font-black uppercase tracking-[0.2em]">
+                <span className="text-slate-300"><span className="text-[#C2A378]">●</span> SYSTEM ONLINE</span>
+                <span className="text-slate-300"><span className="text-[#C2A378]">05</span> PORTS CONNECTED</span>
+                <span className="text-slate-300"><span className="text-[#C2A378]">500+</span> GENSET UNITS</span>
+                <span className="text-slate-300"><span className="text-[#C2A378]">●</span> OPS NETWORK ACTIVE</span>
+              </div>
             </div>
           </div>
         </div>
