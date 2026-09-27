@@ -23,6 +23,7 @@ const Notifications = lazy(() => import('./screens/Notifications'));
 import Layout from './components/Layout';
 import { User, UserRole } from './types';
 import { db } from './services/supabaseDb';
+import { supabase } from './services/supabaseClient';
 import { loginWithPassword, logout as supabaseLogout, getCurrentSessionUser } from './services/authService';
 import { supabase } from './services/supabaseClient';
 import { discoveryQueue, registerDynamicTranslations, translateUiText } from './translations';
@@ -100,50 +101,68 @@ const App: React.FC = () => {
     localStorage.setItem('app_lang', lang);
   }, [lang]);
 
-  // Bootstrap from Supabase Auth. User data is loaded only after a valid
-  // session has been resolved; the localStorage user entry is only a UI cache.
+  // Authentication is authoritative. localStorage is only a UI cache and is never
+  // treated as proof of identity or authorization.
   useEffect(() => {
     let cancelled = false;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') {
-        setUser(null);
-        localStorage.removeItem('user');
-      }
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        // Defer Supabase calls until after its auth callback releases the lock.
-        window.setTimeout(() => {
-          if (cancelled) return;
-          getCurrentSessionUser().then(async sessionUser => {
-            if (cancelled) return;
-            if (!sessionUser) {
-              setUser(null);
-              localStorage.removeItem('user');
-              return;
-            }
-            setUser(sessionUser);
-            localStorage.setItem('user', JSON.stringify(sessionUser));
-            await db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err));
-          }).catch(err => console.error('Failed to refresh Supabase user:', err));
-        }, 0);
-      }
-    });
-    getCurrentSessionUser().catch(err => {
+
+    const applySessionUser = async () => {
+      const sessionUser = await getCurrentSessionUser().catch(err => {
         console.error('Failed to verify Supabase session:', err);
         return null;
-      }).then(async sessionUser => {
+      });
       if (cancelled) return;
+
       if (sessionUser) {
         setUser(sessionUser);
         localStorage.setItem('user', JSON.stringify(sessionUser));
-        setActiveScreen(sessionUser.role === UserRole.GATE_OPERATOR ? 'port-gate' : (sessionUser.role === UserRole.CUSTOMER ? 'cust-reservations' : 'dashboard'));
+
+        // Load protected business data only after authentication succeeds.
         await db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err));
+
+        if (sessionUser.revoked) {
+          await supabaseLogout();
+          setUser(null);
+          localStorage.removeItem('user');
+        } else {
+          setActiveScreen(
+            sessionUser.role === UserRole.GATE_OPERATOR
+              ? 'port-gate'
+              : sessionUser.role === UserRole.CUSTOMER
+                ? 'cust-reservations'
+                : 'dashboard'
+          );
+        }
       } else {
         setUser(null);
         localStorage.removeItem('user');
       }
-      setAuthChecked(true);
+
+      if (!cancelled) setAuthChecked(true);
+    };
+
+    applySessionUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'INITIAL_SESSION') return;
+
+      window.setTimeout(() => {
+        if (cancelled) return;
+
+        if (event === 'SIGNED_OUT') {
+          setUser(null);
+          localStorage.removeItem('user');
+          setAuthChecked(true);
+          return;
+        }
+
+        applySessionUser();
+      }, 0);
     });
-    return () => { cancelled = true; subscription.unsubscribe(); };
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Deep links use the current screen key in the URL. All screens remain
@@ -479,21 +498,28 @@ const App: React.FC = () => {
   }, [user?.id]);
 
   const handleLogin = async (email: string, pass: string) => {
-    const result = await loginWithPassword(email, pass);
+    const result = await loginWithPassword(email.trim(), pass);
     if (result.user) {
       const u = result.user;
       setUser(u);
       localStorage.setItem('user', JSON.stringify(u));
-      setActiveScreen(u.role === UserRole.GATE_OPERATOR ? 'port-gate' : (u.role !== UserRole.CUSTOMER ? 'dashboard' : 'cust-reservations'));
+      await db.loadAll().catch(err => console.error('Failed to load data after login:', err));
+      setActiveScreen(
+        u.role === UserRole.GATE_OPERATOR
+          ? 'port-gate'
+          : u.role === UserRole.CUSTOMER
+            ? 'cust-reservations'
+            : 'dashboard'
+      );
     } else if (result.error === 'REVOKED') {
       alert(lang === 'ar' ? 'تم تعليق هذا الحساب من قبل الإدارة' : 'This account access has been suspended/revoked by system administrator.');
     } else {
-      alert(lang === 'ar' ? 'فشل المصادقة' : 'Authentication failed');
+      alert(lang === 'ar' ? (result.error || 'فشل المصادقة') : (result.error || 'Authentication failed'));
     }
   };
 
-  const handleLogout = useCallback(() => {
-    void supabaseLogout();
+  const handleLogout = useCallback(async () => {
+    await supabaseLogout();
     setUser(null);
     localStorage.removeItem('user');
     window.location.hash = '';
@@ -531,6 +557,12 @@ const App: React.FC = () => {
   }
 
   const renderScreen = () => {
+    if (!canAccessScreen(activeScreen)) {
+      return user.role === UserRole.CUSTOMER
+        ? <CustomerPortal user={user} type="reservations" />
+        : <Dashboard onNavigate={navigateTo} />;
+    }
+
     switch (activeScreen) {
       case 'dashboard': return <Dashboard onNavigate={navigateTo} />;
       case 'analytics': return <Analytics />;
