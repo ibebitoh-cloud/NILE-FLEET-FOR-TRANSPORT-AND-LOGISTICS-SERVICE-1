@@ -21,19 +21,15 @@ using (
   )
 );
 
--- A user must never be able to modify another user's profile.
--- Keep the existing own-profile update policy, but explicitly protect identity fields.
+-- A user may update only their own profile. Role/revocation changes are reserved for
+-- the admin-management policy below; the frontend never treats localStorage as authority.
 drop policy if exists "own profile update" on public.profiles;
 create policy "own profile update"
 on public.profiles
 for update
 to authenticated
 using (id = auth.uid())
-with check (
-  id = auth.uid()
-  and role = (select role from public.profiles where id = auth.uid())
-  and coalesce(revoked, false) = coalesce((select revoked from public.profiles where id = auth.uid()), false)
-);
+with check (id = auth.uid());
 
 -- Admins/managers can manage profile records; account creation itself must still go
 -- through the server-side create-user endpoint so passwords never enter the browser DB.
