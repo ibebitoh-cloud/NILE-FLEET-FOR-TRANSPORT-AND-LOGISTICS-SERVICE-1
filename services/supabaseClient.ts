@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
   || 'https://mlxsafyubdsssugyiarx.supabase.co';
 const supabasePublishableKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
+  || (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)
   || 'sb_publishable_A6Mc79suLAirBb1mo3L_Vg_NnUXiB1F';
 
 if (!supabaseUrl || !supabasePublishableKey) {
