@@ -99,7 +99,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
 
         {/* RIGHT PANEL */}
-        <div className={`col-span-full lg:col-span-5 min-h-screen flex flex-col justify-center px-5 py-20 sm:px-8 sm:py-16 lg:px-16 lg:py-0 relative z-10 backdrop-blur-sm transition-colors duration-1000 ${isDark ? 'bg-slate-900/60' : 'bg-white/65'}`}>
+        <div className={`col-span-full lg:col-span-5 min-h-screen flex flex-col justify-center px-5 py-20 sm:px-8 sm:py-16 lg:px-12 lg:py-0 relative z-10 backdrop-blur-md transition-colors duration-1000 ${isDark ? 'bg-slate-900/35' : 'bg-white/35'}`}>
           {/* Top Bar for Language Switcher */}
           <div className="absolute top-6 right-6 lg:top-8 lg:right-8 z-20 flex items-center gap-2">
             <button
@@ -117,9 +117,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
 
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[30rem] lg:text-[40rem] font-black text-slate-500/5 pointer-events-none select-none italic tracking-tighter">N</div>
-          <div className="max-w-md w-full mx-auto space-y-7 sm:space-y-8 lg:space-y-10 relative z-10">
+          <div className="max-w-sm w-full mx-auto space-y-5 sm:space-y-6 lg:space-y-7 relative z-10">
             <div className="space-y-3 text-center lg:text-start relative">
-              <h3 className={`text-3xl sm:text-4xl lg:text-5xl font-black uppercase italic tracking-tighter leading-[0.95] ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>
+              <h3 className={`text-2xl sm:text-3xl lg:text-4xl font-black uppercase italic tracking-tighter leading-[0.95] ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>
                 <>{isAr ? 'مرحباً بكم في' : 'WELCOME TO'} <br/> <span className="text-[#C2A378]">{isAr ? 'أسطول النيل' : 'NILE FLEET'}</span></>
               </h3>
               <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.25em] text-[#C2A378] italic">
@@ -130,14 +130,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5 text-start">
               <div className="group">
                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.16em] sm:tracking-widest block mb-2 px-1 group-focus-within:text-[#C2A378] transition-colors">{t.networkIdentity}</label>
-                <input type="email" required className="w-full h-12 sm:h-14 px-4 sm:px-6 rounded-xl border outline-none transition-all text-sm font-bold bg-[var(--input-bg)] border-[var(--border-primary)] text-[var(--text-primary)] focus:border-[var(--accent)]" placeholder="EMAIL" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input type="email" required className="w-full h-11 sm:h-12 px-4 sm:px-5 rounded-xl border outline-none transition-all text-sm font-bold bg-[var(--input-bg)] border-[var(--border-primary)] text-[var(--text-primary)] focus:border-[var(--accent)]" placeholder="EMAIL" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div className="group">
                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.16em] sm:tracking-widest block mb-2 px-1 group-focus-within:text-[#C2A378] transition-colors">{t.strategicPasskey}</label>
                 <input type="password" required className="w-full h-12 sm:h-14 px-4 sm:px-6 rounded-xl border outline-none transition-all text-sm font-bold bg-[var(--input-bg)] border-[var(--border-primary)] text-[var(--text-primary)] focus:border-[var(--accent)]" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
 
-              <button type="submit" className="w-full min-h-12 sm:min-h-14 bg-[#001F3F] hover:bg-[#002b57] text-white font-black py-4 sm:py-5 lg:py-6 rounded-xl sm:rounded-2xl transition-all uppercase tracking-[0.28em] sm:tracking-[0.4em] text-[9px] sm:text-[10px] shadow-2xl active:scale-[0.98] mt-3 relative overflow-hidden group/btn border border-white/5">
+              <button type="submit" className="w-full min-h-11 sm:min-h-12 bg-[#001F3F] hover:bg-[#002b57] text-white font-black py-3 sm:py-4 rounded-xl transition-all uppercase tracking-[0.28em] sm:tracking-[0.4em] text-[9px] sm:text-[10px] shadow-2xl active:scale-[0.98] mt-3 relative overflow-hidden group/btn border border-white/5">
                 <span className="relative z-10">{t.initializeCommand}</span>
                 <div className="absolute inset-0 bg-[#C2A378] translate-y-full group-hover/btn:translate-y-0 transition-transform duration-500 opacity-20"></div>
               </button>
@@ -147,9 +147,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                <p className="text-[8px] font-black uppercase text-slate-400 tracking-[0.12em] sm:tracking-[0.2em] text-center leading-relaxed">{isAr ? 'لطلب حساب، تواصل مع مسؤول النظام.' : 'Contact your administrator to request an account.'}</p>
             </div>
             
-            <div className="relative pt-5 sm:pt-6 border-t border-slate-100 dark:border-white/5">
+            <div className="relative pt-4 sm:pt-5 border-t border-slate-100 dark:border-white/5">
                <div className="flex flex-col items-center gap-1 select-none transition-all mx-auto w-fit text-center font-sans">
-                  <div className="bg-slate-50/85 dark:bg-slate-800/50 px-6 sm:px-10 py-3 rounded-full border border-slate-100 dark:border-white/10 shadow-sm">
+                  <div className="bg-slate-50/85 dark:bg-slate-800/50 px-5 sm:px-8 py-2.5 rounded-full border border-slate-100 dark:border-white/10 shadow-sm">
                      <p className="text-[8px] font-black uppercase tracking-[0.35em] sm:tracking-[0.6em] text-slate-400 py-1 leading-none">
                        POWERED BY BEBITO
                      </p>
