@@ -1,9 +1,11 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useContext } from 'react';
 import { User, Reservation, Invoice, Location, ReservationStatus } from '../types';
 import { db } from '../services/supabaseDb';
 import InvoiceView from '../components/InvoiceView';
 import { ProLedger } from './Financials';
+import { LanguageContext } from '../App';
+import { translateEntity } from '../translations';
 
 interface CustomerPortalProps {
   user: User;
@@ -11,6 +13,8 @@ interface CustomerPortalProps {
 }
 
 const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
+  const { lang } = useContext(LanguageContext);
+  const isAr = lang === 'ar';
   const [isBooking, setIsBooking] = useState(false);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [showSoa, setShowSoa] = useState(false);
@@ -124,7 +128,7 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.bookingNumber.trim() || !Number.isFinite(formData.gensetsNeeded) || formData.gensetsNeeded < 1 || formData.gensetsNeeded > 100) {
-      alert('Please enter a valid booking number and 1–100 gensets.');
+      alert(isAr ? 'أدخل رقم حجز صحيحاً وعدداً من ١ إلى ١٠٠ مولد.' : 'Please enter a valid booking number and 1–100 gensets.');
       return;
     }
     const newRes: Reservation = {
@@ -144,23 +148,23 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
     await db.addReservation(newRes);
     const saved = db.getReservations().length > before;
     if (!saved) {
-      alert('Reservation could not be saved. Please try again.');
+      alert(isAr ? 'تعذر حفظ الحجز. حاول مرة أخرى.' : 'Reservation could not be saved. Please try again.');
       return;
     }
     setIsBooking(false);
-    alert('Reservation requested successfully! Our team will review and approve it shortly.');
+    alert(isAr ? 'تم إرسال طلب الحجز بنجاح. سيراجعه فريقنا ويعتمده قريباً.' : 'Reservation requested successfully! Our team will review and approve it shortly.');
   };
 
   if (type === 'reservations') {
     return (
-      <div className="space-y-6">
+      <div className={`space-y-6 text-start ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
         <div className="flex justify-between items-center">
-          <h3 className="text-xl font-bold text-slate-800">Your Bookings</h3>
+          <h3 className="text-xl font-bold text-slate-800">{isAr ? 'حجوزاتك' : 'Your Bookings'}</h3>
           <button 
             onClick={() => setIsBooking(true)}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95"
           >
-            + Create New Reservation
+            + {isAr ? 'إنشاء حجز جديد' : 'Create New Reservation'}
           </button>
         </div>
 
@@ -168,37 +172,37 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden">
               <div className="p-6 bg-blue-600 text-white flex justify-between items-center">
-                <h4 className="text-lg font-bold">New Online Reservation</h4>
+                <h4 className="text-lg font-bold">{isAr ? 'حجز جديد عبر الإنترنت' : 'New Online Reservation'}</h4>
                 <button onClick={() => setIsBooking(false)} className="text-white hover:text-blue-100">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
               <form onSubmit={handleSubmit} className="p-8 grid grid-cols-2 gap-4">
                 <div className="col-span-2 md:col-span-1">
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Booking Number</label>
-                  <input required className="w-full px-4 py-2 border rounded-lg" placeholder="EX: MAEU123456" onChange={e => setFormData({...formData, bookingNumber: e.target.value})} />
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{isAr ? 'رقم الحجز' : 'Booking Number'}</label>
+                  <input required className="w-full px-4 py-2 border rounded-lg" placeholder={isAr ? 'مثال: MAEU123456' : 'EX: MAEU123456'} onChange={e => setFormData({...formData, bookingNumber: e.target.value})} />
                 </div>
                 <div className="col-span-2 md:col-span-1">
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Gensets Needed</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{isAr ? 'عدد المولدات المطلوبة' : 'Gensets Needed'}</label>
                   <input type="number" min="1" max="100" required className="w-full px-4 py-2 border rounded-lg" value={formData.gensetsNeeded} onChange={e => setFormData({...formData, gensetsNeeded: parseInt(e.target.value)})} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Port In</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{isAr ? 'ميناء الوصول' : 'Port In'}</label>
                   <select className="w-full px-4 py-2 border rounded-lg" onChange={e => setFormData({...formData, portIn: e.target.value as any})}>
-                    {commercialPorts.map(l => <option key={l} value={l}>{l}</option>)}
+                    {commercialPorts.map(l => <option key={l} value={l}>{translateEntity(l, lang)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Port Out</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{isAr ? 'ميناء المغادرة' : 'Port Out'}</label>
                   <select className="w-full px-4 py-2 border rounded-lg" onChange={e => setFormData({...formData, portOut: e.target.value as any})}>
-                    {commercialPorts.map(l => <option key={l} value={l}>{l}</option>)}
+                    {commercialPorts.map(l => <option key={l} value={l}>{translateEntity(l, lang)}</option>)}
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Reservation Date</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{isAr ? 'تاريخ الحجز' : 'Reservation Date'}</label>
                   <input type="date" required className="w-full px-4 py-2 border rounded-lg" onChange={e => setFormData({...formData, date: e.target.value})} />
                 </div>
-                <button type="submit" className="col-span-2 bg-blue-600 text-white py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 shadow-lg">Confirm Reservation</button>
+                <button type="submit" className="col-span-2 bg-blue-600 text-white py-3 rounded-xl font-bold mt-4 hover:bg-blue-700 shadow-lg">{isAr ? 'تأكيد الحجز' : 'Confirm Reservation'}</button>
               </form>
             </div>
           </div>
@@ -213,26 +217,26 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
                   res.status === ReservationStatus.PENDING ? 'bg-amber-50 text-amber-500' :
                   res.status === ReservationStatus.APPROVED ? 'bg-green-50 text-green-500' : 'bg-slate-50 text-slate-400'
                 }`}>
-                  {res.status}
+                  {translateEntity(res.status, lang)}
                 </span>
               </div>
               <div className="flex items-center space-x-4 mb-3">
                 <div className="text-center">
-                  <p className="text-[10px] text-slate-400 uppercase">UNITS</p>
+                  <p className="text-[10px] text-slate-400 uppercase">{isAr ? 'الوحدات' : 'UNITS'}</p>
                   <p className="font-bold text-lg">{res.gensetsNeeded}</p>
                 </div>
                 <div className="flex-1 px-4 border-l">
-                  <p className="text-[10px] text-slate-400 uppercase">ROUTE</p>
-                  <p className="font-bold text-slate-700">{res.portIn} → {res.portOut}</p>
+                  <p className="text-[10px] text-slate-400 uppercase">{isAr ? 'المسار' : 'ROUTE'}</p>
+                  <p className="font-bold text-slate-700">{translateEntity(res.portIn, lang)} → {translateEntity(res.portOut, lang)}</p>
                 </div>
               </div>
-              <p className="text-xs text-slate-500">Reserved for: <span className="font-medium">{res.reservationDate}</span></p>
+              <p className="text-xs text-slate-500">{isAr ? 'محجوز بتاريخ:' : 'Reserved for:'} <span className="font-medium">{res.reservationDate}</span></p>
             </div>
           ))}
           {myReservations.length === 0 && (
             <div className="col-span-2 py-20 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
-              <p>No active reservations.</p>
-              <button onClick={() => setIsBooking(true)} className="text-blue-500 font-bold hover:underline mt-2">Start your first booking →</button>
+              <p>{isAr ? 'لا توجد حجوزات نشطة.' : 'No active reservations.'}</p>
+              <button onClick={() => setIsBooking(true)} className="text-blue-500 font-bold hover:underline mt-2">{isAr ? 'ابدأ أول حجز لك ←' : 'Start your first booking →'}</button>
             </div>
           )}
         </div>
@@ -241,21 +245,21 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 text-start ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h3 className="text-xl font-bold text-slate-800">Your Financial Statements</h3>
+        <h3 className="text-xl font-bold text-slate-800">{isAr ? 'كشوفك المالية' : 'Your Financial Statements'}</h3>
         <div className="flex flex-wrap gap-2">
           <button 
             onClick={() => setShowSoa(true)}
             className="flex items-center gap-1.5 bg-[#001F3F] hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
           >
-            📋 Statement of Account (SOA)
+            📋 {isAr ? 'كشف الحساب' : 'Statement of Account (SOA)'}
           </button>
           <button 
             onClick={handleExportAllDataAndFinance}
             className="flex items-center gap-1.5 bg-[#C2A378] hover:bg-[#b09268] text-[#001F3F] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
           >
-            📥 Export Data & Finance (CSV)
+            📥 {isAr ? 'تصدير البيانات والمالية (CSV)' : 'Export Data & Finance (CSV)'}
           </button>
         </div>
       </div>
@@ -263,11 +267,11 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
         <table className="w-full text-left">
           <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
             <tr>
-              <th className="px-6 py-4">Invoice #</th>
-              <th className="px-6 py-4">Booking #</th>
-              <th className="px-6 py-4">Date</th>
-              <th className="px-6 py-4">Amount</th>
-              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4">{isAr ? 'رقم الفاتورة' : 'Invoice #'}</th>
+              <th className="px-6 py-4">{isAr ? 'رقم الحجز' : 'Booking #'}</th>
+              <th className="px-6 py-4">{isAr ? 'التاريخ' : 'Date'}</th>
+              <th className="px-6 py-4">{isAr ? 'المبلغ' : 'Amount'}</th>
+              <th className="px-6 py-4">{isAr ? 'الحالة' : 'Status'}</th>
               <th className="px-6 py-4"></th>
             </tr>
           </thead>
@@ -282,7 +286,7 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
                   <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
                     inv.status === 'PAID' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                   }`}>
-                    {inv.status}
+                    {translateEntity(inv.status, lang)}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-right">
@@ -290,14 +294,14 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
                     onClick={() => setViewingInvoice(inv)}
                     className="text-blue-600 text-xs font-black uppercase hover:underline"
                   >
-                    View & Print
+                    {isAr ? 'عرض وطباعة' : 'View & Print'}
                   </button>
                 </td>
               </tr>
             ))}
             {myInvoices.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No invoices issued to your account yet.</td>
+                <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">{isAr ? 'لم تصدر فواتير لحسابك حتى الآن.' : 'No invoices issued to your account yet.'}</td>
               </tr>
             )}
           </tbody>

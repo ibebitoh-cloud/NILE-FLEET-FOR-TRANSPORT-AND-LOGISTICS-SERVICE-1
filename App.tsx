@@ -264,37 +264,65 @@ const App: React.FC = () => {
   }, [lang]);
 
   // GLOBAL UI TRANSLATION FALLBACK.
-  // Keep this lightweight: a full DOM walk on every React mutation caused UI lag.
+  // Keep hard-coded labels translated as lazy screens and dialogs are mounted.
   useEffect(() => {
     if (lang !== 'ar') return;
 
     let timer: ReturnType<typeof setTimeout> | null = null;
     let running = false;
+    const translatedTexts = new Map<Text, { original: string; translated: string }>();
+    const translatedAttributes = new Map<HTMLElement, Map<string, { original: string; translated: string }>>();
+
+    const shouldSkip = (element: HTMLElement | null) => {
+      if (!element) return true;
+      if (element.closest('script,style,code,pre,[data-no-translate]')) return true;
+      return false;
+    };
+
+    const translateTextNode = (text: Text) => {
+      const parent = text.parentElement;
+      if (shouldSkip(parent) || parent?.closest('textarea,input')) return;
+      const current = text.nodeValue || '';
+      const previous = translatedTexts.get(text);
+      if (previous?.translated === current) return;
+      const original = current;
+      const translated = translateUiText(original, 'ar');
+      if (translated !== original) {
+        translatedTexts.set(text, { original, translated });
+        text.nodeValue = translated;
+      } else {
+        translatedTexts.delete(text);
+      }
+    };
+
+    const translateAttributes = (element: HTMLElement) => {
+      if (shouldSkip(element)) return;
+      const attributes = translatedAttributes.get(element) || new Map<string, { original: string; translated: string }>();
+      for (const name of ['placeholder', 'title', 'aria-label']) {
+        const current = element.getAttribute(name);
+        if (!current) continue;
+        const previous = attributes.get(name);
+        if (previous?.translated === current) continue;
+        const translated = translateUiText(current, 'ar');
+        if (translated !== current) {
+          attributes.set(name, { original: current, translated });
+          element.setAttribute(name, translated);
+        } else {
+          attributes.delete(name);
+        }
+      }
+      if (attributes.size) translatedAttributes.set(element, attributes);
+      else translatedAttributes.delete(element);
+    };
 
     const translateRoot = (root: ParentNode) => {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      const nodes: Text[] = [];
       let node: Node | null;
       while ((node = walker.nextNode())) {
-        const text = node as Text;
-        const parent = text.parentElement;
-        if (parent && !['SCRIPT', 'STYLE', 'TEXTAREA'].includes(parent.tagName)) nodes.push(text);
+        translateTextNode(node as Text);
       }
-      for (const text of nodes) {
-        const value = text.nodeValue || '';
-        const translated = translateUiText(value, 'ar');
-        if (translated !== value) text.nodeValue = translated;
-      }
-      if (root === document.body) {
-        document.body.querySelectorAll<HTMLElement>('[placeholder],[title],[aria-label]').forEach(el => {
-          for (const attr of ['placeholder', 'title', 'aria-label']) {
-            const value = el.getAttribute(attr);
-            if (!value) continue;
-            const translated = translateUiText(value, 'ar');
-            if (translated !== value) el.setAttribute(attr, translated);
-          }
-        });
-      }
+      if (root instanceof HTMLElement && root.matches('[placeholder],[title],[aria-label]')) translateAttributes(root);
+      root.querySelectorAll?.<HTMLElement>('[placeholder],[title],[aria-label]').forEach(translateAttributes);
     };
 
     translateRoot(document.body);
@@ -305,31 +333,33 @@ const App: React.FC = () => {
         if (running) return;
         running = true;
         try {
-          // Only inspect newly inserted subtrees. Do not react to characterData
-          // changes caused by our own translations.
-          const roots = mutations
-            .flatMap(m => Array.from(m.addedNodes))
-            .filter(n => n.nodeType === Node.ELEMENT_NODE || n.nodeType === Node.TEXT_NODE)
-            .slice(0, 20);
-          for (const root of roots) {
-          if (root.nodeType === Node.ELEMENT_NODE) translateRoot(root as Element);
-            else {
-              const text = root as Text;
-              const value = text.nodeValue || '';
-              const translated = translateUiText(value, 'ar');
-              if (translated !== value) text.nodeValue = translated;
+          for (const mutation of mutations) {
+            if (mutation.type === 'characterData') translateTextNode(mutation.target as Text);
+            if (mutation.type === 'attributes' && mutation.target instanceof HTMLElement) translateAttributes(mutation.target);
+            for (const added of Array.from(mutation.addedNodes)) {
+              if (added.nodeType === Node.ELEMENT_NODE) translateRoot(added as Element);
+              else if (added.nodeType === Node.TEXT_NODE) translateTextNode(added as Text);
             }
           }
         } finally {
           running = false;
         }
-      }, 120);
+      }, 40);
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label'] });
     return () => {
       observer.disconnect();
       if (timer) clearTimeout(timer);
+      translatedTexts.forEach(({ original, translated }, text) => {
+        if (text.isConnected && text.nodeValue === translated) text.nodeValue = original;
+      });
+      translatedAttributes.forEach((attributes, element) => {
+        if (!element.isConnected) return;
+        attributes.forEach(({ original, translated }, name) => {
+          if (element.getAttribute(name) === translated) element.setAttribute(name, original);
+        });
+      });
     };
   }, [lang, langUpdateKey]);
 
