@@ -48,10 +48,23 @@ export async function loginWithPassword(email: string, password: string): Promis
     .from('profiles')
     .select('*')
     .eq('id', data.user.id)
-    .single();
+    .maybeSingle();
 
-  if (profileError || !profile) {
-    return { error: 'Could not load user profile' };
+  if (profileError) {
+    console.error('Supabase profile lookup failed after sign in:', {
+      code: profileError.code,
+      message: profileError.message,
+      hint: profileError.hint,
+    });
+    await supabase.auth.signOut();
+    return {
+      error: 'Profile lookup failed (' + (profileError.code || 'unknown') + '). Check the browser console for details.',
+    };
+  }
+
+  if (!profile) {
+    await supabase.auth.signOut();
+    return { error: 'No profile is linked to this Auth account. Ask an administrator to link or recreate the account.' };
   }
 
   if (profile.revoked) {
@@ -77,7 +90,7 @@ export async function getCurrentSessionUser(): Promise<User | null> {
     .from('profiles')
     .select('*')
     .eq('id', sessionUser.id)
-    .single();
+    .maybeSingle();
 
   if (!profile || profile.revoked) return null;
 
