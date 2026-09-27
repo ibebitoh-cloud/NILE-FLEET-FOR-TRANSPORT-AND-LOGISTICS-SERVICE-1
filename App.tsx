@@ -24,6 +24,7 @@ import Layout from './components/Layout';
 import { User, UserRole } from './types';
 import { db } from './services/supabaseDb';
 import { loginWithPassword, logout as supabaseLogout, getCurrentSessionUser } from './services/authService';
+import { supabase } from './services/supabaseClient';
 import { discoveryQueue, registerDynamicTranslations, translateUiText } from './translations';
 import { translateBusinessEntities, getSafeApiKey } from './services/aiService';
 
@@ -99,30 +100,85 @@ const App: React.FC = () => {
     localStorage.setItem('app_lang', lang);
   }, [lang]);
 
-  // Bootstrap: load live data and verify the real Supabase session.
-  // localStorage is only a UI cache and must never be treated as authentication.
+  // Bootstrap from Supabase Auth. User data is loaded only after a valid
+  // session has been resolved; the localStorage user entry is only a UI cache.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err)),
-      getCurrentSessionUser().catch(err => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        localStorage.removeItem('user');
+      }
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        // Defer Supabase calls until after its auth callback releases the lock.
+        window.setTimeout(() => {
+          if (cancelled) return;
+          getCurrentSessionUser().then(async sessionUser => {
+            if (cancelled) return;
+            if (!sessionUser) {
+              setUser(null);
+              localStorage.removeItem('user');
+              return;
+            }
+            setUser(sessionUser);
+            localStorage.setItem('user', JSON.stringify(sessionUser));
+            await db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err));
+          }).catch(err => console.error('Failed to refresh Supabase user:', err));
+        }, 0);
+      }
+    });
+    getCurrentSessionUser().catch(err => {
         console.error('Failed to verify Supabase session:', err);
         return null;
-      })
-    ]).then(([, sessionUser]) => {
+      }).then(async sessionUser => {
       if (cancelled) return;
       if (sessionUser) {
         setUser(sessionUser);
         localStorage.setItem('user', JSON.stringify(sessionUser));
         setActiveScreen(sessionUser.role === UserRole.GATE_OPERATOR ? 'port-gate' : (sessionUser.role === UserRole.CUSTOMER ? 'cust-reservations' : 'dashboard'));
+        await db.loadAll().catch(err => console.error('Failed to load data from Supabase:', err));
       } else {
         setUser(null);
         localStorage.removeItem('user');
       }
       setAuthChecked(true);
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; subscription.unsubscribe(); };
   }, []);
+
+  // Deep links use the current screen key in the URL. All screens remain
+  // behind the auth gate below, including direct navigation and refreshes.
+  useEffect(() => {
+    const allScreens = new Set([
+      'dashboard', 'analytics', 'master-view', 'port-gate', 'operations',
+      'booking-invoices', 'intelligence', 'reports', 'stock', 'reservations',
+      'customers', 'user-mgmt', 'customer-prices', 'financials', 'support',
+      'notifications', 'system-log', 'user-settings', 'cust-reservations',
+      'cust-invoices'
+    ]);
+    const role = String(user?.role || '').toUpperCase();
+    const isInternal = role === String(UserRole.ADMIN) || role === String(UserRole.VIEWER);
+    const isGate = role === String(UserRole.GATE_OPERATOR);
+    const homeScreen = isInternal ? 'dashboard' : isGate ? 'port-gate' : 'cust-reservations';
+    const roleScreens = isInternal
+      ? ['dashboard', 'port-gate', 'master-view', 'operations', 'notifications', 'booking-invoices', 'intelligence', 'reports', 'stock', 'reservations', 'customers', 'user-mgmt', 'customer-prices', 'financials', 'support', 'system-log', 'analytics', 'user-settings']
+      : isGate
+        ? ['port-gate', 'notifications', 'support', 'user-settings']
+        : ['cust-reservations', 'notifications', 'cust-invoices', 'support', 'user-settings'];
+    const permittedScreens = user?.allowedScreens?.length
+      ? new Set(user.allowedScreens.filter(screen => allScreens.has(screen)))
+      : new Set(roleScreens);
+    const syncFromUrl = () => {
+      const screen = window.location.hash.slice(1).split('?')[0];
+      if (!user) return;
+      const destination = permittedScreens.has(screen) ? screen : homeScreen;
+      if (screen !== destination) window.location.hash = destination;
+      setActiveScreen(destination);
+    };
+    window.addEventListener('hashchange', syncFromUrl);
+    if (user) syncFromUrl();
+    return () => window.removeEventListener('hashchange', syncFromUrl);
+  }, [user]);
 
   const getIsDark = (currentTheme: ThemeMode): boolean => {
     if (currentTheme === 'custom') {
@@ -437,14 +493,16 @@ const App: React.FC = () => {
   };
 
   const handleLogout = useCallback(() => {
-    supabaseLogout();
+    void supabaseLogout();
     setUser(null);
     localStorage.removeItem('user');
+    window.location.hash = '';
   }, []);
 
   const navigateTo = useCallback((screen: string, id?: string) => {
     setHighlightId(id || null);
     setActiveScreen(screen);
+    window.location.hash = screen;
   }, []);
 
   if (!authChecked) {
@@ -505,6 +563,7 @@ const App: React.FC = () => {
   const setScreenFromLayout = (screen: string) => {
     setHighlightId(null);
     setActiveScreen(screen);
+    window.location.hash = screen;
   };
 
   return (

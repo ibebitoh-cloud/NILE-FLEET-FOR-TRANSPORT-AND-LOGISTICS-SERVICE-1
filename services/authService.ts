@@ -67,8 +67,10 @@ export async function logout(): Promise<void> {
 }
 
 export async function getCurrentSessionUser(): Promise<User | null> {
-  const { data } = await supabase.auth.getSession();
-  const sessionUser = data.session?.user;
+  // getUser() validates the access token with Supabase Auth instead of
+  // trusting a locally cached session when deciding whether to unlock screens.
+  const { data, error } = await supabase.auth.getUser();
+  const sessionUser = error ? null : data.user;
   if (!sessionUser) return null;
 
   const { data: profile } = await supabase
