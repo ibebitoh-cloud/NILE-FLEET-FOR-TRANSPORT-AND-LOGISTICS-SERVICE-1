@@ -556,6 +556,19 @@ const App: React.FC = () => {
     );
   }
 
+  const canAccessScreen = (screen: string): boolean => {
+    if (user.allowedScreens?.length) return user.allowedScreens.includes(screen);
+
+    const role = String(user.role).toUpperCase();
+    const defaultScreens = role === String(UserRole.ADMIN) || role === String(UserRole.VIEWER)
+      ? ['dashboard', 'analytics', 'master-view', 'port-gate', 'operations', 'booking-invoices', 'intelligence', 'reports', 'stock', 'reservations', 'customers', 'user-mgmt', 'customer-prices', 'financials', 'support', 'notifications', 'system-log', 'user-settings']
+      : role === String(UserRole.GATE_OPERATOR)
+        ? ['port-gate', 'notifications', 'support', 'user-settings']
+        : ['cust-reservations', 'cust-invoices', 'notifications', 'support', 'user-settings'];
+
+    return defaultScreens.includes(screen);
+  };
+
   const renderScreen = () => {
     if (!canAccessScreen(activeScreen)) {
       return user.role === UserRole.CUSTOMER
