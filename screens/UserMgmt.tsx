@@ -76,9 +76,10 @@ const UserMgmt: React.FC = () => {
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
-      const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            (u.companyName && u.companyName.toLowerCase().includes(searchTerm.toLowerCase()));
+      const normalizedSearch = searchTerm.toLowerCase();
+      const matchesSearch = String(u.name || '').toLowerCase().includes(normalizedSearch) ||
+                            String(u.email || '').toLowerCase().includes(normalizedSearch) ||
+                            String(u.companyName || '').toLowerCase().includes(normalizedSearch);
       
       const matchesRole = roleFilter === 'ALL' || 
                           (roleFilter === 'INTERNAL' && u.role !== UserRole.CUSTOMER && !u.isServiceAccount) ||
@@ -202,6 +203,12 @@ const UserMgmt: React.FC = () => {
         return;
       }
       await db.reloadUsers();
+      if (!userId || !db.getUsers().some(user => user.id === userId)) {
+        alert(lang === 'ar'
+          ? `تم إنشاء حساب الدخول لكن تعذر تحميل ملف المستخدم. ${db.getLastDbError() || 'تحقق من أعمدة جدول profiles.'}`
+          : `The login was created, but its profile is not visible in the app. ${db.getLastDbError() || 'Check the profiles table columns.'}`);
+        return;
+      }
     } else {
       const newUser = {
         ...editingUser,

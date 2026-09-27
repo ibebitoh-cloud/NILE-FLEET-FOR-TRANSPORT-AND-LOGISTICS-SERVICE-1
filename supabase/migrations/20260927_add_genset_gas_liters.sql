@@ -5,3 +5,13 @@ ALTER TABLE public.gensets
 
 UPDATE public.gensets
 SET gas_liters = 50;
+
+-- Keep the profile fields required by the secure account-creation endpoint
+-- available even when older database migrations have not yet been applied.
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS email text,
+  ADD COLUMN IF NOT EXISTS job_title text,
+  ADD COLUMN IF NOT EXISTS department text,
+  ADD COLUMN IF NOT EXISTS joined_date date,
+  ADD COLUMN IF NOT EXISTS governorate text,
+  ADD COLUMN IF NOT EXISTS phone_number text;

@@ -8,11 +8,11 @@ import { createClient } from '@supabase/supabase-js';
 export async function onRequestPost(context) {
   const { request, env } = context;
 
-  const supabaseUrl = env.VITE_SUPABASE_URL;
+  // Vite build variables are not automatically available to the deployed Worker.
+  const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceRoleKey) {
-    return json({ error: 'Server missing SUPABASE_SERVICE_ROLE_KEY' }, 500);
-  }
+  if (!supabaseUrl) return json({ error: 'Cloudflare Worker variable SUPABASE_URL is not configured' }, 500);
+  if (!serviceRoleKey) return json({ error: 'Cloudflare Worker secret SUPABASE_SERVICE_ROLE_KEY is not configured' }, 500);
 
   let body;
   try {
@@ -67,15 +67,15 @@ export async function onRequestPost(context) {
 
   // 2. Upsert the application profile. This does not depend on a signup trigger.
   const profileRow = toSnakeProfile({ ...profile, id: userId });
-  delete profileRow.email;
   delete profileRow.password;
   delete profileRow.wipe_password;
 
   const { error: updateError } = await admin.from('profiles').upsert(profileRow, { onConflict: 'id' });
   if (updateError) {
-    // Account exists but profile fields didn't fully apply — still return success
-    // with a warning, since the login itself was created correctly.
-    return json({ userId, email, warning: `Profile fields partially applied: ${updateError.message}` });
+    // Avoid leaving an Auth account that cannot sign into the application.
+    const { error: rollbackError } = await admin.auth.admin.deleteUser(userId);
+    const rollbackNote = rollbackError ? ` Account cleanup also failed: ${rollbackError.message}` : '';
+    return json({ error: `Could not save the user profile: ${updateError.message}.${rollbackNote}` }, 500);
   }
 
   return json({ userId, email });

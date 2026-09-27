@@ -1099,7 +1099,10 @@ const MasterView: React.FC = () => {
     if (!genset) return;
     void db.updateGenset({ ...genset, gasLiters: liters }).then(saved => {
       if (!saved) {
-        window.alert(isAr ? 'تعذر حفظ كمية الوقود. تحقق من تطبيق تحديث قاعدة البيانات.' : 'Could not save gas amount. Make sure the database update has been applied.');
+        const detail = db.getLastDbError();
+        window.alert(isAr
+          ? `تعذر حفظ كمية الوقود. ${detail || 'تحقق من تطبيق تحديث قاعدة البيانات.'}`
+          : `Could not save gas amount. ${detail || 'Make sure the database update has been applied.'}`);
         return;
       }
       refresh();

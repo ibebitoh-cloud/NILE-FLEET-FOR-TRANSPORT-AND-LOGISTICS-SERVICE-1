@@ -101,8 +101,15 @@ export async function createRealAccount(email: string, password: string, profile
       },
       body: JSON.stringify({ email, password, profile }),
     });
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || 'Failed to create account' };
+    const responseText = await res.text();
+    let data: any;
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      return { error: `Create-user service returned HTTP ${res.status}: ${responseText.slice(0, 300) || 'non-JSON response'}` };
+    }
+    if (!res.ok || data.error) return { error: data.error || `Failed to create account (HTTP ${res.status})` };
+    if (!data.userId) return { error: 'Account service did not return a user ID' };
     return { userId: data.userId };
   } catch (e: any) {
     return { error: e?.message || 'Network error creating account' };
