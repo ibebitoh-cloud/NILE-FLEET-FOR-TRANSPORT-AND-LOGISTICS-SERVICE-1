@@ -99,7 +99,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
 
         {/* RIGHT PANEL */}
-        <div className={`col-span-full lg:col-span-5 min-h-screen flex flex-col justify-center px-5 py-20 sm:px-8 sm:py-16 lg:px-12 lg:py-0 relative z-10 backdrop-blur-md transition-colors duration-1000 ${isDark ? 'bg-slate-900/35' : 'bg-white/35'}`}>
+        <div className="col-span-full lg:col-span-5 min-h-screen flex items-center justify-center px-5 py-20 sm:px-8 sm:py-16 lg:px-12 lg:py-0 relative z-10">
           {/* Top Bar for Language Switcher */}
           <div className="absolute top-6 right-6 lg:top-8 lg:right-8 z-20 flex items-center gap-2">
             <button
@@ -117,7 +117,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
 
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[30rem] lg:text-[40rem] font-black text-slate-500/5 pointer-events-none select-none italic tracking-tighter">N</div>
-          <div className="max-w-sm w-full mx-auto space-y-5 sm:space-y-6 lg:space-y-7 relative z-10">
+          <div className={`max-w-sm w-full mx-auto space-y-5 sm:space-y-6 lg:space-y-7 relative z-10 rounded-3xl px-6 py-7 sm:px-8 sm:py-8 backdrop-blur-md border shadow-2xl ${isDark ? 'bg-slate-900/35 border-white/10' : 'bg-white/35 border-white/30'}`}>
             <div className="space-y-3 text-center lg:text-start relative">
               <h3 className={`text-2xl sm:text-3xl lg:text-4xl font-black uppercase italic tracking-tighter leading-[0.95] ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>
                 <>{isAr ? 'مرحباً بكم في' : 'WELCOME TO'} <br/> <span className="text-[#C2A378]">{isAr ? 'أسطول النيل' : 'NILE FLEET'}</span></>
