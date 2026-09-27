@@ -1,5 +1,5 @@
 
-import React, { lazy, Suspense, useState, createContext, useContext, useEffect } from 'react';
+import React, { lazy, Suspense, useState, createContext, useContext, useEffect, useMemo, useCallback } from 'react';
 const Login = lazy(() => import('./screens/Login'));
 const Dashboard = lazy(() => import('./screens/Dashboard'));
 const Operations = lazy(() => import('./screens/Operations'));
@@ -93,7 +93,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('app_lang');
     return (saved === 'ar' || saved === 'en') ? saved : 'en';
   });
-  const [langUpdateKey, setLangUpdateKey] = useState(0);
+  const languageContextValue = useMemo(() => ({ lang, setLang }), [lang]);
 
   useEffect(() => {
     localStorage.setItem('app_lang', lang);
@@ -134,7 +134,7 @@ const App: React.FC = () => {
 
   const isDark = getIsDark(theme);
 
-  const updateCustomTheme = (colors: {
+  const updateCustomTheme = useCallback((colors: {
     bg: string;
     text: string;
     textSec: string;
@@ -157,7 +157,11 @@ const App: React.FC = () => {
     if (colors.rowBg !== undefined) localStorage.setItem('custom_row_bg', colors.rowBg);
     if (colors.railBg !== undefined) localStorage.setItem('custom_rail_bg', colors.railBg);
     setCustomThemeKey(prev => prev + 1);
-  };
+  }, []);
+
+  const themeContextValue = useMemo(() => ({
+    theme, setTheme, scale, setScale, isMuted, setIsMuted, isDark, updateCustomTheme
+  }), [theme, scale, isMuted, isDark, updateCustomTheme]);
 
   useEffect(() => {
     localStorage.setItem('app_muted', isMuted.toString());
@@ -251,7 +255,6 @@ const App: React.FC = () => {
         const mappings = await translateBusinessEntities(wordsToTranslate);
         if (mappings && Object.keys(mappings).length > 0) {
           registerDynamicTranslations(mappings);
-          setLangUpdateKey(prev => prev + 1); // Trigger UI Refresh
         }
       } catch (err) {
         console.error("Linguistic Node Failed:", err);
@@ -270,6 +273,7 @@ const App: React.FC = () => {
 
     let timer: ReturnType<typeof setTimeout> | null = null;
     let running = false;
+    const translationTimers = new Set<ReturnType<typeof setTimeout>>();
     const translatedTexts = new Map<Text, { original: string; translated: string }>();
     const translatedAttributes = new Map<HTMLElement, Map<string, { original: string; translated: string }>>();
 
@@ -315,14 +319,29 @@ const App: React.FC = () => {
       else translatedAttributes.delete(element);
     };
 
-    const translateRoot = (root: ParentNode) => {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let node: Node | null;
-      while ((node = walker.nextNode())) {
-        translateTextNode(node as Text);
-      }
+    const translateRoot = (root: Node) => {
       if (root instanceof HTMLElement && root.matches('[placeholder],[title],[aria-label]')) translateAttributes(root);
-      root.querySelectorAll?.<HTMLElement>('[placeholder],[title],[aria-label]').forEach(translateAttributes);
+      if (root.nodeType !== Node.ELEMENT_NODE && root.nodeType !== Node.DOCUMENT_NODE) return;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      const translateBatch = () => {
+        if (root !== document.body && root instanceof Node && !root.isConnected) return;
+        let count = 0;
+        while (node && count < 250) {
+          if (node.nodeType === Node.TEXT_NODE) translateTextNode(node as Text);
+          else if (node instanceof HTMLElement && node.matches('[placeholder],[title],[aria-label]')) translateAttributes(node);
+          node = walker.nextNode();
+          count++;
+        }
+        if (node) {
+          const nextTimer = setTimeout(() => {
+            translationTimers.delete(nextTimer);
+            translateBatch();
+          }, 0);
+          translationTimers.add(nextTimer);
+        }
+      };
+      translateBatch();
     };
 
     translateRoot(document.body);
@@ -348,28 +367,41 @@ const App: React.FC = () => {
     });
 
     observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label'] });
+    const refreshLearnedTranslations = () => translateRoot(document.body);
+    window.addEventListener('lang-discovered', refreshLearnedTranslations);
     return () => {
       observer.disconnect();
+      window.removeEventListener('lang-discovered', refreshLearnedTranslations);
       if (timer) clearTimeout(timer);
-      translatedTexts.forEach(({ original, translated }, text) => {
-        if (text.isConnected && text.nodeValue === translated) text.nodeValue = original;
-      });
-      translatedAttributes.forEach((attributes, element) => {
-        if (!element.isConnected) return;
-        attributes.forEach(({ original, translated }, name) => {
-          if (element.getAttribute(name) === translated) element.setAttribute(name, original);
-        });
-      });
+      translationTimers.forEach(clearTimeout);
+      const textEntries = translatedTexts.entries();
+      const attributeEntries = translatedAttributes.entries();
+      let textDone = false;
+      let attributesDone = false;
+      const restoreBatch = () => {
+        let count = 0;
+        while (!textDone && count < 250) {
+          const next = textEntries.next();
+          if (next.done) { textDone = true; break; }
+          const [text, { original, translated }] = next.value;
+          if (text.isConnected && text.nodeValue === translated) text.nodeValue = original;
+          count++;
+        }
+        while (!attributesDone && count < 250) {
+          const next = attributeEntries.next();
+          if (next.done) { attributesDone = true; break; }
+          const [element, attributes] = next.value;
+          if (element.isConnected) attributes.forEach(({ original, translated }, name) => {
+            if (element.getAttribute(name) === translated) element.setAttribute(name, original);
+          });
+          count++;
+        }
+        if (!textDone || !attributesDone) setTimeout(restoreBatch, 0);
+      };
+      setTimeout(restoreBatch, 0);
     };
-  }, [lang, langUpdateKey]);
+  }, [lang]);
 
-
-  // Handle refresh events from translations.ts
-  useEffect(() => {
-    const refresh = () => setLangUpdateKey(prev => prev + 1);
-    window.addEventListener('lang-discovered', refresh);
-    return () => window.removeEventListener('lang-discovered', refresh);
-  }, []);
 
   // Sync current user if modified in DB
   useEffect(() => {
@@ -404,21 +436,22 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     supabaseLogout();
     setUser(null);
     localStorage.removeItem('user');
-  };
+  }, []);
 
-  const navigateTo = (screen: string, id?: string) => {
+  const navigateTo = useCallback((screen: string, id?: string) => {
     setHighlightId(id || null);
     setActiveScreen(screen);
-  };
+  }, []);
 
   if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary,#f8fafc)] text-[var(--text-primary,#0f172a)]">
         <div className="text-center">
+          <img src="/nile-fleet-logo.png" className="h-20 w-20 object-contain mx-auto mb-4" alt="Nile Fleet" />
           <div className="w-10 h-10 border-4 border-slate-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-[10px] font-black uppercase tracking-[0.25em]">NILE FLEET</p>
           <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-1">Verifying session...</p>
@@ -429,8 +462,8 @@ const App: React.FC = () => {
 
   if (!user) {
     return (
-      <LanguageContext value={{ lang, setLang }}>
-        <ThemeContext value={{ theme, setTheme, scale, setScale, isMuted, setIsMuted, isDark, updateCustomTheme }}>
+      <LanguageContext value={languageContextValue}>
+        <ThemeContext value={themeContextValue}>
           <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>}>
             <Login onLogin={handleLogin} />
           </Suspense>
@@ -443,18 +476,18 @@ const App: React.FC = () => {
     switch (activeScreen) {
       case 'dashboard': return <Dashboard onNavigate={navigateTo} />;
       case 'analytics': return <Analytics />;
-      case 'master-view': return <MasterView key={`mv-${langUpdateKey}`} />;
-      case 'port-gate': return <PortGateControl key={`pg-${langUpdateKey}`} />;
-      case 'operations': return <Operations highlightId={highlightId} clearHighlight={() => setHighlightId(null)} key={`ops-${langUpdateKey}`} />;
+      case 'master-view': return <MasterView />;
+      case 'port-gate': return <PortGateControl />;
+      case 'operations': return <Operations highlightId={highlightId} clearHighlight={() => setHighlightId(null)} />;
       case 'booking-invoices': return <BookingInvoices />;
       case 'intelligence': return <Intelligence />;
       case 'reports': return <Reports />;
       case 'stock': return <StockManagement />;
       case 'reservations': return <Reservations />;
-      case 'customers': return <Customers key={`cust-${langUpdateKey}`} />;
+      case 'customers': return <Customers />;
       case 'user-mgmt': return <UserMgmt />;
       case 'customer-prices': return <CustomerPrices />;
-      case 'financials': return <Financials key={`fin-${langUpdateKey}`} />;
+      case 'financials': return <Financials />;
       case 'support': return <CustomerService />;
       case 'notifications': return <Notifications />;
       case 'system-log': return <HistoryLog />;
@@ -469,14 +502,19 @@ const App: React.FC = () => {
     }
   };
 
+  const setScreenFromLayout = (screen: string) => {
+    setHighlightId(null);
+    setActiveScreen(screen);
+  };
+
   return (
-    <LanguageContext value={{ lang, setLang }}>
-      <ThemeContext value={{ theme, setTheme, scale, setScale, isMuted, setIsMuted, isDark, updateCustomTheme }}>
+    <LanguageContext value={languageContextValue}>
+      <ThemeContext value={themeContextValue}>
         <Layout 
           user={user} 
           onLogout={handleLogout} 
           activeScreen={activeScreen} 
-          setActiveScreen={(s) => { setHighlightId(null); setActiveScreen(s); }}
+          setActiveScreen={setScreenFromLayout}
         >
           <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-slate-500">Loading…</div>}>
             {renderScreen()}

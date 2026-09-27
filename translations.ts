@@ -9,6 +9,7 @@ const loadLearnedTranslations = (): Record<string, string> => {
 };
 
 export const dynamicTranslations: Record<string, string> = loadLearnedTranslations();
+const uiPhraseTextCache = new Map<string, string>();
 
 // Queue of words that the UI encountered but couldn't translate
 export const discoveryQueue = new Set<string>();
@@ -252,6 +253,7 @@ export const registerDynamicTranslations = (mappings: Record<string, string>) =>
     // Remove from queue if it was there
     discoveryQueue.delete(en);
   });
+  uiPhraseTextCache.clear();
   localStorage.setItem(SAVED_TRANSLATIONS_KEY, JSON.stringify(dynamicTranslations));
   // Dispatch event so UI knows to refresh components using translateEntity
   window.dispatchEvent(new CustomEvent('lang-discovered'));
@@ -265,6 +267,7 @@ export const registerDynamicTranslation = (en: string, ar: string) => {
   const key = en.toUpperCase().trim();
   dynamicTranslations[key] = ar;
   uiPhraseTranslations[key] = ar;
+  uiPhraseTextCache.clear();
   discoveryQueue.delete(en);
   localStorage.setItem(SAVED_TRANSLATIONS_KEY, JSON.stringify(dynamicTranslations));
   window.dispatchEvent(new CustomEvent('lang-discovered'));
@@ -277,6 +280,7 @@ export const deleteDynamicTranslation = (en: string) => {
   const key = en.toUpperCase().trim();
   delete dynamicTranslations[key];
   delete uiPhraseTranslations[key];
+  uiPhraseTextCache.clear();
   localStorage.setItem(SAVED_TRANSLATIONS_KEY, JSON.stringify(dynamicTranslations));
   window.dispatchEvent(new CustomEvent('lang-discovered'));
 };
@@ -1317,6 +1321,10 @@ const uiPhraseTranslations: Record<string, string> = (() => {
 
 export const translateUiText = (value: string, lang: 'en' | 'ar'): string => {
   if (lang === 'en' || !value) return value;
+  const cached = uiPhraseTextCache.get(value);
+  if (cached !== undefined) return cached;
+  const exact = uiPhraseTranslations[value.toUpperCase()];
+  if (exact) return exact;
   let translated = value;
   const phrases = Object.keys(uiPhraseTranslations).sort((a, b) => b.length - a.length);
   for (const phrase of phrases) {
@@ -1328,5 +1336,7 @@ export const translateUiText = (value: string, lang: 'en' | 'ar'): string => {
     const pattern = `${startsWithWord ? '(?<![\\p{L}\\p{N}])' : ''}${escaped}${endsWithWord ? '(?![\\p{L}\\p{N}])' : ''}`;
     translated = translated.replace(new RegExp(pattern, 'giu'), replacement);
   }
+  if (uiPhraseTextCache.size > 5000) uiPhraseTextCache.clear();
+  uiPhraseTextCache.set(value, translated);
   return translated;
 };

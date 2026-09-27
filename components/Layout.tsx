@@ -1065,13 +1065,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       {/* SIDEBAR (Desktop) */}
       <aside className={`hidden lg:flex ${isSidebarCollapsed ? 'w-16' : 'w-56'} flex-col border-r transition-all duration-300 relative shrink-0 z-50 no-print`} style={{ backgroundColor: 'var(--rail-bg)', borderRightColor: 'var(--border-primary)' }}>
         <div className={`p-4 border-b ${borderClass} flex flex-col items-center justify-center relative overflow-hidden`}>
-          {!isSidebarCollapsed ? (
-            <h1 className={`text-lg font-black ${textPrimary} tracking-widest uppercase italic`}>
-              NILE <span className="text-[#C2A378]">FLEET</span>
-            </h1>
-          ) : (
-            <span className="text-xl font-black text-[#C2A378]">N</span>
-          )}
+          <div className="flex items-center justify-center gap-2">
+            <img src="/nile-fleet-logo.png" className="h-9 w-9 object-contain" alt="Nile Fleet" />
+            {!isSidebarCollapsed && <h1 className={`text-lg font-black ${textPrimary} tracking-widest uppercase italic`}>NILE <span className="text-[#C2A378]">FLEET</span></h1>}
+          </div>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar text-start">
           {menu.map(item => (
@@ -1195,7 +1192,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       {isMobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-[100] bg-[#001224]/95 backdrop-blur-2xl animate-in fade-in duration-300 p-4 flex flex-col no-print">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-xl font-black text-white tracking-widest uppercase italic">NILE <span className="text-[#C2A378]">FLEET</span></h1>
+            <h1 className="flex items-center gap-2 text-xl font-black text-white tracking-widest uppercase italic"><img src="/nile-fleet-logo.png" className="h-10 w-10 object-contain" alt="Nile Fleet" />NILE <span className="text-[#C2A378]">FLEET</span></h1>
             <button onClick={() => setIsMobileMenuOpen(false)} className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center text-lg">✕</button>
           </div>
           
@@ -1430,4 +1427,4 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
   );
 };
 
-export default Layout;
+export default React.memo(Layout);

@@ -5,14 +5,6 @@ import { db } from '../services/supabaseDb';
 import { LanguageContext, ThemeContext } from '../App';
 import { translations, translateEntity } from '../translations';
 
-const NileFleetLogo = ({ color = "#001F3F" }: { color?: string }) => (
-  <svg width="40" height="40" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20 80L50 20L80 80H20Z" fill={color} />
-    <path d="M35 80L50 50L65 80H35Z" fill="#C2A378" />
-    <rect x="45" y="85" width="10" height="5" fill={color} />
-  </svg>
-);
-
 interface InvoiceViewProps {
   invoice: Invoice;
   onClose: () => void;
@@ -153,7 +145,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ invoice, onClose, settings })
             {isFuturistic ? (
               <div className="bg-slate-900 text-white p-10 rounded-[3rem] mb-12 flex justify-between items-center border-b-8 border-[#C2A378]">
                 <div>
-                   {s.showLogo && (s.logoUrl ? <img src={s.logoUrl} className="h-16 object-contain mb-4" /> : <NileFleetLogo color="#C2A378" />)}
+                   {s.showLogo && (s.logoUrl ? <img src={s.logoUrl} className="h-16 object-contain mb-4" alt="Company logo" /> : <img src="/nile-fleet-logo.png" className="h-16 object-contain mb-4" alt="Nile Fleet" />)}
                    <h1 className="text-5xl font-black italic tracking-tighter uppercase text-[#C2A378]">{s.documentTitle}</h1>
                 </div>
                 <div className="text-right">
@@ -163,7 +155,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ invoice, onClose, settings })
               </div>
             ) : isElegant ? (
               <div className="text-center mb-16 border-b border-slate-100 pb-16">
-                 {s.showLogo && (s.logoUrl ? <img src={s.logoUrl} className="h-20 object-contain mx-auto mb-8" /> : <div className="mx-auto mb-8"><NileFleetLogo color={s.primaryColor} /></div>)}
+                 {s.showLogo && (s.logoUrl ? <img src={s.logoUrl} className="h-20 object-contain mx-auto mb-8" alt="Company logo" /> : <img src="/nile-fleet-logo.png" className="h-20 object-contain mx-auto mb-8" alt="Nile Fleet" />)}
                  <h1 className="text-5xl font-serif italic mb-4" style={{ color: s.primaryColor }}>{s.documentTitle}</h1>
                  <div className="w-16 h-px bg-[#C2A378] mx-auto mb-4"></div>
                  <p className="text-[10px] uppercase tracking-[0.5em] text-slate-400">Issued for: {partner.companyName}</p>
@@ -171,7 +163,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ invoice, onClose, settings })
             ) : isCompact ? (
               <div className="flex justify-between items-end mb-6 pb-4 border-b-2 border-slate-900">
                 <div className="flex items-center gap-4">
-                  {s.showLogo && (s.logoUrl ? <img src={s.logoUrl} className="h-10 object-contain" /> : <NileFleetLogo color={s.primaryColor} />)}
+                  {s.showLogo && (s.logoUrl ? <img src={s.logoUrl} className="h-10 object-contain" alt="Company logo" /> : <img src="/nile-fleet-logo.png" className="h-10 object-contain" alt="Nile Fleet" />)}
                   <h1 className="text-2xl font-black uppercase tracking-tighter">{s.documentTitle}</h1>
                 </div>
                 <p className="text-xs font-black">SERIAL: {invoice.id.split('-').pop()}</p>
@@ -180,7 +172,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ invoice, onClose, settings })
               <div className={`flex ${isMinimal ? 'flex-col items-center text-center' : 'justify-between items-start'} mb-12`}>
                 <div className={isMinimal ? 'mb-8' : ''}>
                   {s.showLogo && (
-                    s.logoUrl ? <img src={s.logoUrl} className="h-24 object-contain mb-6" alt="logo" /> : <div className="mb-6"><NileFleetLogo color={s.primaryColor} /></div>
+                    s.logoUrl ? <img src={s.logoUrl} className="h-24 object-contain mb-6" alt="Company logo" /> : <img src="/nile-fleet-logo.png" className="h-24 object-contain mb-6" alt="Nile Fleet" />
                   )}
                   <h1 className={`${isModern ? 'text-6xl' : 'text-4xl'} font-black uppercase tracking-tighter`} style={{ color: s.primaryColor }}>{s.documentTitle}</h1>
                   {s.showCompanyInfo && <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em] mt-2">Nile Fleet Operations Hub</p>}

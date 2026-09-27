@@ -63,7 +63,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           <div className="relative z-10">
             <div className="mb-16">
               <p className="text-[#C2A378] text-[10px] font-black uppercase tracking-[0.6em] mb-6 animate-pulse">{t.secureTerminal}</p>
-              <h1 className="text-7xl font-black text-white tracking-tighter uppercase italic leading-none">NILE <span className="text-[#C2A378]">FLEET</span></h1>
+              <div className="flex items-center gap-5"><img src="/nile-fleet-logo.png" className="h-20 w-20 object-contain" alt="Nile Fleet" /><h1 className="text-7xl font-black text-white tracking-tighter uppercase italic leading-none">NILE <span className="text-[#C2A378]">FLEET</span></h1></div>
               <p className="text-xs font-black uppercase tracking-[0.25em] text-[#C2A378] italic mt-3">
                 SHERIF HEGAZY
               </p>

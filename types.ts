@@ -68,6 +68,7 @@ export interface PortInfo {
   location: Location;
   address: string;
   addressAr: string;
+  mapsUrl?: string;
   contactName: string;
   contactPhone: string;
 }
@@ -221,6 +222,7 @@ export interface GensetMaintenanceLog {
 export interface Genset {
   id: string;
   unitNumber: string;
+  gasLiters?: number;
   location: Location;
   status: GensetStatus;
   lastMaintenanceDate?: string;

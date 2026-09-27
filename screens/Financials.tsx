@@ -14,14 +14,6 @@ const belongsToCustomer = (record: { customerId?: string; customerName?: string 
 };
 const money = (value: string | number | undefined) => Number(String(value ?? 0).replace(/,/g, '')) || 0;
 
-const NileFleetLogo = ({ color = "#001F3F" }: { color?: string }) => (
-  <svg width="40" height="40" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-sm transition-colors duration-500">
-    <path d="M20 80L50 20L80 80H20Z" fill={color} />
-    <path d="M35 80L50 50L65 80H35Z" fill="#C2A378" />
-    <rect x="45" y="85" width="10" height="5" fill={color} />
-  </svg>
-);
-
 export const ProLedger: React.FC<{
   partner: User;
   onClose: () => void;
@@ -96,10 +88,10 @@ export const ProLedger: React.FC<{
                 <div className="flex justify-between items-start border-b-4 border-slate-900 pb-10 mb-10">
                    <div>
                       {settings.logoUrl ? (
-                        <img src={settings.logoUrl} className="h-24 object-contain mb-6" alt="logo" />
+                        <img src={settings.logoUrl} className="h-24 object-contain mb-6" alt="Company logo" />
                       ) : (
                         <div className="flex items-center gap-4 mb-6">
-                           <NileFleetLogo color="#001F3F" />
+                           <img src="/nile-fleet-logo.png" className="h-24 object-contain mb-6" alt="Nile Fleet" />
                            <h1 className="text-3xl font-black italic uppercase tracking-tighter">NILE <span className="text-blue-600">FLEET</span></h1>
                         </div>
                       )}

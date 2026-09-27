@@ -3,9 +3,8 @@ import React, { useState, useMemo, useContext, useEffect, useRef } from 'react';
 import { db } from '../services/supabaseDb';
 import { Operation, Location, GensetStatus, UserRole, User, CustomerPrice, Invoice } from '../types';
 import { LanguageContext, ThemeContext } from '../App';
-import { translations, translateEntity, registerDynamicTranslation } from '../translations';
+import { translations, translateEntity } from '../translations';
 import { PORT_STYLING } from '../constants';
-import { mapSpreadsheetToSchema } from '../services/aiService';
 import InvoiceView from '../components/InvoiceView';
 
 type SortConfig = {
@@ -28,6 +27,7 @@ const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   destination: 150,
   containerNumber: 120,
   gensetNumber: 90,
+  gas: 88,
   rate: 80,
   status: 110,
   operationDate: 100,
@@ -597,10 +597,10 @@ const MasterView: React.FC = () => {
   const todayDate = new Date().toISOString().split('T')[0];
 
   const [stagedOps, setStagedOps] = useState<any[]>([
-    { customerName: '', bookingNumber: '', gensetNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, destination: '', trucker: '', beneficiaryName: '', quantity: 1 }
+    { customerName: '', bookingNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, destination: '', trucker: '', beneficiaryName: '', quantity: 1 }
   ]);
   const [rawPasteBuffer, setRawPasteBuffer] = useState('');
-  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [stagingColWidths, setStagingColWidths] = useState<Record<string, number>>({});
 
   const [viewPrefs, setViewPrefs] = useState<{
     density: number;
@@ -622,7 +622,7 @@ const MasterView: React.FC = () => {
       const safe: Record<string, number> = {};
       Object.keys(DEFAULT_COLUMN_WIDTHS).forEach(key => {
         const value = Number(parsed?.[key] ?? DEFAULT_COLUMN_WIDTHS[key]);
-        safe[key] = Number.isFinite(value) ? Math.max(35, Math.min(500, value)) : DEFAULT_COLUMN_WIDTHS[key];
+        safe[key] = Number.isFinite(value) ? Math.max(35, Math.min(1600, value)) : DEFAULT_COLUMN_WIDTHS[key];
       });
       return safe;
     } catch {
@@ -692,7 +692,7 @@ const MasterView: React.FC = () => {
 
     const startX = e.clientX;
     const startWidth = Number(colWidths[colKey] ?? DEFAULT_COLUMN_WIDTHS[colKey] ?? 100);
-    const safeStartWidth = Number.isFinite(startWidth) ? Math.max(35, Math.min(500, startWidth)) : 100;
+    const safeStartWidth = Number.isFinite(startWidth) ? Math.max(35, Math.min(1600, startWidth)) : 100;
     const resizeColumnKey = colKey;
     const resizeStartX = startX;
     const resizeStartWidth = safeStartWidth;
@@ -716,7 +716,7 @@ const MasterView: React.FC = () => {
       if (!resizingRef.current) return;
       const deltaX = moveEvent.clientX - resizeStartX;
       const actualDelta = isAr ? -deltaX : deltaX;
-      lastWidth = Math.max(35, Math.min(500, resizeStartWidth + actualDelta));
+      lastWidth = Math.max(35, Math.min(1600, resizeStartWidth + actualDelta));
 
       // Throttle React state updates to one per animation frame. This prevents
       // a rapid mousemove stream from overwhelming the Master View render cycle.
@@ -757,7 +757,7 @@ const MasterView: React.FC = () => {
   const expandColumn = (colKey: string, delta = 15) => {
     setColWidths(prev => ({
       ...prev,
-      [colKey]: Math.min(500, (prev[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100) + delta)
+      [colKey]: Math.min(1600, (prev[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100) + delta)
     }));
   };
 
@@ -775,7 +775,7 @@ const MasterView: React.FC = () => {
     setColWidths(prev => {
       const updated: Record<string, number> = {};
       Object.keys(prev).forEach(k => {
-        updated[k] = Math.min(500, Math.round(prev[k] * 1.25));
+        updated[k] = Math.min(1600, Math.round(prev[k] * 1.25));
       });
       return updated;
     });
@@ -845,49 +845,6 @@ const MasterView: React.FC = () => {
     }
   };
 
-  const handleSmartPaste = async (buffer: string) => {
-    if (!buffer.trim()) return;
-    setIsAiProcessing(true);
-    try {
-      // Fix: Call mapSpreadsheetToSchema and ensure result is treated as any[] for staging
-      const rawResult = await mapSpreadsheetToSchema(buffer);
-      // Added line: defensive cast to any[] to handle return from mapSpreadsheetToSchema
-      const result = (rawResult as any[]) || [];
-      
-      if (result && result.length > 0) {
-        result.forEach((row: any) => {
-          if (row.customerNameAr) registerDynamicTranslation(row.customerName, row.customerNameAr);
-          if (row.truckerAr) registerDynamicTranslation(row.trucker, row.truckerAr);
-          if (row.beneficiaryNameAr) registerDynamicTranslation(row.beneficiaryName, row.beneficiaryNameAr);
-        });
-        // Fix: Explicitly use any[] type for the staging defaults call
-        setStagingDataWithDefaults(result);
-      } else {
-        fallbackParse(buffer);
-      }
-    } catch (e) {
-      fallbackParse(buffer);
-    } finally {
-      setIsAiProcessing(false);
-    }
-  };
-
-  const setStagingDataWithDefaults = (data: any[]) => {
-    const processed = data.map(item => ({
-      ...item,
-      quantity: 1,
-      operationDate: item.operationDate || todayDate,
-      clipOnDate: item.operationDate || todayDate,
-      status: item.status || 'UNDER OPERATE',
-      clipOnPort: item.clipOnPort || Location.ALEX,
-      clipOffPort: item.clipOffPort || Location.ALEX,
-      destination: item.destination || '',
-      rate: item.rate || '0',
-      vat: '0'
-    }));
-    setStagedOps(processed);
-  };
-
   const fallbackParse = (buffer: string) => {
     const lines = buffer.split('\n').filter(l => l.trim().length > 0);
     const newStaged: StagingRow[] = lines.map(line => {
@@ -896,7 +853,6 @@ const MasterView: React.FC = () => {
         customerName: parts[0] || '',
         bookingNumber: parts[1] || '',
         containerNumber: parts[2] || '',
-        gensetNumber: parts[3] || '',
         rate: parts[4] || '0',
         beneficiaryName: parts[5] || '',
         trucker: parts[6] || '',
@@ -912,6 +868,45 @@ const MasterView: React.FC = () => {
     });
     if (newStaged.length > 0) setStagedOps(newStaged);
   };
+
+  const startStagingColumnResize = (event: React.MouseEvent, columnKey: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const initialWidth = stagingColWidths[columnKey] ?? stagingColumnDefaults[columnKey] ?? 140;
+    const move = (moveEvent: MouseEvent) => {
+      const delta = isAr ? startX - moveEvent.clientX : moveEvent.clientX - startX;
+      setStagingColWidths(previous => ({ ...previous, [columnKey]: Math.max(70, Math.min(1600, initialWidth + delta)) }));
+    };
+    const stop = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', stop);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', stop);
+  };
+
+  const stagingColumnDefaults: Record<string, number> = {
+    row: 48, quantity: 74, customer: 190, booking: 170, date: 145,
+    inPort: 145, outPort: 145, destination: 190, rate: 120,
+    shipper: 170, trucker: 170, commodity: 160, actions: 128
+  };
+  const stagingColumnHeaders = [
+    { key: 'row', label: '#' },
+    { key: 'quantity', label: isAr ? 'الكمية' : 'Qty' },
+    { key: 'customer', label: t.client },
+    { key: 'booking', label: t.bookingNum },
+    { key: 'date', label: t.date },
+    { key: 'inPort', label: isAr ? 'ميناء الدخول' : 'In Hub' },
+    { key: 'outPort', label: isAr ? 'ميناء الخروج' : 'Out Hub' },
+    { key: 'destination', label: isAr ? 'الوجهة' : 'Destination' },
+    { key: 'rate', label: t.rate },
+    { key: 'shipper', label: t.shipper },
+    { key: 'trucker', label: t.trucker },
+    { key: 'commodity', label: isAr ? 'البضاعة' : 'Commodity' },
+    { key: 'actions', label: t.actions }
+  ];
+  const stagingFieldClass = `w-full p-2 rounded-xl border-2 font-black text-[10px] outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-slate-950 text-slate-100 border-slate-600 placeholder:text-slate-400' : 'bg-white text-slate-900 border-slate-300 placeholder:text-slate-500'}`;
 
   const updateStagedRow = (idx: number, field: keyof StagingRow, val: any) => {
     const copy = [...stagedOps];
@@ -950,9 +945,9 @@ const MasterView: React.FC = () => {
           customerName: s.customerName!,
           bookingNumber: s.bookingNumber!,
           containerNumber: s.containerNumber || '',
-          gensetNumber: s.gensetNumber || '',
+          gensetNumber: '',
           commodity: s.commodity || '',
-          clipperName: s.clipperName || '',
+          clipperName: '',
           operationDate: s.operationDate || todayDate,
           dateReceived: s.operationDate || todayDate,
           clipOnDate: s.clipOnDate || todayDate,
@@ -1004,7 +999,7 @@ const MasterView: React.FC = () => {
       }
       setOperations([...freshOps]);
       setShowAddModal(false);
-      setStagedOps([{ customerName: '', bookingNumber: '', gensetNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, destination: '', trucker: '', beneficiaryName: '', quantity: 1 }]);
+      setStagedOps([{ customerName: '', bookingNumber: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, destination: '', trucker: '', beneficiaryName: '', quantity: 1 }]);
       setRawPasteBuffer('');
       refresh();
       alert(isAr ? `تمت إضافة ${toInject.length} عملية بنجاح` : `Successfully injected ${toInject.length} operations.`);
@@ -1096,6 +1091,21 @@ const MasterView: React.FC = () => {
     refresh();
   };
 
+  const handleUpdateGensetGas = (unitNumber: string, value: string) => {
+    if (isReadOnly) return;
+    const liters = Number(value);
+    if (!Number.isFinite(liters) || liters < 0) return;
+    const genset = db.getStock().find(item => item.unitNumber.trim().toUpperCase() === unitNumber.trim().toUpperCase());
+    if (!genset) return;
+    void db.updateGenset({ ...genset, gasLiters: liters }).then(saved => {
+      if (!saved) {
+        window.alert(isAr ? 'تعذر حفظ كمية الوقود. تحقق من تطبيق تحديث قاعدة البيانات.' : 'Could not save gas amount. Make sure the database update has been applied.');
+        return;
+      }
+      refresh();
+    });
+  };
+
   const requestSort = (key: keyof Operation) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -1113,7 +1123,7 @@ const MasterView: React.FC = () => {
       isAr ? 'المولد' : 'GENSET', t.rate, t.status,
       isAr ? 'تاريخ التشغيل' : 'OP DATE', isAr ? 'تاريخ التركيب' : 'CLIP ON',
       isAr ? 'البضاعة' : 'COMMODITY', isAr ? 'فني التركيب' : 'CLIPPER ON',
-      t.notes, isAr ? 'فاتورة الحجز' : 'BOOKING INVOICE'
+      t.notes, isAr ? 'الوقود (لتر)' : 'GAS (L)', isAr ? 'فاتورة الحجز' : 'BOOKING INVOICE'
     ];
     const invoiceByBooking = new Map<string, Invoice>(invoices.map(invoice => [invoice.bookingNumber, invoice]));
     const exportRows = filteredAndSortedOps.map((op, index) => {
@@ -1136,6 +1146,7 @@ const MasterView: React.FC = () => {
         op.commodity || '',
         translateEntity(op.clipperName || '', lang),
         op.notes || '',
+        op.gensetNumber ? (db.getStock().find(g => g.unitNumber.trim().toUpperCase() === op.gensetNumber.trim().toUpperCase())?.gasLiters ?? 50) : '',
         invoice ? `${invoice.id} | ${translateEntity(invoice.status, lang)} | ${Number(invoice.amount || 0).toLocaleString()} EGP` : (isAr ? 'غير مفوترة' : 'Not invoiced')
       ];
     });
@@ -1170,7 +1181,7 @@ const MasterView: React.FC = () => {
       { wch: 6 }, { wch: 18 }, { wch: 24 }, { wch: 18 }, { wch: 18 },
       { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 16 },
       { wch: 14 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 18 },
-      { wch: 18 }, { wch: 34 }, { wch: 38 }
+      { wch: 18 }, { wch: 34 }, { wch: 12 }, { wch: 38 }
     ];
     sheet['!rows'] = [{ hpt: 28 }, { hpt: 24 }, { hpt: 20 }, { hpt: 26 }];
 
@@ -1344,6 +1355,7 @@ const MasterView: React.FC = () => {
                   { key: 'commodity', label: isAr ? 'البضاعة' : 'COMMODITY', sortable: true },
                   { key: 'clipperName', label: isAr ? 'فني التركيب' : 'CLIPPER ON', sortable: true },
                   { key: 'notes', label: t.notes },
+                  { key: 'gas', label: isAr ? 'الوقود (لتر)' : 'Gas (L)' },
                   { key: 'invoice', label: isAr ? 'فاتورة الحجز' : 'BOOKING INVOICE', align: 'text-center' }
                 ].map(col => (
                   <th
@@ -1539,6 +1551,22 @@ const MasterView: React.FC = () => {
                           <td style={{ ...dynamicCellStyle, ...getColStyle('notes') }} className={`px-2 border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
                             <EditableCell value={op.notes || ''} onSave={(val) => handleUpdateCell(op, 'notes', val)} disabled={isReadOnly} isDark={isDark} className={`${isSelected ? 'text-white/60' : 'text-slate-400'} italic`} />
                           </td>
+                          <td style={{ ...dynamicCellStyle, ...getColStyle('gas') }} className={`px-2 border-r text-center ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
+                            {(() => {
+                              const genset = db.getStock().find(item => item.unitNumber.trim().toUpperCase() === (op.gensetNumber || '').trim().toUpperCase());
+                              return genset ? (
+                                <EditableCell
+                                  value={String(genset.gasLiters ?? 50)}
+                                  type="number"
+                                  onSave={value => handleUpdateGensetGas(genset.unitNumber, value)}
+                                  disabled={isReadOnly}
+                                  isDark={isDark}
+                                  className={`font-black ${isSelected ? 'text-white' : 'text-cyan-600 dark:text-cyan-300'}`}
+                                  placeholder="50"
+                                />
+                              ) : <span className="text-slate-400" title={isAr ? 'المولد غير مسجل في مخزون المولدات' : 'Genset is not registered in Genset Stock'}>—</span>;
+                            })()}
+                          </td>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('invoice') }} className={`px-2 border-r text-center ${isDark ? 'border-slate-800 border-white/5' : 'border-slate-100'} text-xs font-bold`}>
                             {(() => {
                               const bookingInv = invoices.find(inv => inv.bookingNumber === op.bookingNumber);
@@ -1626,93 +1654,73 @@ const MasterView: React.FC = () => {
              <div className={`p-8 flex justify-between items-center shrink-0 ${isDark ? 'bg-slate-950 text-white' : 'bg-slate-900 text-white'}`}>
                 <div className="text-start">
                   <h3 className="text-2xl font-black italic uppercase tracking-tighter text-[#C2A378]">{isAr ? 'حقن بيانات السجل المجمع' : 'Bulk Manifest Staging'}</h3>
-                  <p className="text-[9px] font-black uppercase tracking-widest opacity-50 italic">{isAr ? 'سيتم جلب الأسعار وتوليد الترجمة تلقائياً.' : 'Rates and translations are auto-generated via AI Node.'}</p>
+                  <p className="text-[9px] font-bold tracking-wide text-slate-300">{isAr ? 'أدخل البيانات يدوياً أو الصق صفوفاً مفصولة بعلامات تبويب.' : 'Enter rows manually or paste tab-separated data.'}</p>
                 </div>
                 <div className="flex gap-4">
                    <textarea 
-                     disabled={isAiProcessing}
-                     className="w-48 h-10 p-2 bg-white/10 border border-white/20 rounded-xl text-[9px] font-black text-white outline-none focus:w-80 focus:h-20 focus:bg-white focus:text-black transition-all" 
-                     placeholder={isAr ? 'الصق البيانات هنا للمطابقة الذكية...' : "PASTE DATA HERE FOR AI ALIGNMENT..."} 
+                     className="w-48 h-10 p-2 bg-slate-800 border border-slate-500 rounded-xl text-[10px] font-bold text-white placeholder:text-slate-300 outline-none focus:w-80 focus:h-20 focus:ring-2 focus:ring-[#C2A378] transition-all"
+                     placeholder={isAr ? 'الصق البيانات هنا...' : 'Paste tab-separated rows...'}
                      value={rawPasteBuffer} 
-                     onChange={(e) => { setRawPasteBuffer(e.target.value); handleSmartPaste(e.target.value); }} 
+                     onChange={(e) => setRawPasteBuffer(e.target.value)}
                    />
+                   <button type="button" onClick={() => fallbackParse(rawPasteBuffer)} className="px-4 py-2 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 text-white text-[9px] font-black uppercase tracking-wider">{isAr ? 'تحميل الصفوف' : 'Load Rows'}</button>
                    <button onClick={() => setShowAddModal(false)} className="text-white hover:text-rose-500 p-2">✕</button>
                 </div>
              </div>
-             <div className="flex-1 overflow-auto p-4 bg-current/5 relative">
-                {isAiProcessing && (
-                  <div className="absolute inset-0 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-6">
-                     <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                     <p className="font-black uppercase text-xs tracking-widest text-blue-600">AI Thinking: Translating & Aligning Manifest...</p>
-                  </div>
-                )}
-                <table className="w-full text-start whitespace-nowrap border-collapse">
+             <div className="flex-1 overflow-auto p-4 relative" style={{ backgroundColor: isDark ? '#0b1220' : '#f1f5f9' }}>
+                <table className="manifest-staging-table w-max min-w-full text-start whitespace-nowrap border-collapse" style={{ tableLayout: 'fixed' }}>
+                   <colgroup>{stagingColumnHeaders.map(column => <col key={column.key} style={{ width: stagingColWidths[column.key] ?? stagingColumnDefaults[column.key] }} />)}</colgroup>
                    <thead className="bg-[#001F3F] text-white text-[9px] font-black uppercase tracking-widest sticky top-0 z-10">
-                      <tr>
-                        <th className="p-4 w-10">#</th>
-                        <th className="p-4 w-16 text-center">{isAr ? 'الكمية' : 'Qty'}</th>
-                        <th className="p-4 min-w-[150px]">{t.client}</th>
-                        <th className="p-4">{t.bookingNum}</th>
-                        <th className="p-4">{t.date}</th>
-                        <th className="p-4">{isAr ? 'ميناء الدخول' : 'In Hub'}</th>
-                        <th className="p-4">{isAr ? 'ميناء الخروج' : 'Out Hub'}</th>
-                        <th className="p-4 min-w-[150px]">{isAr ? 'الوجهة' : 'Destination'}</th>
-                        <th className="p-4 text-right">{t.rate}</th>
-                        <th className="p-4 min-w-[120px]">{t.shipper}</th>
-                        <th className="p-4 min-w-[120px]">{t.trucker}</th>
-                        <th className="p-4 min-w-[110px]">{isAr ? 'البضاعة' : 'Commodity'}</th>
-                        <th className="p-4 min-w-[120px]">{isAr ? 'وحدة المولد' : 'Genset Unit'}</th>
-                        <th className="p-4 min-w-[110px]">{isAr ? 'فني التركيب' : 'Clipper On'}</th>
-                        <th className="p-4 text-center w-32">{t.actions}</th>
-                      </tr>
+                      <tr>{stagingColumnHeaders.map(column => <th key={column.key} className="p-3 relative text-start" style={{ width: stagingColWidths[column.key] ?? stagingColumnDefaults[column.key], minWidth: stagingColWidths[column.key] ?? stagingColumnDefaults[column.key] }}>
+                        <span>{column.label}</span>
+                        {column.key !== 'row' && <span onMouseDown={event => startStagingColumnResize(event, column.key)} className="absolute top-0 right-0 h-full w-2 cursor-col-resize hover:bg-[#C2A378]" title={isAr ? 'اسحب لتغيير العرض بحرية' : 'Drag to resize this column'} />}
+                      </th>)}</tr>
                    </thead>
                    <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
                       {stagedOps.map((o, idx) => (
                         <tr key={idx} className={`${isDark ? 'hover:bg-white/5' : 'hover:bg-blue-50/50'}`}>
-                           <td className="p-4 text-slate-400 font-black text-[9px]">{idx + 1}</td>
-                           <td className="p-2"><input type="number" className="w-full p-2 rounded-xl border-2 font-black text-center text-[10px]" value={o.quantity} onChange={e => updateStagedRow(idx, 'quantity', parseInt(e.target.value) || 1)} /></td>
+                           <td className={`p-4 font-black text-[9px] ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{idx + 1}</td>
+                           <td className="p-2"><input type="number" className={`${stagingFieldClass} text-center`} value={o.quantity} onChange={e => updateStagedRow(idx, 'quantity', parseInt(e.target.value) || 1)} /></td>
                            <td className="p-2">
-                             <input list="partners" className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" value={o.customerName} onChange={e => updateStagedRow(idx, 'customerName', e.target.value.toUpperCase())} />
-                             {isAr && <p className="text-[7px] font-black text-blue-600 mt-1">{translateEntity(o.customerName, 'ar')}</p>}
+                             <input list="partners" className={`${stagingFieldClass} uppercase`} value={o.customerName} onChange={e => updateStagedRow(idx, 'customerName', e.target.value.toUpperCase())} />
+                             {isAr && <p className={`text-[8px] font-bold mt-1 ${isDark ? 'text-sky-300' : 'text-blue-700'}`}>{translateEntity(o.customerName, 'ar')}</p>}
                            </td>
-                           <td className="p-2"><input className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" value={o.bookingNumber} onChange={e => updateStagedRow(idx, 'bookingNumber', e.target.value.toUpperCase())} /></td>
-                           <td className="p-2"><input type="date" className="w-full p-2 rounded-xl border-2 font-black text-[10px]" value={o.clipOnDate} onChange={e => updateStagedRow(idx, 'clipOnDate', e.target.value)} /></td>
+                           <td className="p-2"><input className={`${stagingFieldClass} uppercase`} value={o.bookingNumber} onChange={e => updateStagedRow(idx, 'bookingNumber', e.target.value.toUpperCase())} /></td>
+                           <td className="p-2"><input type="date" className={stagingFieldClass} style={{ colorScheme: isDark ? 'dark' : 'light' }} value={o.clipOnDate} onChange={e => updateStagedRow(idx, 'clipOnDate', e.target.value)} /></td>
                            <td className="p-2">
-                              <select className="w-full p-2 rounded-xl border-2 font-black text-[10px]" value={o.clipOnPort} onChange={e => updateStagedRow(idx, 'clipOnPort', e.target.value as any)}>
+                              <select className={stagingFieldClass} value={o.clipOnPort} onChange={e => updateStagedRow(idx, 'clipOnPort', e.target.value as any)}>
                                 {allPorts.map(p => <option key={p} value={p}>{translateEntity(p, lang)}</option>)}
                               </select>
                            </td>
                            <td className="p-2">
-                              <select className="w-full p-2 rounded-xl border-2 font-black text-[10px]" value={o.clipOffPort} onChange={e => updateStagedRow(idx, 'clipOffPort', e.target.value as any)}>
+                              <select className={stagingFieldClass} value={o.clipOffPort} onChange={e => updateStagedRow(idx, 'clipOffPort', e.target.value as any)}>
                                 {allPorts.map(p => <option key={p} value={p}>{translateEntity(p, lang)}</option>)}
                               </select>
                            </td>
                            <td className="p-2">
-                             <input className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" placeholder={isAr ? 'الوجهة النهائية' : 'Final destination'} value={o.destination || ''} onChange={e => updateStagedRow(idx, 'destination', e.target.value)} />
+                             <input className={`${stagingFieldClass} uppercase`} placeholder={isAr ? 'الوجهة النهائية' : 'Final destination'} value={o.destination || ''} onChange={e => updateStagedRow(idx, 'destination', e.target.value)} />
                            </td>
-                           <td className="p-2"><input type="number" className="w-full p-2 text-right rounded-xl border-2 font-black text-[10px]" value={o.rate} onChange={e => updateStagedRow(idx, 'rate', e.target.value)} /></td>
+                           <td className="p-2"><input type="number" className={`${stagingFieldClass} text-right`} value={o.rate} onChange={e => updateStagedRow(idx, 'rate', e.target.value)} /></td>
                            <td className="p-2">
-                             <input list="shippers" className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" value={o.beneficiaryName} onChange={e => updateStagedRow(idx, 'beneficiaryName', e.target.value.toUpperCase())} />
-                             {isAr && <p className="text-[7px] font-black text-blue-600 mt-1">{translateEntity(o.beneficiaryName, 'ar')}</p>}
+                             <input list="shippers" className={`${stagingFieldClass} uppercase`} value={o.beneficiaryName} onChange={e => updateStagedRow(idx, 'beneficiaryName', e.target.value.toUpperCase())} />
+                             {isAr && <p className={`text-[8px] font-bold mt-1 ${isDark ? 'text-sky-300' : 'text-blue-700'}`}>{translateEntity(o.beneficiaryName, 'ar')}</p>}
                            </td>
                            <td className="p-2">
-                             <input list="truckers" className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" value={o.trucker} onChange={e => updateStagedRow(idx, 'trucker', e.target.value.toUpperCase())} />
-                             {isAr && <p className="text-[7px] font-black text-blue-600 mt-1">{translateEntity(o.trucker, 'ar')}</p>}
+                             <input list="truckers" className={`${stagingFieldClass} uppercase`} value={o.trucker} onChange={e => updateStagedRow(idx, 'trucker', e.target.value.toUpperCase())} />
+                             {isAr && <p className={`text-[8px] font-bold mt-1 ${isDark ? 'text-sky-300' : 'text-blue-700'}`}>{translateEntity(o.trucker, 'ar')}</p>}
                            </td>
-                           <td className="p-2"><input className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" placeholder="e.g. CITRUS" value={o.commodity || ''} onChange={e => updateStagedRow(idx, 'commodity', e.target.value.toUpperCase())} /></td>
-                           <td className="p-2"><input list="gensets" className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" value={o.gensetNumber} onChange={e => updateStagedRow(idx, 'gensetNumber', e.target.value.toUpperCase())} /></td>
-                           <td className="p-2"><input className="w-full p-2 rounded-xl border-2 font-black uppercase text-[10px]" placeholder="Technician" value={o.clipperName || ''} onChange={e => updateStagedRow(idx, 'clipperName', e.target.value)} /></td>
-                           <td className="p-2 text-center flex items-center justify-center gap-2">
-                              <button onClick={() => duplicateRow(idx)} className="text-blue-500 hover:scale-125 transition-transform p-2 bg-blue-50 rounded-lg shadow-sm" title="Duplicate Row">
+                           <td className="p-2"><input className={`${stagingFieldClass} uppercase`} placeholder="e.g. CITRUS" value={o.commodity || ''} onChange={e => updateStagedRow(idx, 'commodity', e.target.value.toUpperCase())} /></td>
+                           <td className="p-2 text-center"><div className="flex items-center justify-center gap-2">
+                              <button onClick={() => duplicateRow(idx)} className={`hover:scale-125 transition-transform p-2 rounded-lg shadow-sm ${isDark ? 'text-sky-200 bg-sky-950 hover:bg-sky-900' : 'text-blue-700 bg-blue-50 hover:bg-blue-100'}`} title={isAr ? 'تكرار الصف' : 'Duplicate Row'}>
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
                               </button>
-                              <button onClick={() => setStagedOps(stagedOps.filter((_, i) => i !== idx))} className="text-rose-500 hover:scale-125 transition-transform p-2 bg-rose-50 rounded-lg shadow-sm">✕</button>
-                           </td>
+                              <button onClick={() => setStagedOps(stagedOps.filter((_, i) => i !== idx))} className={`hover:scale-125 transition-transform p-2 rounded-lg shadow-sm ${isDark ? 'text-rose-200 bg-rose-950 hover:bg-rose-900' : 'text-rose-700 bg-rose-50 hover:bg-rose-100'}`} title={isAr ? 'حذف الصف' : 'Remove row'}>✕</button>
+                           </div></td>
                         </tr>
                       ))}
                    </tbody>
                 </table>
-                <button onClick={() => setStagedOps([...stagedOps, { customerName: '', bookingNumber: '', gensetNumber: '', commodity: '', clipperName: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, trucker: '', beneficiaryName: '', quantity: 1 }])} className="mt-4 w-full py-4 border-2 border-dashed rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all hover:bg-white/5">{isAr ? '+ إضافة سطر فارغ' : '+ Add Empty Row'}</button>
+                <button onClick={() => setStagedOps([...stagedOps, { customerName: '', bookingNumber: '', commodity: '', operationDate: todayDate, clipOnDate: todayDate, status: 'UNDER OPERATE', rate: '0', vat: '0', clipOnPort: Location.ALEX, clipOffPort: Location.ALEX, trucker: '', beneficiaryName: '', quantity: 1 }])} className={`mt-4 w-full py-4 border-2 border-dashed rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all ${isDark ? 'border-slate-600 text-slate-200 hover:bg-white/5' : 'border-slate-300 text-slate-700 hover:bg-white'}`}>{isAr ? '+ إضافة سطر فارغ' : '+ Add Empty Row'}</button>
              </div>
              <div className={`p-8 shrink-0 flex gap-4 border-t ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                 <button type="button" onClick={() => setShowAddModal(false)} className="px-10 py-5 text-[11px] font-black uppercase text-slate-400 tracking-widest hover:text-rose-500 transition-colors">{t.cancel}</button>

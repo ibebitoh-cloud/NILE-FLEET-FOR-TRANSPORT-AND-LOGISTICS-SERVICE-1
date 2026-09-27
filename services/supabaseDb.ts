@@ -1048,9 +1048,11 @@ class SupabaseDB {
     dispatchChange();
     return true;
   }
-  async addSupportContact(contact: SupportContact): Promise<void> {
+  async addSupportContact(contact: SupportContact): Promise<boolean> {
     const saved = await insert<SupportContact>('support_contacts', contact);
-    if (saved) { _supportContacts = [..._supportContacts, saved]; dispatchChange(); }
+    if (!saved) return false;
+    _supportContacts = [..._supportContacts, saved]; dispatchChange();
+    return true;
   }
   async deleteSupportContact(id: string): Promise<boolean> {
     const removed = await remove('support_contacts', id);
@@ -1067,9 +1069,11 @@ class SupabaseDB {
     dispatchChange();
     return true;
   }
-  async addFAQ(item: FAQItem): Promise<void> {
+  async addFAQ(item: FAQItem): Promise<boolean> {
     const saved = await insert<FAQItem>('faqs', item);
-    if (saved) { _faqs = [..._faqs, saved]; dispatchChange(); }
+    if (!saved) return false;
+    _faqs = [..._faqs, saved]; dispatchChange();
+    return true;
   }
   async deleteFAQ(id: string): Promise<boolean> {
     const removed = await remove('faqs', id);
@@ -1086,9 +1090,11 @@ class SupabaseDB {
     dispatchChange();
     return true;
   }
-  async addPortInfo(info: PortInfo): Promise<void> {
+  async addPortInfo(info: PortInfo): Promise<boolean> {
     const saved = await insert<PortInfo>('ports_info', info);
-    if (saved) { _portsInfo = [..._portsInfo, saved]; dispatchChange(); }
+    if (!saved) return false;
+    _portsInfo = [..._portsInfo, saved]; dispatchChange();
+    return true;
   }
   async deletePortInfo(id: string): Promise<boolean> {
     const removed = await remove('ports_info', id);
