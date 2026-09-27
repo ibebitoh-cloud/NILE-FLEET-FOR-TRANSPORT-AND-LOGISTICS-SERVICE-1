@@ -12,7 +12,7 @@ import {
   Genset, Reservation, Operation, Invoice, User, Location,
   UserRole, GensetStatus, ReservationStatus, AuditEntry,
   CustomerPrice, Procurement, GasTransaction, Employee,
-  PayrollTransaction, Payment, FoodExpense, TransportExpense,
+  PayrollTransaction, Payment, PaymentAllocation, FoodExpense, TransportExpense,
   PortRent, SystemNotification, SupportContact, FAQItem, PortInfo,
   GensetMaintenanceLog
 } from '../types';
@@ -159,6 +159,7 @@ let _reservations: Reservation[] = [];
 let _operations: Operation[] = [];
 let _invoices: Invoice[] = [];
 let _payments: Payment[] = [];
+let _paymentAllocations: PaymentAllocation[] = [];
 let _users: User[] = [];
 let _auditLogs: AuditEntry[] = [];
 let _customerPrices: CustomerPrice[] = [];
@@ -184,7 +185,7 @@ class SupabaseDB {
   async loadAll(): Promise<void> {
     if (_loaded) return;
     const [
-      stock, reservations, operations, invoices, payments, users,
+      stock, reservations, operations, invoices, payments, paymentAllocations, users,
       auditLogs, customerPrices, procurements, gasTransactions,
       employees, payrollTransactions, foodExpenses, transportExpenses,
       portRents, notifications, supportContacts, faqs, portsInfo, maintenanceLogs
@@ -194,6 +195,7 @@ class SupabaseDB {
       query<Operation>('operations', { order: 'created_at' }),
       query<Invoice>('invoices', { order: 'created_at' }),
       query<Payment>('payments', { order: 'created_at' }),
+      query<PaymentAllocation>('payment_allocations', { order: 'created_at' }),
       query<User>('profiles', { order: 'created_at' }),
       query<AuditEntry>('audit_log', { order: 'timestamp' }),
       query<CustomerPrice>('customer_prices'),
@@ -216,6 +218,7 @@ class SupabaseDB {
     _operations = operations;
     _invoices = invoices;
     _payments = payments;
+    _paymentAllocations = paymentAllocations;
     _users = users;
     _auditLogs = auditLogs;
     _customerPrices = customerPrices;
@@ -240,23 +243,16 @@ class SupabaseDB {
   getStock(): Genset[] { return _stock; }
   /** Fresh database lookup used by DALI when the local cache does not contain a genset. */
   async searchGensetRecords(value: string): Promise<{ stock: Genset[]; operations: Operation[]; maintenance: GensetMaintenanceLog[] }> {
-    const raw = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const digits = raw.replace(/\\D/g, '');
-    const aliases = new Set<string>([raw]);
-    if (digits) {
-      aliases.add(digits);
-      aliases.add(digits.slice(-4).padStart(4, '0'));
-    }
+    const raw = String(value || '').trim().toUpperCase();
+    const normalizedQuery = raw.replace(/[^A-Z0-9]/g, '');
+    const suffixPattern = /^\d{3,6}$/.test(normalizedQuery)
+      ? new RegExp(`(?:^|[^A-Z0-9])${normalizedQuery}$`)
+      : null;
     const matches = (v: unknown) => {
-      const s = String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-      if (!s) return false;
-      const sd = s.replace(/\\D/g, '');
-      const candidates = new Set<string>([s]);
-      if (sd) {
-        candidates.add(sd);
-        candidates.add(sd.slice(-4).padStart(4, '0'));
-      }
-      return [...aliases].some(a => candidates.has(a));
+      const serial = String(v ?? '').trim().toUpperCase();
+      if (!serial || !normalizedQuery) return false;
+      const normalizedSerial = serial.replace(/[^A-Z0-9]/g, '');
+      return normalizedSerial === normalizedQuery || Boolean(suffixPattern?.test(serial));
     };
     const [stockRows, operationRows, maintenanceRows] = await Promise.all([
       query<Genset>('gensets'),
@@ -264,7 +260,7 @@ class SupabaseDB {
       query<GensetMaintenanceLog>('genset_maintenance_logs')
     ]);
     return {
-      stock: stockRows.filter(g => [g.unitNumber, g.id].some(matches)),
+      stock: stockRows.filter(g => matches(g.unitNumber)),
       operations: operationRows.filter(o => matches(o.gensetNumber)),
       maintenance: maintenanceRows.filter(m => matches(m.gensetNumber))
     };
@@ -307,6 +303,10 @@ class SupabaseDB {
 
   getInvoices(): Invoice[] { return _invoices; }
   getPayments(): Payment[] { return _payments; }
+  getPaymentAllocations(): PaymentAllocation[] { return _paymentAllocations; }
+  getInvoicePaidAmount(invoiceId: string): number {
+    return _paymentAllocations.filter(a => a.invoiceId === invoiceId).reduce((sum, a) => sum + Number(a.amount || 0), 0);
+  }
   getUsers(): User[] { return _users; }
 
   /**
@@ -617,32 +617,83 @@ class SupabaseDB {
   async addPayment(payment: Payment, allocatedInvoiceIds: string[] = []): Promise<boolean> {
     const savedPayment = await insert<Payment>('payments', payment);
     if (!savedPayment) return false;
-    _payments = [..._payments, savedPayment];
+    const explicitlySelected = [...new Set(allocatedInvoiceIds)]
+      .map(id => _invoices.find(i => i.id === id))
+      .filter((invoice): invoice is Invoice => Boolean(invoice && (
+        invoice.customerId === payment.customerId ||
+        (!invoice.customerId && resolveCustomerId(invoice.customerName) === payment.customerId)
+      )));
+    const customerInvoices = _invoices.filter(invoice =>
+      invoice.status === 'UNPAID' && (
+        invoice.customerId === payment.customerId ||
+        (!invoice.customerId && resolveCustomerId(invoice.customerName) === payment.customerId)
+      )
+    ).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    const requestedInvoices = [...explicitlySelected, ...customerInvoices.filter(invoice => !explicitlySelected.some(selected => selected.id === invoice.id))];
+    let remainingMoney = Number(payment.amount);
+    const insertedAllocations: PaymentAllocation[] = [];
+    for (const invoice of requestedInvoices) {
+      if (remainingMoney <= 0) break;
+      const openAmount = Math.max(0, Number(invoice.amount || 0) - this.getInvoicePaidAmount(invoice.id));
+      const allocationAmount = Math.min(openAmount, remainingMoney);
+      if (allocationAmount <= 0) continue;
+      const allocation = await insert<PaymentAllocation>('payment_allocations', {
+        paymentId: savedPayment.id, invoiceId: invoice.id, amount: allocationAmount
+      });
+      if (!allocation) {
+        await Promise.all(insertedAllocations.map(a => remove('payment_allocations', a.id)));
+        await remove('payments', savedPayment.id);
+        return false;
+      }
+      insertedAllocations.push(allocation);
+      remainingMoney -= allocationAmount;
+    }
 
-    let remainingMoney = payment.amount;
-    for (const invId of allocatedInvoiceIds) {
-      const inv = _invoices.find(i => i.id === invId);
-      if (inv && inv.status === 'UNPAID') {
-        if (remainingMoney >= inv.amount) {
-          await update('invoices', invId, { status: 'PAID' });
-          _invoices = _invoices.map(i => i.id === invId ? { ...i, status: 'PAID' } : i);
-          remainingMoney -= inv.amount;
-        } else {
-          await update('invoices', invId, { amount: inv.amount - remainingMoney });
-          _invoices = _invoices.map(i => i.id === invId ? { ...i, amount: i.amount - remainingMoney } : i);
-          remainingMoney = 0;
+    const newlyPaidInvoices: Invoice[] = [];
+    for (const invoice of requestedInvoices) {
+      const paidAmount = this.getInvoicePaidAmount(invoice.id) + insertedAllocations
+        .filter(allocation => allocation.invoiceId === invoice.id)
+        .reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+      if (paidAmount >= Number(invoice.amount || 0) && invoice.status !== 'PAID') {
+        if (!(await update('invoices', invoice.id, { status: 'PAID' }))) {
+          await Promise.all(insertedAllocations.map(a => remove('payment_allocations', a.id)));
+          await remove('payments', savedPayment.id);
+          return false;
         }
+        newlyPaidInvoices.push(invoice);
       }
     }
 
-    if (remainingMoney > 0) {
-      const user = _users.find(u => u.id === payment.customerId);
-      if (user) {
-        const newBal = Math.max(0, (user.pastOutstandingAmount || 0) - remainingMoney);
-        await update('profiles', user.id, { pastOutstandingAmount: newBal });
-        _users = _users.map(u => u.id === user.id ? { ...u, pastOutstandingAmount: newBal } : u);
+    const user = _users.find(u => u.id === payment.customerId);
+    const historicalCredit = Math.min(remainingMoney, Number(user?.pastOutstandingAmount || 0));
+    const newHistoricalBalance = Number(user?.pastOutstandingAmount || 0) - historicalCredit;
+    if (historicalCredit > 0) {
+      const allocation = await insert<PaymentAllocation>('payment_allocations', {
+        paymentId: savedPayment.id, invoiceId: undefined, amount: historicalCredit
+      });
+      if (!allocation) {
+        await Promise.all(insertedAllocations.map(a => remove('payment_allocations', a.id)));
+        await Promise.all(newlyPaidInvoices.map(invoice => update('invoices', invoice.id, { status: 'UNPAID' })));
+        await remove('payments', savedPayment.id);
+        return false;
       }
+      insertedAllocations.push(allocation);
     }
+    if (user && historicalCredit > 0 && !(await update('profiles', user.id, { pastOutstandingAmount: newHistoricalBalance }))) {
+      await Promise.all(insertedAllocations.map(a => remove('payment_allocations', a.id)));
+      await Promise.all(newlyPaidInvoices.map(invoice => update('invoices', invoice.id, { status: 'UNPAID' })));
+      await remove('payments', savedPayment.id);
+      return false;
+    }
+
+    _payments = [..._payments, savedPayment];
+    _paymentAllocations = [..._paymentAllocations, ...insertedAllocations];
+    if (user && historicalCredit > 0) {
+      _users = _users.map(u => u.id === user.id ? { ...u, pastOutstandingAmount: newHistoricalBalance } : u);
+    }
+    _invoices = _invoices.map(invoice => newlyPaidInvoices.some(paid => paid.id === invoice.id)
+      ? { ...invoice, status: 'PAID' }
+      : invoice);
 
     await auditLog('FIN', `Recorded Payment ${payment.amount} from ${payment.customerName}`);
     dispatchChange();
@@ -650,6 +701,10 @@ class SupabaseDB {
   }
 
   async updatePayment(payment: Payment): Promise<boolean> {
+    if (_paymentAllocations.some(allocation => allocation.paymentId === payment.id)) {
+      _lastDbError = 'This payment has allocations. Reverse or reallocate it before editing the payment details.';
+      return false;
+    }
     const saved = await update<Payment>('payments', payment.id, {
       customerId: payment.customerId,
       customerName: payment.customerName,
@@ -666,8 +721,45 @@ class SupabaseDB {
   }
 
   async deletePayment(paymentId: string): Promise<boolean> {
+    const allocations = _paymentAllocations.filter(a => a.paymentId === paymentId);
+    const payment = _payments.find(p => p.id === paymentId);
+    const historicalCredit = allocations.filter(allocation => !allocation.invoiceId).reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+    const user = payment && _users.find(u => u.id === payment.customerId);
+    const restoredHistoricalBalance = Number(user?.pastOutstandingAmount || 0) + historicalCredit;
+    if (user && historicalCredit > 0 && !(await update('profiles', user.id, { pastOutstandingAmount: restoredHistoricalBalance }))) return false;
+    const removedAllocations: PaymentAllocation[] = [];
+    for (const allocation of allocations) {
+      if (!(await remove('payment_allocations', allocation.id))) {
+        if (user && historicalCredit > 0) await update('profiles', user.id, { pastOutstandingAmount: Number(user.pastOutstandingAmount || 0) });
+        await Promise.all(removedAllocations.map(item => insert<PaymentAllocation>('payment_allocations', {
+          paymentId, invoiceId: item.invoiceId, amount: item.amount
+        })));
+        return false;
+      }
+      removedAllocations.push(allocation);
+    }
     const removed = await remove('payments', paymentId);
-    if (!removed) return false;
+    if (!removed) {
+      if (user && historicalCredit > 0) await update('profiles', user.id, { pastOutstandingAmount: Number(user.pastOutstandingAmount || 0) });
+      await Promise.all(allocations.map(allocation => insert<PaymentAllocation>('payment_allocations', {
+        paymentId, invoiceId: allocation.invoiceId, amount: allocation.amount
+      })));
+      return false;
+    }
+    if (user && historicalCredit > 0) {
+      _users = _users.map(u => u.id === user.id ? { ...u, pastOutstandingAmount: restoredHistoricalBalance } : u);
+    }
+    for (const invoiceId of new Set(allocations.map(allocation => allocation.invoiceId).filter(Boolean))) {
+      const invoice = _invoices.find(item => item.id === invoiceId);
+      if (!invoice) continue;
+      const remainingPaid = _paymentAllocations.filter(allocation => allocation.paymentId !== paymentId && allocation.invoiceId === invoice.id)
+        .reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+      if (invoice.status === 'PAID' && remainingPaid < Number(invoice.amount || 0)) {
+        await update('invoices', invoice.id, { status: 'UNPAID' });
+        _invoices = _invoices.map(item => item.id === invoice.id ? { ...item, status: 'UNPAID' } : item);
+      }
+    }
+    _paymentAllocations = _paymentAllocations.filter(a => a.paymentId !== paymentId);
     _payments = _payments.filter(p => p.id !== paymentId);
     await auditLog('FIN', `Deleted Payment ${paymentId}`);
     dispatchChange();

@@ -198,10 +198,16 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       };
       const gensetMatches = (value: string, g: any) => {
         const queryAliases = gensetAliases(value);
-        const recordValues = [g?.gensetNumber, g?.unitNumber, g?.id, g?.assetNumber];
+        const normalizedQuery = normalizeId(value);
+        const isNumericSuffix = /^\d{3,6}$/.test(normalizedQuery);
+        const suffixPattern = isNumericSuffix ? new RegExp(`(?:^|[^A-Z0-9])${normalizedQuery}$`, 'i') : null;
+        // Match only actual genset identifiers. Database UUIDs are not serial
+        // numbers and can coincidentally end in the digits a user is searching for.
+        const recordValues = [g?.gensetNumber, g?.unitNumber];
         return recordValues.some(v => {
+          const raw = String(v ?? '').trim().toUpperCase();
           const aliases = gensetAliases(v);
-          return [...queryAliases].some(a => aliases.has(a));
+          return [...queryAliases].some(a => aliases.has(a)) || Boolean(suffixPattern?.test(raw));
         });
       };
       const operationGensetMatches = (value: string, o: any) => gensetMatches(value, o);
@@ -235,8 +241,16 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           opHits = fresh.operations.sort((a, b) => dateValue(b).localeCompare(dateValue(a)));
           maintenanceHits = fresh.maintenance.sort((a, b) => String(b.serviceDate || '').localeCompare(String(a.serviceDate || '')));
         }
+        if (stockHits.length > 1) {
+          const matches = stockHits.map(g => g.unitNumber).join(', ');
+          return responseIsAr
+            ? `وجدت أكثر من مولد يطابق ${id}: ${matches}. أرسل الرقم التسلسلي الكامل لأحدد الموقع الصحيح.`
+            : `More than one genset matches ${id}: ${matches}. Please provide the full serial number to identify the correct unit.`;
+        }
         const stock = stockHits[0];
         const latestOp = opHits[0];
+        const activeOp = opHits.find(o => String(o.status || '').toUpperCase() === 'IN PROGRESS');
+        const latestCompletedOp = opHits.find(o => String(o.status || '').toUpperCase() === 'DONE');
         const latestMaintenance = maintenanceHits[0];
         if (!stock && !latestOp && !latestMaintenance) {
           return responseIsAr ? `المولد ${id} غير موجود في بيانات الأسطول أو السجل التشغيلي.` : `GENSET ${id} was not found in fleet, operations, or maintenance records.`;
@@ -244,13 +258,13 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
         // Every persisted operation matched to this genset is part of its lifetime log.
         // Cancelled records are excluded from the trip count.
-        const completedTrips = opHits.filter(o => String(o.status || '').toUpperCase() !== 'CANCEL').length;
+        const completedTrips = opHits.filter(o => String(o.status || '').toUpperCase() === 'DONE').length;
         const qText = String(questionText).toUpperCase();
         const wantsTripCount = /HOW MANY|HOW MUCH|NUMBER OF|TRIPS?|OPERATIONS?|رحل|رحلة|رحلات|كام|عدد|كم|عملية|عمليه|عمليات|اشتغل|شغل/.test(qText);
         const wantsHistory = /HISTORY|LOG|PREVIOUS|PAST|HISTOR|سجل|سجلات|تاريخ|سابق|العمليات|رحلات/.test(qText);
 
         const stockNumber = stock?.unitNumber || id;
-        const location = latestOp?.clipOffPort || stock?.location || latestOp?.clipOnPort || latestMaintenance?.location || '—';
+        const location = activeOp?.clipOnPort || stock?.location || latestCompletedOp?.clipOffPort || latestOp?.clipOnPort || latestMaintenance?.location || '—';
         const status = stock?.status || latestOp?.status || latestMaintenance?.status || '—';
 
         if (wantsHistory) {
@@ -267,14 +281,14 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
         if (wantsTripCount) {
           return responseIsAr
-            ? `المولد ${stockNumber}\\nعدد الرحلات: ${completedTrips}\\nالموقع الحالي: ${location}\\nالحالة: ${status}${latestOp ? `\\nآخر حجز: ${latestOp.bookingNumber || '—'} | ${dateValue(latestOp) || '—'}` : ''}`
-            : `GENSET ${stockNumber}\\nTrips: ${completedTrips}\\nCurrent location: ${location}\\nStatus: ${status}${latestOp ? `\\nLast booking: ${latestOp.bookingNumber || '—'} | ${dateValue(latestOp) || '—'}` : ''}`;
+            ? `المولد ${stockNumber}\nعدد الرحلات: ${completedTrips}\nالموقع الحالي: ${location}\nالحالة: ${status}${latestOp ? `\nآخر حجز: ${latestOp.bookingNumber || '—'} | ${dateValue(latestOp) || '—'}` : ''}`
+            : `GENSET ${stockNumber}\nTrips: ${completedTrips}\nCurrent location: ${location}\nStatus: ${status}${latestOp ? `\nLast booking: ${latestOp.bookingNumber || '—'} | ${dateValue(latestOp) || '—'}` : ''}`;
         }
 
         if (responseIsAr) {
-          return `المولد ${stockNumber}\\nالحالة: ${status}\\nالموقع: ${location}${latestOp ? `\\nالحجز: ${latestOp.bookingNumber || '—'}\\nالحاوية: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\\nآخر صيانة: ${latestMaintenance.serviceDate || '—'}` : ''}`;
+          return `المولد ${stockNumber}\nالحالة: ${status}\nالموقع: ${location}${latestOp ? `\nالحجز: ${latestOp.bookingNumber || '—'}\nالحاوية: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nآخر صيانة: ${latestMaintenance.serviceDate || '—'}` : ''}`;
         }
-        return `GENSET ${stockNumber}\\nStatus: ${status}\\nLocation: ${location}${latestOp ? `\\nBooking: ${latestOp.bookingNumber || '—'}\\nContainer: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\\nLast maintenance: ${latestMaintenance.serviceDate || '—'}` : ''}`;
+        return `GENSET ${stockNumber}\nStatus: ${status}\nLocation: ${location}${latestOp ? `\nBooking: ${latestOp.bookingNumber || '—'}\nContainer: ${latestOp.containerNumber || '—'}` : ''}${latestMaintenance ? `\nLast maintenance: ${latestMaintenance.serviceDate || '—'}` : ''}`;
       };
 
       const matchedGensetId = idMatch?.[1];
@@ -286,7 +300,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       // A short standalone number is also a genset search. This prevents
       // questions such as "464" from unnecessarily going through the LLM.
-      if (/^\\d{1,6}$/.test(q.trim())) {
+      if (/^\d{1,6}$/.test(q.trim())) {
         const answer = await answerGenset(q.trim(), question);
         setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
         return;
@@ -359,20 +373,20 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         .replace(/[ؤ]/g, 'و')
         .replace(/[ئ]/g, 'ي')
         .replace(/[ًٌٍَُِّْـ]/g, '')
-        .replace(/[^\\p{L}\\p{N}]+/gu, ' ')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
         .trim()
-        .replace(/\\s+/g, ' ');
+        .replace(/\s+/g, ' ');
 
       // Arabic/English customer names are resolved against the live profile
       // AND every known translation/learned translation. This lets DALI
       // understand "كشف حساب شركة..." even when the user types the customer
       // using Arabic, English, a translated name, or only a distinctive word.
       const normalizeEntityText = (value: unknown) => normalizeArabic(value)
-        .replace(/\\b(?:el|al|the|company|co|ltd|llc|شركه|شركة|مؤسسه|مؤسسة)\\b/g, ' ')
-        .replace(/\\s+/g, ' ')
+        .replace(/\b(?:el|al|the|company|co|ltd|llc|شركه|شركة|مؤسسه|مؤسسة)\b/g, ' ')
+        .replace(/\s+/g, ' ')
         .trim();
 
-      const compactEntityText = (value: unknown) => normalizeEntityText(value).replace(/\\s+/g, '');
+      const compactEntityText = (value: unknown) => normalizeEntityText(value).replace(/\s+/g, '');
 
       // Loose phonetic key for mixed Arabic/English customer names.
       // Matching only: original customer names are never changed.
@@ -549,7 +563,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
             const alias = normalizeEntityText(value);
             if (!alias || alias.length < 2) return;
             aliases.add(alias);
-            aliases.add(alias.replace(/\\s/g, ''));
+            aliases.add(alias.replace(/\s/g, ''));
           };
           addAlias(rawName);
           addAlias(translateEntity(rawName, 'ar'));
@@ -557,7 +571,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
           let best = 0;
           for (const alias of aliases) {
-            const compactAlias = alias.replace(/\\s/g, '');
+            const compactAlias = alias.replace(/\s/g, '');
             const exact = nq === alias || compactQ === compactAlias;
             const contains = nq.includes(alias) || alias.includes(nq);
             const aliasTokens = alias.split(' ').filter(Boolean);
@@ -618,15 +632,15 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
       // operations may predate customer_id, so names are matched by the same
       // normalized multilingual rules.
       const customerMatchesOperation = (customer: User, op: any) => {
-        if (String(op.customerId || '') === String(customer.id)) return true;
+        if (op.customerId) return String(op.customerId) === String(customer.id);
         const opName = normalizeEntityText(op.customerName);
-        return getCustomerAliases(customer).some(alias => opName === alias || (alias.length >= 4 && opName.includes(alias)));
+        return getCustomerAliases(customer).some(alias => opName === alias);
       };
       const customerMatchesNamedRecord = (customer: User | null, customerName: unknown, customerId: unknown) => {
-        if (customer && String(customerId || '') === String(customer.id)) return true;
+        if (customerId) return Boolean(customer && String(customerId) === String(customer.id));
         const recordName = normalizeEntityText(customerName);
         if (!recordName) return false;
-        if (customer) return getCustomerAliases(customer).some(alias => recordName === alias || (alias.length >= 4 && recordName.includes(alias)));
+        if (customer) return getCustomerAliases(customer).some(alias => recordName === alias);
         return false;
       };
       // Financial statements use registered names and IDs only. Fuzzy/phonetic
@@ -685,14 +699,16 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
         if (resolvedCustomerName) {
           const customerName = resolvedCustomerName;
           const customerNameAliases = customer ? getSoaCustomerAliases(customer) : [normalizeEntityText(customerName)];
-          const matchesSoaCustomer = (recordName: unknown, recordId: unknown) =>
-            Boolean(customer && String(recordId || '') === String(customer.id)) || customerNameAliases.includes(normalizeEntityText(recordName));
+          const matchesSoaCustomer = (recordName: unknown, recordId: unknown) => {
+            if (recordId) return Boolean(customer && String(recordId) === String(customer.id));
+            return customerNameAliases.includes(normalizeEntityText(recordName));
+          };
           const customerOps = operations.filter(o => matchesSoaCustomer(o.customerName, o.customerId));
           const customerInvoices = invoices.filter(i => matchesSoaCustomer(i.customerName, i.customerId));
           const customerPayments = db.getPayments().filter(p => matchesSoaCustomer(p.customerName, p.customerId));
           const unbilled = customerOps.filter(o => !o.invoiced).reduce((s, o) => s + (parseFloat(String(o.rate || '0').replace(/,/g,'')) || 0) + (parseFloat(String(o.vat || '0').replace(/,/g,'')) || 0), 0);
           const invoiced = customerInvoices.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-          const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+          const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + Math.max(0, (Number(i.amount) || 0) - db.getInvoicePaidAmount(i.id)), 0);
           const paidInvoices = customerInvoices.filter(i => i.status === 'PAID').reduce((s, i) => s + (Number(i.amount) || 0), 0);
           const collected = customerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
           const historical = Number(customer?.pastOutstandingAmount) || 0;
@@ -733,22 +749,37 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           // Show a company-wide receivables/collections summary instead of
           // handing the question to the LLM or returning an empty answer.
           const allPayments = db.getPayments();
-          const names = Array.from(new Set([
-            ...customerProfiles.map(u => u.companyName || u.name),
-            ...operations.map(o => o.customerName),
-            ...invoices.map(i => i.customerName),
-            ...allPayments.map(p => p.customerName)
-          ].filter(Boolean).map(String)));
-          const rows = names.map(name => {
-            const n = normalizeEntityText(name);
-            const ops = operations.filter(o => normalizeEntityText(o.customerName) === n);
-            const invs = invoices.filter(i => normalizeEntityText(i.customerName) === n);
-            const pays = allPayments.filter(p => normalizeEntityText(p.customerName) === n);
-            const billed = invs.reduce((s,i) => s + (Number(i.amount)||0), 0);
-            const collected = pays.reduce((s,p) => s + (Number(p.amount)||0), 0);
-            const unpaid = invs.filter(i => i.status === 'UNPAID').reduce((s,i) => s + (Number(i.amount)||0), 0);
-            const unbilled = ops.filter(o => !o.invoiced).reduce((s,o) => s + (parseFloat(String(o.rate||'0').replace(/,/g,''))||0) + (parseFloat(String(o.vat||'0').replace(/,/g,''))||0), 0);
-            return { name, ops: ops.length, billed, collected, unpaid, unbilled, due: unpaid + unbilled };
+          const grouped = new Map<string, { name: string; customer: User | null; ops: typeof operations; invoices: typeof invoices; payments: typeof allPayments }>();
+          customerProfiles.forEach(customer => {
+            grouped.set(`customer:${customer.id}`, {
+              name: customer.companyName || customer.name,
+              customer,
+              ops: [], invoices: [], payments: []
+            });
+          });
+          const groupForRecord = (recordName: unknown, recordId: unknown) => {
+            const id = String(recordId || '');
+            const name = String(recordName || '').trim();
+            const nameKey = normalizeEntityText(name);
+            let customer = id ? customerProfiles.find(profile => String(profile.id) === id) : undefined;
+            if (!id && nameKey) {
+              const matchingProfiles = customerProfiles.filter(profile => getSoaCustomerAliases(profile).includes(nameKey));
+              if (matchingProfiles.length === 1) customer = matchingProfiles[0];
+            }
+            const key = customer ? `customer:${customer.id}` : id ? `external:${id}` : `name:${nameKey}`;
+            if (!grouped.has(key)) grouped.set(key, { name: name || 'Unknown customer', customer: null, ops: [], invoices: [], payments: [] });
+            return grouped.get(key)!;
+          };
+          operations.forEach(op => groupForRecord(op.customerName, op.customerId).ops.push(op));
+          invoices.forEach(invoice => groupForRecord(invoice.customerName, invoice.customerId).invoices.push(invoice));
+          allPayments.forEach(payment => groupForRecord(payment.customerName, payment.customerId).payments.push(payment));
+          const rows = Array.from(grouped.values()).map(group => {
+            const billed = group.invoices.reduce((s,i) => s + (Number(i.amount)||0), 0);
+            const collected = group.payments.reduce((s,p) => s + (Number(p.amount)||0), 0);
+            const unpaid = group.invoices.filter(i => i.status === 'UNPAID').reduce((s,i) => s + Math.max(0, (Number(i.amount)||0) - db.getInvoicePaidAmount(i.id)), 0);
+            const unbilled = group.ops.filter(o => !o.invoiced).reduce((s,o) => s + (parseFloat(String(o.rate||'0').replace(/,/g,''))||0) + (parseFloat(String(o.vat||'0').replace(/,/g,''))||0), 0);
+            const historical = Number(group.customer?.pastOutstandingAmount) || 0;
+            return { name: group.name, ops: group.ops.length, billed, collected, unpaid, unbilled, due: historical + unpaid + unbilled };
           }).sort((a,b) => b.due - a.due);
 
           const totalCollected = rows.reduce((s,r) => s + r.collected, 0);
@@ -790,15 +821,19 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           const customerOps = customer
             ? operations.filter(o => customerMatchesOperation(customer, o))
             : operations.filter(o => normalizeEntityText(o.customerName) === normalizeEntityText(resolvedName));
-          const customerInvoices = invoices.filter(i => (customer && String(i.customerId || '') === String(customer.id)) || normalizeEntityText(i.customerName) === normalizeEntityText(resolvedName));
-          const customerPayments = db.getPayments().filter(p => (customer && String(p.customerId || '') === String(customer.id)) || normalizeEntityText(p.customerName) === normalizeEntityText(resolvedName));
+          const customerInvoices = invoices.filter(i => customer
+            ? customerMatchesNamedRecord(customer, i.customerName, i.customerId)
+            : normalizeEntityText(i.customerName) === normalizeEntityText(resolvedName));
+          const customerPayments = db.getPayments().filter(p => customer
+            ? customerMatchesNamedRecord(customer, p.customerName, p.customerId)
+            : normalizeEntityText(p.customerName) === normalizeEntityText(resolvedName));
           const displayName = responseIsAr ? (customer?.companyNameAr || translateEntity(resolvedName, 'ar')) : resolvedName;
           const collected = customerPayments.reduce((s,p) => s + (Number(p.amount) || 0), 0);
           const invoiced = customerInvoices.reduce((s,i) => s + (Number(i.amount) || 0), 0);
-          const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s,i) => s + (Number(i.amount) || 0), 0);
+          const unpaid = customerInvoices.filter(i => i.status === 'UNPAID').reduce((s,i) => s + Math.max(0, (Number(i.amount) || 0) - db.getInvoicePaidAmount(i.id)), 0);
           const answer = responseIsAr
-            ? `العميل: ${displayName}\\nعدد العمليات: ${customerOps.length}\\nإجمالي الفواتير: ${invoiced.toLocaleString()} جنيه\\nإجمالي التحصيل: ${collected.toLocaleString()} جنيه\\nغير مسدد: ${unpaid.toLocaleString()} جنيه`
-            : `Customer: ${displayName}\\nOperations: ${customerOps.length}\\nTotal invoiced: ${invoiced.toLocaleString()} EGP\\nTotal collected: ${collected.toLocaleString()} EGP\\nUnpaid: ${unpaid.toLocaleString()} EGP`;
+            ? `العميل: ${displayName}\nعدد العمليات: ${customerOps.length}\nإجمالي الفواتير: ${invoiced.toLocaleString()} جنيه\nإجمالي التحصيل: ${collected.toLocaleString()} جنيه\nغير مسدد: ${unpaid.toLocaleString()} جنيه`
+            : `Customer: ${displayName}\nOperations: ${customerOps.length}\nTotal invoiced: ${invoiced.toLocaleString()} EGP\nTotal collected: ${collected.toLocaleString()} EGP\nUnpaid: ${unpaid.toLocaleString()} EGP`;
           setAiChatMessages(prev => [...prev, { role: 'ai', text: answer }]);
           return;
         }

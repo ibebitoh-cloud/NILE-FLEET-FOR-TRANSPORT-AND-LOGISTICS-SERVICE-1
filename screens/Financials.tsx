@@ -6,6 +6,14 @@ import { translations, translateEntity } from '../translations';
 import { Invoice, User, UserRole, Operation, InvoiceSettings, Payment } from '../types';
 import InvoiceView from '../components/InvoiceView';
 
+const normalizeCustomerName = (value?: string) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+const belongsToCustomer = (record: { customerId?: string; customerName?: string }, customer: User) => {
+  if (record.customerId) return record.customerId === customer.id;
+  const recordName = normalizeCustomerName(record.customerName);
+  return Boolean(recordName && [customer.companyName, customer.name].some(name => normalizeCustomerName(name) === recordName));
+};
+const money = (value: string | number | undefined) => Number(String(value ?? 0).replace(/,/g, '')) || 0;
+
 const NileFleetLogo = ({ color = "#001F3F" }: { color?: string }) => (
   <svg width="40" height="40" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-sm transition-colors duration-500">
     <path d="M20 80L50 20L80 80H20Z" fill={color} />
@@ -24,13 +32,18 @@ export const ProLedger: React.FC<{
   const t = translations[lang];
   const isAr = lang === 'ar';
   
-  const ops = db.getOperations().filter(o => o.customerName === (partner.companyName || partner.name));
+  const ops = db.getCustomerOperations(partner.id, partner.companyName || partner.name);
   const unbilledOps = ops.filter(o => !o.invoiced);
   const unbilledTotal = unbilledOps.reduce((s, o) => s + (parseFloat(String(o.rate || '0').replace(/,/g,'')) || 0) + (parseFloat(String(o.vat || '0').replace(/,/g,'')) || 0), 0);
-  const invoices = db.getInvoices().filter(i => i.customerName === (partner.companyName || partner.name));
+  const invoices = db.getInvoices().filter(i => belongsToCustomer(i, partner));
   const unpaidInvoices = invoices.filter(i => i.status === 'UNPAID');
-  const unpaidInvoicesTotal = unpaidInvoices.reduce((s, i) => s + Number(i.amount || 0), 0);
+  const unpaidInvoicesTotal = unpaidInvoices.reduce((s, i) => s + Math.max(0, Number(i.amount || 0) - db.getInvoicePaidAmount(i.id)), 0);
   const payments = db.getPayments().filter(p => p.customerId === partner.id);
+  const allocatedPayments = db.getPaymentAllocations()
+    .filter(allocation => invoices.some(invoice => invoice.id === allocation.invoiceId))
+    .reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+  const historicalPayments = Math.max(0, payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) - allocatedPayments);
+  const historicalOpeningBalance = Number(partner.pastOutstandingAmount || 0) + historicalPayments;
   
   const netDue = Number(partner.pastOutstandingAmount || 0) + unpaidInvoicesTotal + unbilledTotal;
 
@@ -103,7 +116,7 @@ export const ProLedger: React.FC<{
                 <div className="grid grid-cols-3 gap-6 mb-12">
                    <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{isAr ? 'مديونية سابقة' : 'Historical Debt'}</p>
-                      <p className="text-2xl lg:text-3xl font-black text-slate-900">{settings.currency} {Number(partner.pastOutstandingAmount || 0).toLocaleString()}</p>
+                      <p className="text-2xl lg:text-3xl font-black text-slate-900">{settings.currency} {historicalOpeningBalance.toLocaleString()}</p>
                    </div>
                    <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{isAr ? 'لم يُفوتر بعد' : 'Unbilled Ops'}</p>
@@ -135,7 +148,7 @@ export const ProLedger: React.FC<{
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 text-[10px] font-bold">
-                            {unpaidInvoices.map(inv => (
+                            {invoices.map(inv => (
                               <tr key={inv.id}>
                                 <td className="p-3 text-slate-400">{inv.date}</td>
                                 <td className="p-3 font-mono">{inv.bookingNumber || '—'}</td>
@@ -145,7 +158,7 @@ export const ProLedger: React.FC<{
                                 <td className="p-3">{Number(inv.amount || 0).toLocaleString()}</td>
                                 <td className="p-3">—</td>
                                 <td className="p-3">—</td>
-                                <td className="p-3 text-right">{Number(inv.amount || 0).toLocaleString()}</td>
+                                <td className="p-3 text-right">{Math.max(0, Number(inv.amount || 0) - db.getInvoicePaidAmount(inv.id)).toLocaleString()}</td>
                                 <td className="p-3 text-right">—</td>
                               </tr>
                             ))}
@@ -232,6 +245,9 @@ const Financials: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentRef, setPaymentRef] = useState('');
   const [autoSettleSelection, setAutoSettleSelection] = useState(true);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
 
   const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}') as User, []);
   const isReadOnly = currentUser.role === UserRole.VIEWER;
@@ -250,28 +266,55 @@ const Financials: React.FC = () => {
 
   const accountBreakdown = useMemo(() => {
     if (!selectedUser) return { totalExposure: 0, unbilledTotal: 0, unpaidInvoicesTotal: 0 };
-    const unbilledTotal = operations.filter(o => o.customerName === (selectedUser.companyName || selectedUser.name) && !o.invoiced)
-      .reduce((s, o) => s + (parseFloat(o.rate.replace(/,/g,'')) || 0) + (parseFloat(o.vat.replace(/,/g,'')) || 0), 0);
-    const userInvoices = invoices.filter(i => i.customerName === (selectedUser.companyName || selectedUser.name));
-    const unpaidInvoicesTotal = userInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + i.amount, 0);
+    const customerOperations = db.getCustomerOperations(selectedUser.id, selectedUser.companyName || selectedUser.name);
+    const unbilledOperations = customerOperations.filter(o => !o.invoiced);
+    const unbilledTotal = unbilledOperations.reduce((s, o) => s + money(o.rate) + money(o.vat), 0);
+    const userInvoices = invoices.filter(i => belongsToCustomer(i, selectedUser));
+    const userPayments = db.getPayments().filter(payment => payment.customerId === selectedUser.id);
+    const unpaidInvoicesTotal = userInvoices.filter(i => i.status === 'UNPAID').reduce((s, i) => s + Math.max(0, Number(i.amount || 0) - db.getInvoicePaidAmount(i.id)), 0);
+    const payableBalance = Number(selectedUser.pastOutstandingAmount || 0) + unpaidInvoicesTotal;
     const totalExposure = (selectedUser?.pastOutstandingAmount || 0) + unpaidInvoicesTotal + unbilledTotal;
-    return { totalExposure, unbilledTotal, unpaidInvoicesTotal, userInvoices };
+    const historicalPayments = Math.max(0, userPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) - db.getPaymentAllocations()
+      .filter(allocation => userInvoices.some(invoice => invoice.id === allocation.invoiceId))
+      .reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0));
+    const historicalOpeningBalance = Number(selectedUser.pastOutstandingAmount || 0) + historicalPayments;
+    return { totalExposure, payableBalance, historicalOpeningBalance, unbilledTotal, unpaidInvoicesTotal, userInvoices, userPayments, unbilledOperations };
   }, [selectedUser, operations, invoices]);
 
-  const handleReceivePayment = () => {
-    if (!selectedUser || !paymentAmount) return;
-    db.addPayment({
+  const handleReceivePayment = async () => {
+    if (!selectedUser || !paymentAmount || paymentSaving) return;
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) { setPaymentError(isAr ? 'أدخل مبلغاً صحيحاً أكبر من صفر.' : 'Enter a valid amount greater than zero.'); return; }
+    if (amount > accountBreakdown.payableBalance) { setPaymentError(isAr ? 'المبلغ أكبر من الرصيد المفوتر المستحق.' : 'Amount exceeds the currently invoiced outstanding balance.'); return; }
+    setPaymentSaving(true); setPaymentError('');
+    const saved = await db.addPayment({
       id: `PAY-${Date.now()}`,
       customerId: selectedUser.id,
       customerName: selectedUser.companyName || selectedUser.name,
-      amount: parseFloat(paymentAmount),
+      amount,
       date: new Date().toISOString().split('T')[0],
       reference: paymentRef || 'Bulk Deposit',
       type: 'CASH'
     }, autoSettleSelection ? Array.from(selectedInvIds) : []);
+    if (!saved) { setPaymentError(db.getLastDbError() || (isAr ? 'تعذر حفظ الدفعة. لم يتم اعتمادها.' : 'Could not save payment. It was not recorded.')); setPaymentSaving(false); return; }
     setPaymentAmount(''); setPaymentRef(''); setSelectedInvIds(new Set());
-    setShowPaymentModal(false); refreshData();
+    setShowPaymentModal(false); setPaymentSaving(false); refreshData();
   };
+
+  const visibleCustomers = useMemo(() => {
+    const q = normalizeCustomerName(customerSearch);
+    if (!q) return customers;
+    return customers.filter(customer => {
+      const ops = db.getCustomerOperations(customer.id, customer.companyName || customer.name);
+      const customerInvoices = invoices.filter(invoice => belongsToCustomer(invoice, customer));
+      const payments = db.getPayments().filter(payment => payment.customerId === customer.id);
+      return [customer.name, customer.companyName, customer.email, customer.id,
+        ...customerInvoices.flatMap(invoice => [invoice.id, invoice.invoiceNo, invoice.bookingNumber, ...(invoice.containerNumbers || [])]),
+        ...ops.flatMap(op => [op.bookingNumber, op.containerNumber, op.gensetNumber]),
+        ...payments.flatMap(payment => [payment.reference, payment.id])]
+        .some(value => normalizeCustomerName(String(value || '')).includes(q));
+    });
+  }, [customers, customerSearch, invoices, operations]);
 
   return (
     <div className={`max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 text-start pb-32 ${isAr ? 'rtl font-cairo' : 'ltr'}`}>
@@ -280,8 +323,8 @@ const Financials: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 no-print">
         {[
           { label: t.unpaidMoney, value: customers.reduce((acc, c) => {
-            const uI = db.getInvoices().filter(i => i.customerName === (c.companyName || c.name) && i.status === 'UNPAID').reduce((s,i)=>s+i.amount, 0);
-            const uO = db.getOperations().filter(o => o.customerName === (c.companyName || c.name) && !o.invoiced).reduce((s,o)=>s+(parseFloat(o.rate) || 0)+(parseFloat(o.vat) || 0), 0);
+            const uI = db.getInvoices().filter(i => belongsToCustomer(i, c) && i.status === 'UNPAID').reduce((s,i)=>s+Math.max(0, i.amount - db.getInvoicePaidAmount(i.id)), 0);
+            const uO = db.getCustomerOperations(c.id, c.companyName || c.name).filter(o => !o.invoiced).reduce((s,o)=>s+money(o.rate)+money(o.vat), 0);
             return acc + (c.pastOutstandingAmount || 0) + uI + uO;
           }, 0), color: 'text-rose-600', icon: '🏦', bg: 'bg-rose-50/30' },
           { label: t.liveUnbilled, value: operations.filter(o=>o.status==='DONE'&&!o.invoiced).reduce((s,o)=>s+(parseFloat(o.rate) || 0), 0), color: 'text-blue-600', icon: '🚛', bg: 'bg-blue-50/30' },
@@ -311,16 +354,20 @@ const Financials: React.FC = () => {
              </div>
              
              <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-2">
-                {customers.map(cust => {
-                  const uI = db.getInvoices().filter(i => i.customerName === (cust.companyName || cust.name) && i.status === 'UNPAID').reduce((s,i)=>s+i.amount, 0);
-                  const uO = db.getOperations().filter(o => o.customerName === (cust.companyName || cust.name) && !o.invoiced).reduce((s,o)=>s+(parseFloat(o.rate) || 0)+(parseFloat(o.vat) || 0), 0);
+                <label className="block mb-4">
+                  <span className="sr-only">{isAr ? 'ابحث عن عميل أو فاتورة أو حجز أو حاوية أو دفعة' : 'Search customers, invoices, bookings, containers, or payments'}</span>
+                  <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder={isAr ? 'ابحث باسم العميل أو الفاتورة أو الحجز أو الحاوية أو مرجع الدفع' : 'Search customer, invoice, booking, container, or payment reference'} className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-xs font-bold outline-none focus:border-blue-500" />
+                </label>
+                {visibleCustomers.map(cust => {
+                  const uI = db.getInvoices().filter(i => belongsToCustomer(i, cust) && i.status === 'UNPAID').reduce((s,i)=>s+Math.max(0, i.amount - db.getInvoicePaidAmount(i.id)), 0);
+                  const uO = db.getCustomerOperations(cust.id, cust.companyName || cust.name).filter(o => !o.invoiced).reduce((s,o)=>s+money(o.rate)+money(o.vat), 0);
                   const total = (cust.pastOutstandingAmount || 0) + uI + uO;
                   const isSelected = selectedUser?.id === cust.id;
                   
                   return (
                     <button 
                       key={cust.id} 
-                      onClick={() => setSelectedUser(cust)} 
+                      onClick={() => { setSelectedUser(cust); setSelectedInvIds(new Set()); }}
                       className={`w-full text-start p-6 rounded-[2.2rem] border-2 transition-all relative overflow-hidden group ${isSelected ? 'bg-slate-900 border-blue-600 text-white shadow-2xl scale-[1.02]' : 'bg-slate-50 dark:bg-slate-800/40 border-transparent hover:border-slate-200'}`}
                     >
                        <div className="flex justify-between items-start relative z-10">
@@ -337,6 +384,7 @@ const Financials: React.FC = () => {
                     </button>
                   );
                 })}
+                {visibleCustomers.length === 0 && <p className="rounded-2xl bg-slate-50 dark:bg-slate-800 p-5 text-center text-xs font-bold text-slate-400">{isAr ? 'لا توجد نتائج مطابقة.' : 'No matching customers or financial records.'}</p>}
              </div>
           </div>
         </div>
@@ -408,20 +456,40 @@ const Financials: React.FC = () => {
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 dark:divide-white/5 text-[11px] font-bold">
-                           {Number(selectedUser?.pastOutstandingAmount || 0) > 0 && (
+                            {Number(accountBreakdown.historicalOpeningBalance || 0) > 0 && (
                              <tr className="bg-rose-50/10 italic">
                                 <td className="px-6 py-6 text-center text-rose-500 font-black">⚡</td>
                                 <td className="px-8 py-6 text-slate-400">System Genesis</td>
                                 <td className="px-8 py-6 text-rose-600 font-black uppercase tracking-widest underline decoration-2 underline-offset-8">Historical Debt Forward</td>
-                                <td className="px-8 py-6 text-right font-black text-rose-600">EGP {Number(selectedUser?.pastOutstandingAmount || 0).toLocaleString()}</td>
+                                <td className="px-8 py-6 text-right font-black text-rose-600">EGP {Number(accountBreakdown.historicalOpeningBalance || 0).toLocaleString()}</td>
                                 <td className="px-8 py-6 text-center"><span className="bg-rose-100 text-rose-700 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border border-rose-200">OPEN BALANCE</span></td>
                                 <td className="px-8 py-6 text-right opacity-30 italic">Pre-Deployment Legacy</td>
                              </tr>
                            )}
+                           {accountBreakdown.unbilledOperations.map(op => (
+                             <tr key={`op-${op.id}`} onClick={() => setCustomerSearch(op.bookingNumber || op.containerNumber || '')} className="cursor-pointer bg-blue-50/20 hover:bg-blue-50/60 transition-colors" title={isAr ? 'اضغط للبحث عن الحجز أو الحاوية' : 'Click to find this booking or container'}>
+                                <td className="px-6 py-6 text-center text-blue-600">🚛</td>
+                                <td className="px-8 py-6 text-slate-400 font-mono">{op.operationDate}</td>
+                                <td className="px-8 py-6"><div className="font-black text-blue-900 dark:text-blue-400">{op.bookingNumber || '—'}</div><div className="text-[9px] text-slate-400">{op.containerNumber || '—'}</div></td>
+                                <td className="px-8 py-6 text-right font-black text-blue-700 dark:text-blue-300">EGP {(money(op.rate) + money(op.vat)).toLocaleString()}</td>
+                                <td className="px-8 py-6 text-center"><span className="bg-blue-100 text-blue-700 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase">UNBILLED</span></td>
+                                <td className="px-8 py-6 text-right text-slate-400">{op.containerNumber || '—'}</td>
+                             </tr>
+                           ))}
+                           {accountBreakdown.userPayments.map(payment => (
+                             <tr key={`payment-${payment.id}`} onClick={() => setCustomerSearch(payment.reference || payment.id)} className="cursor-pointer bg-emerald-50/20 hover:bg-emerald-50/60 transition-colors" title={isAr ? 'اضغط للبحث عن مرجع الدفعة' : 'Click to find this payment reference'}>
+                                <td className="px-6 py-6 text-center text-emerald-600">💰</td>
+                                <td className="px-8 py-6 text-slate-400 font-mono">{payment.date}</td>
+                                <td className="px-8 py-6"><div className="font-black text-emerald-700 dark:text-emerald-400">{payment.reference || payment.id}</div><div className="text-[9px] text-slate-400">PAYMENT • {payment.type}</div></td>
+                                <td className="px-8 py-6 text-right font-black text-emerald-700 dark:text-emerald-400">− EGP {Number(payment.amount || 0).toLocaleString()}</td>
+                                <td className="px-8 py-6 text-center"><span className="bg-emerald-100 text-emerald-700 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase">RECEIVED</span></td>
+                                <td className="px-8 py-6 text-right text-slate-400">{db.getPaymentAllocations().filter(allocation => allocation.paymentId === payment.id).length} allocations</td>
+                             </tr>
+                           ))}
                            {accountBreakdown.userInvoices.map(inv => (
-                             <tr key={inv.id} className={`hover:bg-blue-50/30 transition-all group ${selectedInvIds.has(inv.id) ? 'bg-blue-50 shadow-inner' : ''}`}>
+                             <tr key={inv.id} onClick={() => setViewingInvoice(inv)} className={`cursor-pointer hover:bg-blue-50/30 transition-all group ${selectedInvIds.has(inv.id) ? 'bg-blue-50 shadow-inner' : ''}`} title={isAr ? 'اضغط لفتح الفاتورة' : 'Click to open invoice'}>
                                 <td className="px-6 py-6 text-center">
-                                   {inv.status === 'UNPAID' && <input type="checkbox" checked={selectedInvIds.has(inv.id)} onChange={() => {
+                                   {inv.status === 'UNPAID' && <input type="checkbox" onClick={e => e.stopPropagation()} checked={selectedInvIds.has(inv.id)} onChange={() => {
                                       const newSet = new Set(selectedInvIds);
                                       if (newSet.has(inv.id)) newSet.delete(inv.id);
                                       else newSet.add(inv.id);
@@ -442,7 +510,7 @@ const Financials: React.FC = () => {
                                    </span>
                                 </td>
                                 <td className="px-8 py-6 text-right">
-                                   <button onClick={() => setViewingInvoice(inv)} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#001F3F] hover:text-white transition-all border border-slate-200 dark:border-white/10">View Doc</button>
+                                   <button onClick={e => { e.stopPropagation(); setViewingInvoice(inv); }} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#001F3F] hover:text-white transition-all border border-slate-200 dark:border-white/10">View Doc</button>
                                 </td>
                              </tr>
                            ))}
@@ -514,7 +582,7 @@ const Financials: React.FC = () => {
                                    <p className="text-[8px] font-black uppercase tracking-widest opacity-60">#INV-{String(inv.invoiceNo ?? 0).padStart(5, '0')}</p>
                                    <p className="text-[11px] font-black italic">{inv.bookingNumber}</p>
                                 </div>
-                                <p className={`font-black text-xs ${selectedInvIds.has(inv.id) ? 'text-[#C2A378]' : 'text-blue-600'}`}>EGP {Number(inv.amount || 0).toLocaleString()}</p>
+                                <p className={`font-black text-xs ${selectedInvIds.has(inv.id) ? 'text-[#C2A378]' : 'text-blue-600'}`}>EGP {Math.max(0, Number(inv.amount || 0) - db.getInvoicePaidAmount(inv.id)).toLocaleString()}</p>
                              </div>
                           ))}
                           {accountBreakdown.userInvoices.filter(i => i.status === 'UNPAID').length === 0 && (
@@ -523,8 +591,9 @@ const Financials: React.FC = () => {
                        </div>
                     </div>
                  </div>
-                 <button onClick={handleReceivePayment} className="w-full bg-slate-900 hover:bg-black text-white py-8 rounded-[2.5rem] font-black uppercase text-sm tracking-[0.5em] shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-6 border-b-4 border-blue-600">
-                    <span className="text-2xl">🏦</span> {isAr ? 'اعتماد العملية المالية' : 'AUTHORIZE SETTLEMENT'}
+                 {paymentError && <p role="alert" className="rounded-2xl bg-rose-50 border border-rose-200 p-4 text-sm font-bold text-rose-700">{paymentError}</p>}
+                 <button disabled={paymentSaving} onClick={handleReceivePayment} className="w-full bg-slate-900 hover:bg-black disabled:opacity-60 disabled:cursor-wait text-white py-8 rounded-[2.5rem] font-black uppercase text-sm tracking-[0.5em] shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-6 border-b-4 border-blue-600">
+                    <span className="text-2xl">🏦</span> {paymentSaving ? (isAr ? 'جارٍ الحفظ...' : 'SAVING...') : (isAr ? 'اعتماد العملية المالية' : 'AUTHORIZE SETTLEMENT')}
                  </button>
               </div>
            </div>

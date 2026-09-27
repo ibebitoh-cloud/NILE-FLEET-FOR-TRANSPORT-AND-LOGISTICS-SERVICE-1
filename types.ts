@@ -124,6 +124,13 @@ export interface Payment {
   type: 'CASH' | 'BANK' | 'ADVANCE';
 }
 
+export interface PaymentAllocation {
+  id: string;
+  paymentId: string;
+  invoiceId?: string;
+  amount: number;
+}
+
 export interface UserPermissions {
   canCreate?: boolean;
   canEdit?: boolean;
