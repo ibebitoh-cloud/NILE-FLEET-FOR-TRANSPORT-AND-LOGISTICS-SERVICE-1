@@ -25,7 +25,7 @@ export async function onRequestPost(context) {
   if (!email || !password || !profile) {
     return json({ error: 'email, password and profile are required' }, 400);
   }
-  if (password.length < 6) return json({ error: 'Password must be at least 6 characters' }, 400);
+  if (password.length < 8) return json({ error: 'Password must be at least 8 characters' }, 400);
 
   // Admin client — only ever instantiated here, server-side, with the secret key
   const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -48,8 +48,21 @@ export async function onRequestPost(context) {
   if (callerProfileError || !callerProfile || callerProfile.revoked) {
     return json({ error: 'Administrator profile not found or revoked' }, 403);
   }
-  const canManageUsers = callerProfile.role === 'ADMIN' || callerProfile.permissions?.canManageUsers === true;
+  const isAdmin = callerProfile.role === 'ADMIN';
+  const canManageUsers = isAdmin || callerProfile.permissions?.canManageUsers === true;
   if (!canManageUsers) return json({ error: 'You do not have permission to create users' }, 403);
+
+  // Only ADMIN may create an ADMIN. Delegated managers may create only roles
+  // below MANAGER, preventing privilege escalation through the create-user API.
+  const requestedRole = String(profile.role || '').toUpperCase();
+  const managerAllowedRoles = new Set(['CUSTOMER', 'VIEWER', 'GATE_OPERATOR']);
+  if (requestedRole === 'ADMIN' && !isAdmin) {
+    return json({ error: 'Only an ADMIN can create an ADMIN account' }, 403);
+  }
+  if (!isAdmin && !managerAllowedRoles.has(requestedRole)) {
+    return json({ error: 'Delegated user managers may only create CUSTOMER, VIEWER, or GATE_OPERATOR accounts' }, 403);
+  }
+  profile.role = requestedRole;
 
   // 1. Create the real login account
   const { data: created, error: createError } = await admin.auth.admin.createUser({
