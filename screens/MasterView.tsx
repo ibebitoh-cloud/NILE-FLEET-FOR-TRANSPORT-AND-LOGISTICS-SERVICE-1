@@ -1572,12 +1572,6 @@ const MasterView: React.FC = () => {
                                 else newSet.add(op.id);
                                 setSelectedRowIds(newSet);
                               }} disabled={isReadOnly} />
-                            <input type="checkbox" className="rounded bg-transparent border-slate-500" checked={isSelected} onChange={() => {
-                              const newSet = new Set(selectedRowIds);
-                              if (newSet.has(op.id)) newSet.delete(op.id);
-                              else newSet.add(op.id);
-                              setSelectedRowIds(newSet);
-                            }} disabled={isReadOnly} />
                           </td>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('bookingNumber') }} className={`px-2 border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
                             <EditableCell value={op.bookingNumber} onSave={(val) => handleUpdateCell(op, 'bookingNumber', val)} disabled={isReadOnly} isDark={isDark} className={`font-black ${isSelected ? 'text-white' : op.reviewedByManager ? 'text-emerald-500' : (isDark ? 'text-blue-400' : 'text-blue-600')}`} />
