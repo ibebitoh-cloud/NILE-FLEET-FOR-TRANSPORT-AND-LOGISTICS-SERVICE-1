@@ -1392,19 +1392,6 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
           )}
         </header>
 
-        <div className={`flex items-center gap-1 px-3 lg:px-6 py-2 overflow-x-auto border-b no-print ${isTerminal ? 'bg-[#001224] border-white/5' : 'bg-slate-50 border-slate-200'}`} role="tablist" aria-label={isAr ? 'الصفحات المفتوحة' : 'Open pages'}>
-          {openScreens.map(screen => {
-            const label = screen.replace(/-/g, ' ');
-            const isSelected = activeScreen === screen;
-            return (
-              <div key={screen} role="presentation" className={`flex shrink-0 items-center rounded-lg border text-[9px] font-black uppercase tracking-wider ${isSelected ? 'bg-[#001F3F] text-white border-[#C2A378]/60' : isTerminal ? 'bg-white/5 text-slate-300 border-white/10' : 'bg-white text-slate-500 border-slate-200'}`}>
-                <button role="tab" aria-selected={isSelected} onClick={() => setActiveScreen(screen)} className="px-3 py-2 whitespace-nowrap">{label}</button>
-                <button type="button" onClick={() => onCloseScreen(screen)} className="px-2 py-2 opacity-70 hover:opacity-100 hover:text-rose-400" aria-label={`${isAr ? 'إغلاق' : 'Close'} ${label}`} title={isAr ? 'إغلاق الصفحة' : 'Close page'}>×</button>
-              </div>
-            );
-          })}
-        </div>
-
         <div className="p-4 lg:p-6 flex-1">
           {children}
           
