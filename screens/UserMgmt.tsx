@@ -94,6 +94,14 @@ const READ_ONLY_PERMISSIONS: UserPermissions = {
   canBypassGeofence: false,
 };
 
+const isSystemAssistantUser = (user: any): boolean => {
+  const name = String(user?.name || '').trim().toLowerCase();
+  const email = String(user?.email || '').trim().toLowerCase();
+  const company = String(user?.companyName || '').trim().toLowerCase();
+  return name === 'dali' || name.startsWith('dali ') || email.startsWith('dali@') ||
+    email.includes('dali@') || company === 'dali' || company.startsWith('dali ');
+};
+
 const ALL_LOCATIONS = Object.values(Location);
 
 const UserMgmt: React.FC = () => {
@@ -101,7 +109,7 @@ const UserMgmt: React.FC = () => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'black';
   
-  const [users, setUsers] = useState<any[]>(db.getUsers());
+  const [users, setUsers] = useState<any[]>(() => db.getUsers().filter(u => !isSystemAssistantUser(u)));
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'INTERNAL' | 'CUSTOMER' | 'SERVICE'>('ALL');
   const [editingUser, setEditingUser] = useState<any | null>(null);
@@ -125,11 +133,11 @@ const UserMgmt: React.FC = () => {
   const isAdmin = isCreator || currentUser.role === UserRole.ADMIN || currentUser.permissions?.canManageUsers;
 
   const refreshData = () => {
-    setUsers([...db.getUsers()]);
+    setUsers(db.getUsers().filter(u => !isSystemAssistantUser(u)));
   };
 
   const filteredUsers = useMemo(() => {
-    return users.filter(u => {
+    return users.filter(u => !isSystemAssistantUser(u) && (
       const normalizedSearch = searchTerm.toLowerCase();
       const matchesSearch = String(u.name || '').toLowerCase().includes(normalizedSearch) ||
                             String(u.email || '').toLowerCase().includes(normalizedSearch) ||
@@ -141,7 +149,7 @@ const UserMgmt: React.FC = () => {
                           (roleFilter === 'SERVICE' && u.isServiceAccount === true);
       
       return matchesSearch && matchesRole;
-    });
+    ));
   }, [users, searchTerm, roleFilter]);
 
   const initNewUser = () => {
