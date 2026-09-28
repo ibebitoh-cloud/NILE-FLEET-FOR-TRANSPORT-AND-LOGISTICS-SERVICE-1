@@ -184,56 +184,93 @@ class SupabaseDB {
 
   async loadAll(): Promise<void> {
     if (_loaded) return;
-    const [
-      stock, reservations, operations, invoices, payments, paymentAllocations, users,
-      auditLogs, customerPrices, procurements, gasTransactions,
-      employees, payrollTransactions, foodExpenses, transportExpenses,
-      portRents, notifications, supportContacts, faqs, portsInfo, maintenanceLogs
-    ] = await Promise.all([
-      query<Genset>('gensets', { order: 'created_at' }),
+
+    // Customer sessions must never request the company's full operational dataset.
+    // RLS remains the final enforcement layer, but the client also follows least-privilege.
+    const { data: authData } = await supabase.auth.getUser();
+    const authUser = authData.user;
+    let isCustomer = false;
+    if (authUser) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, revoked')
+        .eq('id', authUser.id)
+        .maybeSingle();
+      isCustomer = String(profile?.role || '').toUpperCase() === 'CUSTOMER' && !profile?.revoked;
+    }
+
+    const common = [
       query<Reservation>('reservations', { order: 'created_at' }),
       query<Operation>('operations', { order: 'created_at' }),
       query<Invoice>('invoices', { order: 'created_at' }),
       query<Payment>('payments', { order: 'created_at' }),
       query<PaymentAllocation>('payment_allocations', { order: 'created_at' }),
       query<User>('profiles', { order: 'created_at' }),
-      query<AuditEntry>('audit_log', { order: 'timestamp' }),
-      query<CustomerPrice>('customer_prices'),
-      query<Procurement>('procurement', { order: 'created_at' }),
-      query<GasTransaction>('gas_transactions', { order: 'date' }),
-      query<Employee>('employees', { order: 'created_at' }),
-      query<PayrollTransaction>('payroll_transactions', { order: 'date' }),
-      query<FoodExpense>('food_expenses', { order: 'created_at' }),
-      query<TransportExpense>('transport_expenses', { order: 'created_at' }),
-      query<PortRent>('port_rents', { order: 'created_at' }),
       query<SystemNotification>('system_notifications', { order: 'timestamp' }),
       query<SupportContact>('support_contacts'),
       query<FAQItem>('faqs'),
       query<PortInfo>('ports_info'),
-      query<GensetMaintenanceLog>('genset_maintenance_logs', { order: 'service_date' }),
-    ]);
+    ];
 
-    _stock = stock;
-    _reservations = reservations;
-    _operations = operations;
-    _invoices = invoices;
-    _payments = payments;
-    _paymentAllocations = paymentAllocations;
-    _users = users;
-    _auditLogs = auditLogs;
-    _customerPrices = customerPrices;
-    _procurements = procurements;
-    _gasTransactions = gasTransactions;
-    _employees = employees;
-    _payrollTransactions = payrollTransactions;
-    _foodExpenses = foodExpenses;
-    _transportExpenses = transportExpenses;
-    _portRents = portRents;
-    _notifications = notifications;
-    _supportContacts = supportContacts;
-    _faqs = faqs;
-    _portsInfo = portsInfo;
-    _maintenanceLogs = maintenanceLogs;
+    if (isCustomer) {
+      const [reservations, operations, invoices, payments, paymentAllocations, users, notifications, supportContacts, faqs, portsInfo, customerPrices] = await Promise.all([
+        ...common,
+        query<CustomerPrice>('customer_prices'),
+      ]);
+      _stock = [];
+      _reservations = reservations;
+      _operations = operations;
+      _invoices = invoices;
+      _payments = payments;
+      _paymentAllocations = paymentAllocations;
+      _users = users;
+      _auditLogs = [];
+      _customerPrices = customerPrices;
+      _procurements = [];
+      _gasTransactions = [];
+      _employees = [];
+      _payrollTransactions = [];
+      _foodExpenses = [];
+      _transportExpenses = [];
+      _portRents = [];
+      _notifications = notifications;
+      _supportContacts = supportContacts;
+      _faqs = faqs;
+      _portsInfo = portsInfo;
+      _maintenanceLogs = [];
+    } else {
+      const [stock, reservations, operations, invoices, payments, paymentAllocations, users,
+        auditLogs, customerPrices, procurements, gasTransactions, employees,
+        payrollTransactions, foodExpenses, transportExpenses, portRents, notifications,
+        supportContacts, faqs, portsInfo, maintenanceLogs] = await Promise.all([
+        query<Genset>('gensets', { order: 'created_at' }),
+        query<Reservation>('reservations', { order: 'created_at' }),
+        query<Operation>('operations', { order: 'created_at' }),
+        query<Invoice>('invoices', { order: 'created_at' }),
+        query<Payment>('payments', { order: 'created_at' }),
+        query<PaymentAllocation>('payment_allocations', { order: 'created_at' }),
+        query<User>('profiles', { order: 'created_at' }),
+        query<AuditEntry>('audit_log', { order: 'timestamp' }),
+        query<CustomerPrice>('customer_prices'),
+        query<Procurement>('procurement', { order: 'created_at' }),
+        query<GasTransaction>('gas_transactions', { order: 'date' }),
+        query<Employee>('employees', { order: 'created_at' }),
+        query<PayrollTransaction>('payroll_transactions', { order: 'date' }),
+        query<FoodExpense>('food_expenses', { order: 'created_at' }),
+        query<TransportExpense>('transport_expenses', { order: 'created_at' }),
+        query<PortRent>('port_rents', { order: 'created_at' }),
+        query<SystemNotification>('system_notifications', { order: 'timestamp' }),
+        query<SupportContact>('support_contacts'),
+        query<FAQItem>('faqs'),
+        query<PortInfo>('ports_info'),
+        query<GensetMaintenanceLog>('genset_maintenance_logs', { order: 'service_date' }),
+      ]);
+      _stock=stock; _reservations=reservations; _operations=operations; _invoices=invoices; _payments=payments;
+      _paymentAllocations=paymentAllocations; _users=users; _auditLogs=auditLogs; _customerPrices=customerPrices;
+      _procurements=procurements; _gasTransactions=gasTransactions; _employees=employees; _payrollTransactions=payrollTransactions;
+      _foodExpenses=foodExpenses; _transportExpenses=transportExpenses; _portRents=portRents; _notifications=notifications;
+      _supportContacts=supportContacts; _faqs=faqs; _portsInfo=portsInfo; _maintenanceLogs=maintenanceLogs;
+    }
     _loaded = true;
     dispatchChange();
   }
