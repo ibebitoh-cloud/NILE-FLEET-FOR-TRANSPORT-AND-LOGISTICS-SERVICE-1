@@ -533,6 +533,8 @@ const MasterView: React.FC = () => {
 
   const [operations, setOperations] = useState<Operation[]>(db.getOperations());
   const [searchTerm, setSearchTerm] = useState('');
+  const [containerSearch, setContainerSearch] = useState('');
+  const [gensetSearch, setGensetSearch] = useState('');
   const [selectedPorts, setSelectedPorts] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<DateFilterConfig>({
@@ -1106,6 +1108,8 @@ const MasterView: React.FC = () => {
                             (op.clipperName && op.clipperName.toLowerCase().includes(searchStr)) ||
                             (op.trucker && op.trucker.toLowerCase().includes(searchStr)) ||
                             (op.beneficiaryName && op.beneficiaryName.toLowerCase().includes(searchStr));
+      const matchesContainer = !containerSearch.trim() || (op.containerNumber || '').toLowerCase().includes(containerSearch.trim().toLowerCase());
+      const matchesGenset = !gensetSearch.trim() || (op.gensetNumber || '').toLowerCase().includes(gensetSearch.trim().toLowerCase());
       const matchesPorts = selectedPorts.length === 0 || selectedPorts.includes(op.clipOnPort as string);
       const matchesStatuses = selectedStatuses.length === 0 || selectedStatuses.includes(op.status as string);
       
@@ -1132,7 +1136,7 @@ const MasterView: React.FC = () => {
         });
       })();
 
-      return matchesSearch && matchesPorts && matchesStatuses && matchesDate;
+      return matchesSearch && matchesContainer && matchesGenset && matchesPorts && matchesStatuses && matchesDate;
     });
 
     if (sortConfig) {
@@ -1150,7 +1154,7 @@ const MasterView: React.FC = () => {
       });
     }
     return result;
-  }, [operations, searchTerm, selectedPorts, selectedStatuses, dateFilter, sortConfig]);
+  }, [operations, searchTerm, containerSearch, gensetSearch, selectedPorts, selectedStatuses, dateFilter, sortConfig]);
 
   const handleUpdateCell = (op: Operation, field: keyof Operation, val: any) => {
     if (isReadOnly) return;
@@ -1460,6 +1464,23 @@ const MasterView: React.FC = () => {
                       className="absolute top-0 right-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400/80 z-20"
                       title={isAr ? "اسحب لتغيير الحجم" : "Drag to resize"}
                     />
+                  </th>
+                ))}
+              </tr>
+              <tr className={isDark ? 'bg-[#001224]' : 'bg-[#001F3F]'}>
+                <th className="p-1 border-r border-white/10" />
+                {['bookingNumber','customerName','trucker','shipper','clipOnPort','clipOffPort','destination','containerNumber','gensetNumber','rate','status','operationDate','clipOnDate','commodity','clipperName','notes','gas','invoice'].map(key => (
+                  <th key={key} className="p-1 border-r border-white/10">
+                    {(key === 'containerNumber' || key === 'gensetNumber') && (
+                      <div className="relative">
+                        <input type="search" value={key === 'containerNumber' ? containerSearch : gensetSearch}
+                          onChange={e => key === 'containerNumber' ? setContainerSearch(e.target.value) : setGensetSearch(e.target.value)}
+                          onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}
+                          placeholder={key === 'containerNumber' ? (isAr ? 'بحث حاوية...' : 'Search container...') : (isAr ? 'بحث مولد...' : 'Search genset...')}
+                          className={`w-full min-w-0 px-2 py-1 rounded-md border text-[8px] font-bold outline-none ${isDark ? 'bg-slate-900 border-slate-600 text-white placeholder:text-slate-500 focus:border-red-400' : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-red-500'}`} />
+                        {(key === 'containerNumber' ? containerSearch : gensetSearch) && <button type="button" onClick={() => key === 'containerNumber' ? setContainerSearch('') : setGensetSearch('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 hover:text-red-500">✕</button>}
+                      </div>
+                    )}
                   </th>
                 ))}
               </tr>
