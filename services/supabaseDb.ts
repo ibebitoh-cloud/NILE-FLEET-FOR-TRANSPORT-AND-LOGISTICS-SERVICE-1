@@ -113,21 +113,51 @@ async function upsert<T>(table: string, row: Partial<T>): Promise<T | null> {
 
 async function update<T>(table: string, id: string, updates: Partial<T>): Promise<boolean> {
   const prepared = table === 'operations' ? prepareOperationsDbRow(updates) : updates;
-  const { error } = await supabase.from(table).update(camelToSnake(prepared)).eq('id', id);
+  const { data, error } = await supabase
+    .from(table)
+    .update(camelToSnake(prepared))
+    .eq('id', id)
+    .select('id');
+
   if (error) {
     _lastDbError = `${table}: ${error.message}`;
     console.error(`[supabaseDb] update ${table}:`, error.message);
     return false;
   }
+
+  // RLS can legally turn an UPDATE into a zero-row result without a PostgreSQL
+  // error. Never report that as success: otherwise the UI cache changes and the
+  // old database value returns after refresh.
+  if (!data || data.length === 0) {
+    _lastDbError = `${table}: no row was updated (record missing or access denied)`;
+    console.error(`[supabaseDb] update ${table} affected 0 rows`);
+    return false;
+  }
+
   return true;
 }
 
 async function remove(table: string, id: string): Promise<boolean> {
-  const { error } = await supabase.from(table).delete().eq('id', id);
+  const { data, error } = await supabase
+    .from(table)
+    .delete()
+    .eq('id', id)
+    .select('id');
+
   if (error) {
+    _lastDbError = `${table}: ${error.message}`;
     console.error(`[supabaseDb] delete ${table}:`, error.message);
     return false;
   }
+
+  // Same RLS safeguard for DELETE: a zero-row delete must never be treated as
+  // successful, or deleted records will reappear after refresh.
+  if (!data || data.length === 0) {
+    _lastDbError = `${table}: no row was deleted (record missing or access denied)`;
+    console.error(`[supabaseDb] delete ${table} affected 0 rows`);
+    return false;
+  }
+
   return true;
 }
 
