@@ -30,7 +30,7 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
 
   const handleExportAllDataAndFinance = () => {
     const custOps = db.getCustomerOperations(user.id, user.companyName || user.name);
-    const custInvoices = db.getInvoices().filter(i => i.customerName === (user.companyName || user.name));
+    const custInvoices = db.getInvoices().filter(i => i.customerId === user.id);
     const custPayments = db.getPayments().filter(p => p.customerId === user.id);
     const custPrices = db.getCustomerPrices().filter(p => p.customerName === (user.companyName || user.name));
     
@@ -123,7 +123,7 @@ const CustomerPortal: React.FC<CustomerPortalProps> = ({ user, type }) => {
   const commercialPorts = Object.values(Location).filter(l => l !== Location.MAL);
 
   const myReservations = db.getReservations().filter(r => r.customerId === user.id);
-  const myInvoices = db.getInvoices().filter(i => i.customerName === (user.companyName || user.name));
+  const myInvoices = db.getInvoices().filter(i => i.customerId === user.id);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
