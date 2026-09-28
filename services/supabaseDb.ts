@@ -1096,6 +1096,24 @@ class SupabaseDB {
   }
 
   async clearAllNotifications(): Promise<boolean> {
+    // Distinguish "there was nothing to clear" from an RLS-denied UPDATE.
+    // A permitted read proves that zero matching rows is a valid success case.
+    const { count, error: countError } = await supabase
+      .from('system_notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('active', true);
+
+    if (countError) {
+      _lastDbError = `system_notifications: ${countError.message}`;
+      return false;
+    }
+
+    if ((count ?? 0) === 0) {
+      _notifications = _notifications.map(n => ({ ...n, active: false }));
+      dispatchChange();
+      return true;
+    }
+
     const { data, error } = await supabase
       .from('system_notifications')
       .update({ active: false })
@@ -1107,9 +1125,8 @@ class SupabaseDB {
       return false;
     }
 
-    // A zero-row update can mean RLS denied the operation.
     if (!data || data.length === 0) {
-      _lastDbError = 'system_notifications: no active notifications were updated (record missing or access denied)';
+      _lastDbError = 'system_notifications: active notifications exist but none were updated (access denied or concurrent change)';
       return false;
     }
 
@@ -1350,6 +1367,24 @@ class SupabaseDB {
   }
 
   async restartHistory(): Promise<boolean> {
+    // A clean audit log is a valid state. Check visibility first so an empty
+    // table is not reported as an RLS failure.
+    const { count, error: countError } = await supabase
+      .from('audit_log')
+      .select('id', { count: 'exact', head: true });
+
+    if (countError) {
+      _lastDbError = `audit_log: ${countError.message}`;
+      console.error('[supabaseDb] inspect audit history:', countError.message);
+      return false;
+    }
+
+    if ((count ?? 0) === 0) {
+      _auditLogs = [];
+      dispatchChange();
+      return true;
+    }
+
     const { data, error } = await supabase
       .from('audit_log')
       .delete()
@@ -1363,7 +1398,7 @@ class SupabaseDB {
     }
 
     if (!data || data.length === 0) {
-      _lastDbError = 'audit_log: no audit records were deleted (record missing or access denied)';
+      _lastDbError = 'audit_log: records exist but none were deleted (access denied or concurrent change)';
       return false;
     }
 
