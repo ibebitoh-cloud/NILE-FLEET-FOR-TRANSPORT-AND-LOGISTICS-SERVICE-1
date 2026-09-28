@@ -34,7 +34,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const reservations = db.getReservations();
   const customers = db.getUsers().filter(u => u.role === UserRole.CUSTOMER);
   const maintenanceLogs = db.getMaintenanceLogs();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
 
   const portData = useMemo(() => {
     const locations = ['DAM', 'ALEX', 'GOUDA', 'SOKHNA', 'SCCT', 'PSD', 'MAL', 'WORKSHOP'] as const;
@@ -50,7 +50,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     ops.forEach(o => {
       const p = String(o.clipOnPort || '');
       if (!byPort[p]) return;
-      if (o.status === 'UNDER OPERATE' || o.status === 'HOLD') byPort[p].preorderCount++;
+      if (o.status === 'UNDER OPERATE') byPort[p].preorderCount++;
       if (o.status === 'IN PROGRESS') byPort[p].active++;
     });
     reservations.forEach(r => {
@@ -67,7 +67,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       if (!invoiceByCustomer[name]) invoiceByCustomer[name] = { billed: 0, paid: 0 };
       const amount = Number(i.amount) || 0;
       invoiceByCustomer[name].billed += amount;
-      if (i.status === 'PAID') invoiceByCustomer[name].paid += amount;
+      invoiceByCustomer[name].paid += Math.min(amount, Math.max(0, db.getInvoicePaidAmount(i.id)));
     });
     const opsByCustomer: Record<string, number> = {};
     ops.forEach(o => { const n = String(o.customerName || ''); opsByCustomer[n] = (opsByCustomer[n] || 0) + 1; });
@@ -101,7 +101,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       if (p.preorderCount > p.stockCount) {
         alerts.push({
           level: 'HIGH',
-          text: `${translateEntity(p.port, lang)}: ${p.preorderCount} preorder / ${p.stockCount} stock`,
+          text: `${translateEntity(p.port, lang)}: ${p.preorderCount} pending operations / ${p.stockCount} stock`,
           action: () => onNavigate('operations', p.port)
         });
       }
@@ -117,8 +117,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   }, [portData, maintenanceStats, financialTotals, lang, onNavigate]);
 
   const daliSummary = useMemo(() => {
-    const totalUnits = stock.length;
-    const active = ops.filter(o => o.status === 'IN PROGRESS').length;
+    const totalUnits = stock.filter(g => g.status !== 'RETIRED').length;
+    const active = new Set(ops.filter(o => o.status === 'IN PROGRESS' && o.gensetNumber?.trim()).map(o => o.gensetNumber.trim().toUpperCase())).size;
     const preorder = ops.filter(o => o.status === 'UNDER OPERATE').length;
     const maintenance = stock.filter(g => g.status === 'MAINTENANCE').length;
     return { totalUnits, active, preorder, maintenance };
