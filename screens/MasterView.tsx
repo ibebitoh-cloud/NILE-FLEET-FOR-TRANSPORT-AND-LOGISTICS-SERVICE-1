@@ -1372,47 +1372,6 @@ const MasterView: React.FC = () => {
 
   return (
     <div className={`w-full space-y-4 animate-in fade-in duration-500 pb-24 text-start ${isAr ? 'rtl font-cairo' : 'ltr'}`} style={globalScaleStyle}>
-      <div className={`flex-1 min-w-[360px] rounded-2xl border p-3 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-black uppercase tracking-widest text-[#C2A378]">{title}</span>
-              <span className="text-[9px] font-mono text-slate-400">{date}</span>
-            </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {statDefs.map(([key, label]) => (
-                <div key={key} className={`rounded-xl border p-2 text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                  <div className={`text-lg font-black leading-none ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>{stats[key]}</div>
-                  <div className="mt-1 text-[7px] font-black uppercase leading-tight text-slate-500">{label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-        return (
-          <div className="space-y-2">
-            <div className="flex flex-col 2xl:flex-row gap-2">
-              {dayCard(isAr ? 'أمس — DAILY MANIFEST' : 'YESTERDAY — DAILY MANIFEST', yesterdayKey, yesterday)}
-              {dayCard(isAr ? 'اليوم — LIVE MANIFEST' : 'TODAY — LIVE MANIFEST', todayKey, today)}
-            </div>
-            <div className={`rounded-2xl border p-3 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-black uppercase tracking-widest text-[#C2A378]">{isAr ? 'رصيد المولدات حسب الميناء' : 'GENSET STOCK BY PORT'}</span>
-                <span className="text-[8px] text-slate-400">{isAr ? 'بيانات حية' : 'LIVE'}</span>
-              </div>
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                {allPorts.map(port => {
-                  const count = db.getStock().filter(g => String(g.location) === port).length;
-                  return <div key={port} className={`rounded-xl border p-2 text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                    <div className="text-[9px] font-black text-slate-400">{translateEntity(port, lang)}</div>
-                    <div className={`text-xl font-black ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>{count}</div>
-                    <div className="text-[7px] font-bold text-slate-500">UNITS</div>
-                  </div>;
-                })}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       <div className={`${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-3 rounded-2xl shadow-sm border flex flex-col xl:flex-row gap-3 items-center`}>
         <div className="flex-1 relative w-full">
           <input 
