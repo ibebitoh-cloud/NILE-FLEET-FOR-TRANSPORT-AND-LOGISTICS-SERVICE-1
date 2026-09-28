@@ -15,43 +15,42 @@ const Analytics: React.FC = () => {
   const stock = db.getStock();
   const operations = db.getOperations();
   const invoices = db.getInvoices();
+  const maintenanceLogs = db.getMaintenanceLogs();
 
   const COLORS = ['#001F3F', '#C2A378', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6'];
 
   const metrics = useMemo(() => {
-    const totalRevenue = invoices.reduce((sum, inv) => sum + inv.amount, 0);
-    const activeUnits = operations.filter(o => o.status === 'IN PROGRESS').length;
-    const utilizationRate = stock.length > 0 ? (activeUnits / stock.length) * 100 : 0;
-    const avgRate = totalRevenue / (invoices.length || 1);
-
-    return { totalRevenue, utilizationRate, activeUnits, avgRate };
+    const totalRevenue = invoices.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
+    const activeGensets = new Set(
+      operations.filter(o => o.status === 'IN PROGRESS' && o.gensetNumber?.trim())
+        .map(o => o.gensetNumber.trim().toUpperCase())
+    );
+    const fleetUnits = stock.filter(g => g.status !== 'RETIRED').length;
+    const utilizationRate = fleetUnits > 0 ? Math.min(100, (activeGensets.size / fleetUnits) * 100) : 0;
+    const avgInvoiceValue = invoices.length > 0 ? totalRevenue / invoices.length : 0;
+    return { totalRevenue, utilizationRate, activeUnits: activeGensets.size, avgInvoiceValue };
   }, [stock, operations, invoices]);
 
   const unitPerformanceData = useMemo(() => {
     return stock.map(unit => {
-      const unitOps = operations.filter(o => o.gensetNumber === unit.unitNumber || unit.unitNumber.includes(o.gensetNumber));
-      const rev = unitOps.reduce((sum, op) => sum + (parseFloat(op.rate.replace(/,/g, '')) || 0), 0);
+      const stockUnit = unit.unitNumber.trim().toUpperCase();
+      const unitOps = operations.filter(o => (o.gensetNumber || '').trim().toUpperCase() === stockUnit);
+      const rev = unitOps.reduce((sum, op) => sum + (parseFloat(String(op.rate).replace(/,/g, '')) || 0), 0);
       const trips = unitOps.length;
-      const days = trips * 4.5;
-      const baseHealth = 100;
-      const trips_degradation = trips * 1.5;
-      const health = Math.max(40, baseHealth - trips_degradation);
       const totalFuel = unitOps.reduce((sum, op) => sum + (parseFloat(String(op.gaz || '0').replace(/,/g, '')) || 0), 0);
-      const fuelEfficiency = trips > 0 ? totalFuel / trips : 0;
-      const maintenanceDays = Math.max(0, 30 - (trips % 5) * 6);
-
+      const unitMaintenance = maintenanceLogs.filter(l => (l.gensetNumber || '').trim().toUpperCase() === stockUnit);
+      const latestMaintenance = unitMaintenance.reduce((latest, log) => !latest || log.serviceDate > latest ? log.serviceDate : latest, '');
       return {
         unit: unit.unitNumber,
         revenue: rev,
-        days: Math.round(days),
-        health: Math.round(health),
-        trips: trips,
+        trips,
         lastPort: unit.location,
-        fuel: fuelEfficiency.toFixed(1),
-        maintenanceDays: maintenanceDays
+        fuel: trips > 0 ? (totalFuel / trips).toFixed(1) : '0.0',
+        maintenanceCount: unitMaintenance.length,
+        lastMaintenance: latestMaintenance || '—'
       };
     }).sort((a, b) => b.revenue - a.revenue);
-  }, [stock, operations]);
+  }, [stock, operations, maintenanceLogs]);
 
   const topPerformer = unitPerformanceData[0];
   const rentalTrends = useMemo(() => {
@@ -84,7 +83,7 @@ const Analytics: React.FC = () => {
            <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
               <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
-                {lang === 'ar' ? 'تحديث البيانات: فوري' : 'Data Refresh: Real-time'}
+                {lang === 'ar' ? 'مصدر البيانات: لقطة مباشرة من قاعدة البيانات' : 'Data Source: Live database snapshot'}
               </span>
            </div>
         </div>
@@ -116,9 +115,9 @@ const Analytics: React.FC = () => {
 
         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
           <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-amber-50 group-hover:bg-amber-100 rounded-full transition-colors duration-500"></div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 relative z-10">{lang === 'ar' ? 'قيمة الرحلة' : 'Avg Trip Value'}</p>
-          <h4 className="text-3xl font-black text-[#C2A378] relative z-10">EGP {metrics.avgRate.toFixed(0)}</h4>
-          <p className="text-[8px] font-bold text-slate-400 mt-2">Per booking unit</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 relative z-10">{lang === 'ar' ? 'متوسط قيمة الفاتورة' : 'Average Invoice Value'}</p>
+          <h4 className="text-3xl font-black text-[#C2A378] relative z-10">EGP {metrics.avgInvoiceValue.toFixed(0)}</h4>
+          <p className="text-[8px] font-bold text-slate-400 mt-2">Per recorded invoice</p>
         </div>
       </div>
 
@@ -138,9 +137,9 @@ const Analytics: React.FC = () => {
                   <th className="pb-4 px-2">{t.unit}</th>
                   <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'الموقع' : 'Hub'}</th>
                   <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'الرحلات' : 'Trips'}</th>
-                  <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'وقود/رحلة' : 'Fuel / Trip'}</th>
-                  <th className="pb-4 px-2 text-center">{t.healthScore}</th>
-                  <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'الصيانة' : 'Service In'}</th>
+                  <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'وقود/عملية مسجلة' : 'Fuel / Recorded Op.'}</th>
+                  <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'آخر صيانة' : 'Last Service'}</th>
+                  <th className="pb-4 px-2 text-center">{lang === 'ar' ? 'سجلات الصيانة' : 'Service Logs'}</th>
                   <th className="pb-4 px-2 text-right">{t.revenue}</th>
                 </tr>
               </thead>
@@ -160,22 +159,8 @@ const Analytics: React.FC = () => {
                     <td className="py-4 px-2 text-center">
                        <span className={`text-[10px] font-bold ${parseFloat(data.fuel) > 2.6 ? 'text-amber-600' : 'text-emerald-600'}`}>{data.fuel}</span>
                     </td>
-                    <td className="py-4 px-2">
-                      <div className="flex items-center justify-center gap-2 min-w-[100px]">
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all duration-700 ${data.health > 85 ? 'bg-emerald-500' : data.health > 70 ? 'bg-blue-500' : data.health > 55 ? 'bg-amber-500' : 'bg-rose-500'}`} 
-                            style={{ width: `${data.health}%` }}
-                          />
-                        </div>
-                        <span className="text-[9px] font-black text-slate-500">{data.health}%</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-2 text-center">
-                       <span className={`text-[9px] font-black uppercase ${data.maintenanceDays < 7 ? 'text-rose-600 animate-pulse' : 'text-slate-400'}`}>
-                         {data.maintenanceDays}d
-                       </span>
-                    </td>
+                    <td className="py-4 px-2 text-center text-[9px] font-black text-slate-500">{data.lastMaintenance}</td>
+                    <td className="py-4 px-2 text-center text-[9px] font-black text-slate-500">{data.maintenanceCount}</td>
                     <td className="py-4 px-2 text-right font-black text-slate-900 text-xs">EGP {data.revenue.toLocaleString()}</td>
                   </tr>
                 ))}
