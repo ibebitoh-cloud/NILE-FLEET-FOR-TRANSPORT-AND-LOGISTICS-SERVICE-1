@@ -1542,22 +1542,22 @@ const MasterView: React.FC = () => {
                           </td>
                           <td 
                             style={{ ...dynamicCellStyle, ...getColStyle('containerNumber') }} 
-                            className={`px-2 border-r transition-all duration-300 ${isContainerDup ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-400 font-black shadow-lg' : isDark ? 'border-slate-800' : 'border-slate-50'}`}
+                            className={`px-2 border-r transition-all duration-300 ${isContainerDup ? 'bg-red-600 !text-white font-black shadow-md' : isDark ? 'border-slate-800' : 'border-slate-50'}`}
                             title={isContainerDup ? (isAr ? 'تنبيه: رقم الحاوية مكرر في السجل!' : 'WARNING: Duplicate Container Number in manifest!') : undefined}
                           >
                             <div className="flex items-center gap-1">
                               {isContainerDup && <span className="text-[10px] shrink-0">⚠️</span>}
-                              <EditableCell value={op.containerNumber} onSave={(val) => handleUpdateCell(op, 'containerNumber', val)} disabled={isReadOnly} isDark={isDark} className={`font-mono font-black ${isContainerDup ? 'text-white font-extrabold drop-shadow' : isSelected ? 'text-white' : (isDark ? 'text-slate-200' : 'text-slate-900')}`} placeholder="CONT#" />
+                              <EditableCell value={op.containerNumber} onSave={(val) => handleUpdateCell(op, 'containerNumber', val)} disabled={isReadOnly} isDark={isDark} className={`font-mono font-black ${isContainerDup ? '!text-white font-extrabold drop-shadow' : isSelected ? 'text-white' : (isDark ? 'text-slate-200' : 'text-slate-900')}`} placeholder="CONT#" />
                             </div>
                           </td>
                           <td 
                             style={{ ...dynamicCellStyle, ...getColStyle('gensetNumber') }} 
-                            className={`px-2 border-r text-center transition-all duration-300 ${isGensetDup ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-400 font-black shadow-lg' : isDark ? 'border-slate-800' : 'border-slate-50'}`}
+                            className={`px-2 border-r text-center transition-all duration-300 ${isGensetDup ? 'bg-red-600 !text-white font-black shadow-md' : isDark ? 'border-slate-800' : 'border-slate-50'}`}
                             title={isGensetDup ? (isAr ? 'تنبيه: المولد مستخدم في أكثر من عملية IN PROGRESS!' : 'WARNING: Genset unit assigned to multiple IN PROGRESS operations!') : undefined}
                           >
                             <div className="flex items-center justify-center gap-1">
                               {isGensetDup && <span className="text-[10px] shrink-0">⚡</span>}
-                              <EditableCell value={op.gensetNumber} suggestions={systemSuggestions.gensets} onSave={(val) => handleUpdateCell(op, 'gensetNumber', val)} disabled={isReadOnly} className={`font-black ${isGensetDup ? 'text-white font-extrabold drop-shadow' : isSelected ? 'text-blue-100' : 'text-[#C2A378]'}`} placeholder="UNIT" isDark={isDark} />
+                              <EditableCell value={op.gensetNumber} suggestions={systemSuggestions.gensets} onSave={(val) => handleUpdateCell(op, 'gensetNumber', val)} disabled={isReadOnly} className={`font-black ${isGensetDup ? '!text-white font-extrabold drop-shadow' : isSelected ? 'text-blue-100' : 'text-[#C2A378]'}`} placeholder="UNIT" isDark={isDark} />
                             </div>
                           </td>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('rate') }} className={`border-r text-right px-2 font-bold ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
