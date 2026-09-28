@@ -26,6 +26,27 @@ function parseJsonLoose(text) {
 export async function onRequestPost(context) {
   const { request, env } = context;
 
+  // Every AI request must come from an authenticated Supabase user.
+  // The service-role key is server-side only and is never exposed to the browser.
+  const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
+  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+  const authHeader = request.headers.get('Authorization') || '';
+  const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!supabaseUrl || !serviceRoleKey || !accessToken) {
+    return json({ error: 'Authenticated Supabase session required' }, 401);
+  }
+
+  const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { Authorization: `Bearer ${accessToken}`, apikey: serviceRoleKey },
+  });
+  if (!authResponse.ok) {
+    return json({ error: 'Invalid or expired Supabase session' }, 401);
+  }
+  const authenticatedUser = await authResponse.json();
+  if (!authenticatedUser?.id) {
+    return json({ error: 'Invalid Supabase user session' }, 401);
+  }
+
   // Health check: opening /ai-proxy in a browser now tells us whether the
   // Worker is actually deployed with the Workers AI binding.
   if (request.method === 'GET') {
