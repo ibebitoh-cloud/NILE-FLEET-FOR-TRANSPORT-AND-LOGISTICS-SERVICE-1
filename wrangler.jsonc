@@ -1,16 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "nile-fleet-1",
-  "main": "./worker.js",
   "compatibility_date": "2026-09-18",
+  "pages_build_output_dir": "./dist",
   "vars": {
     "SUPABASE_URL": "https://mlxsafyubdsssugyiarx.supabase.co"
   },
   "ai": {
     "binding": "AI"
-  },
-  "assets": {
-    "directory": "./dist",
-    "not_found_handling": "single-page-application"
   }
 }
