@@ -208,7 +208,7 @@ const Analytics: React.FC = () => {
           </div>
 
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex-1">
-             <h3 className="font-black text-[#001F3F] uppercase tracking-tight mb-4 text-xs">{lang === 'ar' ? 'أداء الموانئ' : 'Port Performance Index'}</h3>
+             <h3 className="font-black text-[#001F3F] uppercase tracking-tight mb-4 text-xs">{lang === 'ar' ? 'توزيع الأسطول حسب الميناء' : 'Fleet Distribution by Port'}</h3>
              <div className="h-48">
                <ResponsiveContainer width="100%" height="100%">
                  <PieChart>
