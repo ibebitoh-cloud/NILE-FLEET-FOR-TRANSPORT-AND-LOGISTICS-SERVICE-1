@@ -558,6 +558,27 @@ const MasterView: React.FC = () => {
   }, []);
 
   // Invoice state handlers
+  const [editingOperation, setEditingOperation] = useState<Operation | null>(null);
+  const [editingOperationDraft, setEditingOperationDraft] = useState<Operation | null>(null);
+
+  const openOperationEditor = (op: Operation) => {
+    setEditingOperation(op);
+    setEditingOperationDraft({ ...op });
+  };
+
+  const saveOperationEditor = async () => {
+    if (!editingOperationDraft || isReadOnly) return;
+    if (!window.confirm(isAr ? 'هل تريد تأكيد وحفظ جميع تعديلات هذه العملية؟' : 'Confirm and save ALL changes to this operation?')) return;
+    const saved = await db.updateOperation(editingOperationDraft);
+    if (!saved) {
+      window.alert(isAr ? `❌ فشل الحفظ.\\n${db.getLastDbError() || 'خطأ غير معروف'}` : `❌ Save failed.\\n${db.getLastDbError() || 'Unknown database error'}`);
+      return;
+    }
+    setEditingOperation(null);
+    setEditingOperationDraft(null);
+    refresh();
+  };
+
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [editAmount, setEditAmount] = useState<number>(0);
@@ -1372,6 +1393,73 @@ const MasterView: React.FC = () => {
 
   return (
     <div className={`w-full space-y-4 animate-in fade-in duration-500 pb-24 text-start ${isAr ? 'rtl font-cairo' : 'ltr'}`} style={globalScaleStyle}>
+      {/* FIXED DAILY COMMAND BOARD */}
+      {(() => {
+        const dateKey = (offset: number) => {
+          const d = new Date(); d.setDate(d.getDate() + offset);
+          return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+        };
+        const makeStats = (date: string) => {
+          const dayOps = operations.filter(o => o.operationDate === date);
+          return {
+            ops: dayOps.length,
+            clipOn: operations.filter(o => o.clipOnDate === date).length,
+            clipOff: operations.filter(o => o.clipOffDate === date).length,
+            inProgress: dayOps.filter(o => o.status === 'IN PROGRESS').length,
+            underOperate: dayOps.filter(o => o.status === 'UNDER OPERATE').length
+          };
+        };
+        const yesterdayKey = dateKey(-1), todayKey = dateKey(0);
+        const yesterday = makeStats(yesterdayKey), today = makeStats(todayKey);
+        const statDefs = [
+          ['ops', isAr ? 'إجمالي OPS' : 'TOTAL OPS'],
+          ['clipOn', isAr ? 'إجمالي CLIP ON' : 'TOTAL CLIP ON'],
+          ['clipOff', isAr ? 'إجمالي CLIP OFF' : 'TOTAL CLIP OFF'],
+          ['inProgress', isAr ? 'قيد التنفيذ' : 'TOTAL IN PROGRESS'],
+          ['underOperate', isAr ? 'تحت التشغيل' : 'TOTAL UNDER OPERATE']
+        ] as const;
+        const dayCard = (title: string, date: string, stats: ReturnType<typeof makeStats>) => (
+          <div className={`flex-1 min-w-[360px] rounded-2xl border p-3 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-black uppercase tracking-widest text-[#C2A378]">{title}</span>
+              <span className="text-[9px] font-mono text-slate-400">{date}</span>
+            </div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {statDefs.map(([key, label]) => (
+                <div key={key} className={`rounded-xl border p-2 text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className={`text-lg font-black leading-none ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>{stats[key]}</div>
+                  <div className="mt-1 text-[7px] font-black uppercase leading-tight text-slate-500">{label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+        return (
+          <div className="space-y-2">
+            <div className="flex flex-col 2xl:flex-row gap-2">
+              {dayCard(isAr ? 'أمس — DAILY MANIFEST' : 'YESTERDAY — DAILY MANIFEST', yesterdayKey, yesterday)}
+              {dayCard(isAr ? 'اليوم — LIVE MANIFEST' : 'TODAY — LIVE MANIFEST', todayKey, today)}
+            </div>
+            <div className={`rounded-2xl border p-3 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-black uppercase tracking-widest text-[#C2A378]">{isAr ? 'رصيد المولدات حسب الميناء' : 'GENSET STOCK BY PORT'}</span>
+                <span className="text-[8px] text-slate-400">{isAr ? 'بيانات حية' : 'LIVE'}</span>
+              </div>
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                {allPorts.map(port => {
+                  const count = db.getStock().filter(g => String(g.location) === port).length;
+                  return <div key={port} className={`rounded-xl border p-2 text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className="text-[9px] font-black text-slate-400">{translateEntity(port, lang)}</div>
+                    <div className={`text-xl font-black ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>{count}</div>
+                    <div className="text-[7px] font-bold text-slate-500">UNITS</div>
+                  </div>;
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className={`${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-3 rounded-2xl shadow-sm border flex flex-col xl:flex-row gap-3 items-center`}>
         <div className="flex-1 relative w-full">
           <input 
@@ -1566,6 +1654,14 @@ const MasterView: React.FC = () => {
                       return (
                         <tr key={op.id} className={`transition-all duration-200 group ${isSelected ? 'selected-row ' + (isDark ? 'bg-blue-900/40 text-white' : 'bg-blue-600 text-white') : (isDark ? 'hover:bg-white/5' : 'hover:bg-blue-50/50')}`}>
                           <td style={{ ...dynamicCellStyle, ...getColStyle('checkbox') }} className={`text-center border-r ${isDark ? 'border-slate-800' : 'border-slate-50'}`}>
+                            <div className="flex items-center justify-center gap-1">
+                              <input type="checkbox" className="rounded bg-transparent border-slate-500" checked={isSelected} onChange={() => {
+                                const newSet = new Set(selectedRowIds);
+                                if (newSet.has(op.id)) newSet.delete(op.id); else newSet.add(op.id);
+                                setSelectedRowIds(newSet);
+                              }} disabled={isReadOnly} />
+                              {!isReadOnly && <button type="button" onClick={() => openOperationEditor(op)} className="p-1 rounded-md bg-[#C2A378]/15 text-[#C2A378] hover:bg-[#C2A378]/30 text-[9px]" title={isAr ? 'تعديل العملية بالكامل' : 'Edit entire operation'}>✎</button>}
+                            </div>
                             <input type="checkbox" className="rounded bg-transparent border-slate-500" checked={isSelected} onChange={() => {
                               const newSet = new Set(selectedRowIds);
                               if (newSet.has(op.id)) newSet.delete(op.id);
@@ -1761,6 +1857,47 @@ const MasterView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {editingOperationDraft && (
+        <div className="fixed inset-0 bg-[#001F3F]/85 backdrop-blur-md z-[450] flex items-center justify-center p-4">
+          <div className={`w-full max-w-6xl max-h-[92vh] overflow-y-auto rounded-3xl shadow-2xl border ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <div className="sticky top-0 z-10 flex items-center justify-between p-5 border-b bg-inherit">
+              <div><div className="text-sm font-black uppercase tracking-widest text-[#C2A378]">{isAr ? 'تعديل العملية بالكامل' : 'EDIT ENTIRE OPERATION'}</div><div className="text-[9px] text-slate-400 mt-1">{editingOperationDraft.bookingNumber || '—'} • {editingOperationDraft.containerNumber || '—'}</div></div>
+              <button type="button" onClick={() => { setEditingOperation(null); setEditingOperationDraft(null); }} className="p-2 text-slate-400 hover:text-rose-500">✕</button>
+            </div>
+            <div className="p-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">bookingNumber</label><input type="text" value={(editingOperationDraft as any).bookingNumber || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, bookingNumber: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">customerName</label><input type="text" value={(editingOperationDraft as any).customerName || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, customerName: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">trucker</label><input type="text" value={(editingOperationDraft as any).trucker || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, trucker: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">beneficiaryName</label><input type="text" value={(editingOperationDraft as any).beneficiaryName || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, beneficiaryName: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">containerNumber</label><input type="text" value={(editingOperationDraft as any).containerNumber || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, containerNumber: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">gensetNumber</label><input type="text" value={(editingOperationDraft as any).gensetNumber || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, gensetNumber: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">destination</label><input type="text" value={(editingOperationDraft as any).destination || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, destination: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">commodity</label><input type="text" value={(editingOperationDraft as any).commodity || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, commodity: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">clipperName</label><input type="text" value={(editingOperationDraft as any).clipperName || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, clipperName: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">driverName</label><input type="text" value={(editingOperationDraft as any).driverName || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, driverName: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">driverPhone</label><input type="text" value={(editingOperationDraft as any).driverPhone || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, driverPhone: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">gaz</label><input type="text" value={(editingOperationDraft as any).gaz || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, gaz: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">shipperAddress</label><input type="text" value={(editingOperationDraft as any).shipperAddress || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, shipperAddress: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">rate</label><input type="number" value={(editingOperationDraft as any).rate || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, rate: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">vat</label><input type="number" value={(editingOperationDraft as any).vat || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, vat: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">manualInvoiceNumber</label><input type="text" value={(editingOperationDraft as any).manualInvoiceNumber || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, manualInvoiceNumber: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">operationDate</label><input type="date" value={(editingOperationDraft as any).operationDate || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, operationDate: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">dateReceived</label><input type="date" value={(editingOperationDraft as any).dateReceived || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, dateReceived: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">clipOnDate</label><input type="date" value={(editingOperationDraft as any).clipOnDate || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, clipOnDate: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+                <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">clipOffDate</label><input type="date" value={(editingOperationDraft as any).clipOffDate || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, clipOffDate: e.target.value })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold outline-none focus:border-blue-500 ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+              <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">CLIP ON PORT</label><select value={editingOperationDraft.clipOnPort} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, clipOnPort: e.target.value as Location })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200'}`}>{allPorts.map(p=><option key={p} value={p}>{translateEntity(p,lang)}</option>)}</select></div>
+              <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">CLIP OFF PORT</label><select value={editingOperationDraft.clipOffPort} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, clipOffPort: e.target.value as Location })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200'}`}>{allPorts.map(p=><option key={p} value={p}>{translateEntity(p,lang)}</option>)}</select></div>
+              <div className="space-y-1"><label className="text-[8px] font-black uppercase text-slate-400">STATUS</label><select value={editingOperationDraft.status} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, status: e.target.value as Operation['status'] })} className={`w-full px-3 py-2 rounded-xl border-2 text-[10px] font-bold ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200'}`}>{STATUS_CYCLE.map(s=><option key={s} value={s}>{translateEntity(s,lang)}</option>)}</select></div>
+              <div className="col-span-2 md:col-span-3 lg:col-span-4"><label className="text-[8px] font-black uppercase text-slate-400">NOTES</label><textarea rows={3} value={editingOperationDraft.notes || ''} onChange={e => setEditingOperationDraft({ ...editingOperationDraft, notes: e.target.value })} className={`w-full mt-1 px-3 py-2 rounded-xl border-2 text-[10px] font-bold ${isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`} /></div>
+            </div>
+            <div className={`sticky bottom-0 flex gap-3 p-5 border-t ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <button type="button" onClick={() => { setEditingOperation(null); setEditingOperationDraft(null); }} className="flex-1 py-3 rounded-xl font-black text-[10px] uppercase text-slate-400 hover:text-rose-500">{t.cancel}</button>
+              <button type="button" onClick={saveOperationEditor} className="flex-[2] py-3 rounded-xl bg-[#C2A378] text-[#001F3F] font-black text-[10px] uppercase tracking-widest">✓ {isAr ? 'تأكيد وحفظ كل التعديلات' : 'CONFIRM & SAVE ALL CHANGES'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedRowIds.size > 0 && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-10 duration-500">
