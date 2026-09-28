@@ -361,6 +361,7 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
                 </div>
               )}
            </div>
+         </div>
 
         {/* DAILY COMMAND BOARD — YESTERDAY / TODAY */}
         <div className="space-y-3 mb-4">
