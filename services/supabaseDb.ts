@@ -66,7 +66,11 @@ async function query<T>(table: string, options?: { filter?: Record<string, any>;
     q = q.order(options.order, { ascending: options.ascending ?? false }) as any;
   }
   const { data, error } = await q;
-  if (error) { _lastDbError = `${table}: ${error.message}`; console.error(`[supabaseDb] query ${table}:`, error.message); return []; }
+  if (error) {
+    _lastDbError = `${table}: ${error.message}`;
+    console.error(`[supabaseDb] query ${table}:`, error.message);
+    throw new Error(_lastDbError);
+  }
   return snakeToCamel(data || []) as T[];
 }
 
@@ -81,7 +85,7 @@ function resolveCustomerId(customerName: string): string | undefined {
 }
 
 function prepareOperationsDbRow(row: any): any {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
   const opDate = normalizeDateForDb(row.operationDate, today);
   const clipOffDate = normalizeDateForDb(row.clipOffDate, '');
   return {
