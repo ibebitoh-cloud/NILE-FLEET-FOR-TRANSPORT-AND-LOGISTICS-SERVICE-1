@@ -5,12 +5,18 @@ import { translations, translateEntity } from '../translations';
 import { runThinkingAudit } from '../services/aiService';
 import { UserRole } from '../types';
 
+const localDateISO = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+};
+
 const Reports: React.FC = () => {
   const { lang } = useContext(LanguageContext);
   const t = translations[lang];
   
-  const [dateFrom, setDateFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
-  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
+  const [dateFrom, setDateFrom] = useState(() => { const now = new Date(); return localDateISO(new Date(now.getFullYear(), now.getMonth(), 1)); });
+  const [dateTo, setDateTo] = useState(() => localDateISO());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<string>('ALL');
   const [isThinking, setIsThinking] = useState(false);
@@ -22,13 +28,13 @@ const Reports: React.FC = () => {
   []);
 
   const filteredData = useMemo(() => {
-    const from = new Date(dateFrom);
-    const to = new Date(dateTo);
+    const from = dateFrom;
+    const to = dateTo;
     const search = searchTerm.toLowerCase().trim();
     
     return ops.filter(o => {
-      const d = new Date(o.operationDate);
-      const matchesDate = d >= from && d <= to;
+      const operationDate = String(o.operationDate || '').slice(0, 10);
+      const matchesDate = operationDate >= from && operationDate <= to;
       const matchesCustomer = selectedCustomer === 'ALL' || o.customerName === selectedCustomer;
       const matchesSearch = !search || 
         (o.bookingNumber || '').toLowerCase().includes(search) ||
