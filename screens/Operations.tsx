@@ -100,6 +100,9 @@ const EditOperationModal: React.FC<{
             <div><label className={labelClass}>Genset Unit</label><input className={inputClass} value={formData.gensetNumber} onChange={e => setFormData({...formData, gensetNumber: e.target.value.toUpperCase()})} /></div>
             <div><label className={labelClass}>Trucking Co</label><input className={inputClass} value={formData.trucker} onChange={e => setFormData({...formData, trucker: e.target.value.toUpperCase()})} /></div>
             <div><label className={labelClass}>Shipper Name</label><input className={inputClass} value={formData.beneficiaryName} onChange={e => setFormData({...formData, beneficiaryName: e.target.value.toUpperCase()})} /></div>
+            <div><label className={labelClass}>Destination</label><input className={inputClass} value={formData.destination || ''} onChange={e => setFormData({...formData, destination: e.target.value.toUpperCase()})} /></div>
+            <div><label className={labelClass}>Shipper Address</label><input className={inputClass} value={formData.shipperAddress || ''} onChange={e => setFormData({...formData, shipperAddress: e.target.value})} /></div>
+            <div><label className={labelClass}>Manual Invoice #</label><input className={inputClass} value={formData.manualInvoiceNumber || ''} onChange={e => setFormData({...formData, manualInvoiceNumber: e.target.value.toUpperCase()})} /></div>
             <div><label className={labelClass}>Commodity</label><input className={inputClass} placeholder="e.g. CITRUS, ORANGES..." value={formData.commodity || ''} onChange={e => setFormData({...formData, commodity: e.target.value.toUpperCase()})} /></div>
             <div><label className={labelClass}>Clipper On Person</label><input className={inputClass} placeholder="Technician / Operator" value={formData.clipperName || ''} onChange={e => setFormData({...formData, clipperName: e.target.value})} /></div>
 
@@ -328,7 +331,51 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
            <div className="flex flex-wrap gap-4">
               {dailyPortActivity.map(([port, counts]) => {
                 const style = PORT_STYLING[port as Location];
-                return (
+                const dayKey = (offset: number) => {
+      const d = new Date(); d.setDate(d.getDate() + offset);
+      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    };
+    const makeStats = (date: string) => {
+      const dayOps = operations.filter(o => o.operationDate === date);
+      return {
+        ops: dayOps.length,
+        clipOn: operations.filter(o => o.clipOnDate === date).length,
+        clipOff: operations.filter(o => o.clipOffDate === date).length,
+        inProgress: dayOps.filter(o => o.status === 'IN PROGRESS').length,
+        underOperate: dayOps.filter(o => o.status === 'UNDER OPERATE').length
+      };
+    };
+    const yesterdayKey = dayKey(-1), todayKey = dayKey(0);
+    const yesterday = makeStats(yesterdayKey), today = makeStats(todayKey);
+    const statDefs = [
+      ['ops', isAr ? 'إجمالي OPS' : 'TOTAL OPS'],
+      ['clipOn', isAr ? 'إجمالي CLIP ON' : 'TOTAL CLIP ON'],
+      ['clipOff', isAr ? 'إجمالي CLIP OFF' : 'TOTAL CLIP OFF'],
+      ['inProgress', isAr ? 'قيد التنفيذ' : 'TOTAL IN PROGRESS'],
+      ['underOperate', isAr ? 'تحت التشغيل' : 'TOTAL UNDER OPERATE']
+    ] as const;
+    const renderDay = (title: string, date: string, stats: ReturnType<typeof makeStats>) => (
+      <div className={`flex-1 min-w-[360px] rounded-2xl border p-3 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className="flex items-center justify-between mb-2"><span className="text-xs font-black uppercase tracking-widest text-[#C2A378]">{title}</span><span className="text-[9px] font-mono text-slate-400">{date}</span></div>
+        <div className="grid grid-cols-5 gap-1.5">
+          {statDefs.map(([key,label]) => <div key={key} className={`rounded-xl border p-2 text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}><div className={`text-lg font-black leading-none ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>{stats[key]}</div><div className="mt-1 text-[7px] font-black uppercase leading-tight text-slate-500">{label}</div></div>)}
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="space-y-3 mb-4">
+        <div className="flex flex-col 2xl:flex-row gap-2">
+          {renderDay(isAr ? 'أمس — DAILY MANIFEST' : 'YESTERDAY — DAILY MANIFEST', yesterdayKey, yesterday)}
+          {renderDay(isAr ? 'اليوم — LIVE MANIFEST' : 'TODAY — LIVE MANIFEST', todayKey, today)}
+        </div>
+        <div className={`rounded-2xl border p-3 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className="flex items-center justify-between mb-2"><span className="text-xs font-black uppercase tracking-widest text-[#C2A378]">{isAr ? 'رصيد المولدات حسب الميناء' : 'GENSET STOCK BY PORT'}</span><span className="text-[8px] text-slate-400">LIVE DATABASE</span></div>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+            {Object.values(Location).map(port => { const count = db.getStock().filter(g => String(g.location) === port).length; return <div key={port} className={`rounded-xl border p-2 text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}><div className="text-[9px] font-black text-slate-400">{translateEntity(port, lang)}</div><div className={`text-xl font-black ${isDark ? 'text-white' : 'text-[#001F3F]'}`}>{count}</div><div className="text-[7px] font-bold text-slate-500">UNITS</div></div>; })}
+          </div>
+        </div>
+      </div>
                   <div key={port} className="flex items-center bg-white dark:bg-slate-800 rounded-3xl p-1.5 pr-6 border border-slate-100 dark:border-white/5 shadow-sm transition-all hover:shadow-md hover:scale-[1.02]">
                      <span className={`px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase ${style?.bg || 'bg-slate-900'} ${style?.text || 'text-white'} border ${style?.border || 'border-transparent'} mr-6`}>
                         {translateEntity(port, lang)}
