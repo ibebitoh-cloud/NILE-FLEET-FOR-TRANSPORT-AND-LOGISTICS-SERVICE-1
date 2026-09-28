@@ -1,10 +1,19 @@
+import { supabase } from './supabaseClient';
+
 const AI_ENDPOINT = '/ai-proxy';
 const OPEN_SOURCE_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 
 async function callAi(action: string, payload: any) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error('No active Supabase session');
+
   const res = await fetch(AI_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`,
+    },
     body: JSON.stringify({ action, payload }),
   });
 
