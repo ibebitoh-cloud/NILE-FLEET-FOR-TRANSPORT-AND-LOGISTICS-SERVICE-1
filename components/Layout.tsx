@@ -1335,7 +1335,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
 
       {/* MAIN CONTENT */}
       <main ref={mainContentRef} onScroll={() => screenScrollPositions.current.set(activeScreen, mainContentRef.current?.scrollTop || 0)} className={`flex-1 overflow-y-auto custom-scrollbar relative flex flex-col transition-colors duration-500 ${forceBanners.length > 0 ? 'mt-8' : ''}`} style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <header className="h-14 border-b flex items-center px-4 lg:px-6 justify-between sticky top-0 z-[40] shadow-sm backdrop-blur-md transition-colors no-print" style={{ backgroundColor: 'var(--rail-bg)', borderBottomColor: 'var(--border-primary)' }}>
+        <header className="h-14 border-b flex items-center px-4 lg:px-6 justify-between shadow-sm backdrop-blur-md transition-colors no-print" style={{ backgroundColor: 'var(--rail-bg)', borderBottomColor: 'var(--border-primary)' }}>
           <div className="flex items-center gap-3">
             <div className="w-1 h-5 bg-[#C2A378] rounded-full shadow-[0_0_8px_#C2A378]"></div>
             <h2 className={`text-xs lg:text-sm font-black uppercase tracking-tight italic ${textPrimary}`}>{activeScreen.replace('-', ' ')}</h2>
