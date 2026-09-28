@@ -51,6 +51,14 @@ const getRoleDefaultScreenIds = (role: UserRole): string[] => {
   return ['dashboard', 'master-view', 'reports', 'intelligence', 'notifications', 'support', 'system-log'];
 };
 
+const getEffectiveAllowedScreenIds = (user: any): string[] => {
+  const configured = Array.isArray(user?.allowedScreens) ? user.allowedScreens : [];
+  // Customer identities are strictly limited to the customer portal modules,
+  // even if an old/stale profile still contains legacy screen IDs.
+  if (user?.role === UserRole.CUSTOMER) return getRoleDefaultScreenIds(UserRole.CUSTOMER);
+  return configured;
+};
+
 const getReadOnlyScreenIds = (role: UserRole): string[] => {
   if (role === UserRole.ADMIN || role === UserRole.MANAGER || role === UserRole.VIEWER) {
     return ['dashboard', 'master-view', 'reports', 'intelligence', 'notifications', 'support', 'system-log'];
@@ -175,7 +183,7 @@ const UserMgmt: React.FC = () => {
     setEditingUser({
       ...u,
       assignedPorts: u.assignedPorts || [],
-      allowedScreens: u.allowedScreens || (
+      allowedScreens: getEffectiveAllowedScreenIds(u).length > 0 ? getEffectiveAllowedScreenIds(u) : (
         u.role === UserRole.ADMIN 
           ? ALL_SYSTEM_SCREENS.map(s => s.id)
           : u.role === UserRole.GATE_OPERATOR
@@ -307,7 +315,9 @@ const UserMgmt: React.FC = () => {
   const toggleScreenAccess = (screenId: string) => {
     if (!editingUser) return;
     if (editingUser.permissions?.isReadOnly && !getReadOnlyScreenIds(editingUser.role).includes(screenId)) return;
-    const current: string[] = editingUser.allowedScreens || [];
+    const current: string[] = getEffectiveAllowedScreenIds(editingUser);
+    // Customers may only toggle their two customer-portal modules.
+    if (editingUser.role === UserRole.CUSTOMER && !getRoleDefaultScreenIds(UserRole.CUSTOMER).includes(screenId)) return;
     const exists = current.includes(screenId);
     const updated = exists ? current.filter(s => s !== screenId) : [...current, screenId];
     setEditingUser({ ...editingUser, allowedScreens: updated });
@@ -520,7 +530,7 @@ const UserMgmt: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredUsers.map(u => {
               const isSA = u.isServiceAccount === true;
-              const screenCount = u.allowedScreens?.length ?? 20;
+              const screenCount = getEffectiveAllowedScreenIds(u).length;
               return (
                 <div 
                   key={u.id} 
@@ -1208,7 +1218,7 @@ const UserMgmt: React.FC = () => {
                  </thead>
                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                    {users.map(u => {
-                     const screensCount = u.allowedScreens?.length ?? 20;
+                     const screensCount = getEffectiveAllowedScreenIds(u).length;
                      return (
                        <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                          <td className="p-3">
