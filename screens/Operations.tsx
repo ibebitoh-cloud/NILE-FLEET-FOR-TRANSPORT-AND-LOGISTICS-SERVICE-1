@@ -178,7 +178,7 @@ const Operations: React.FC<{ highlightId?: string | null; clearHighlight?: () =>
     ? highlightId as Location
     : null;
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
 
   const refresh = () => setOperations([...db.getOperations()]);
 
