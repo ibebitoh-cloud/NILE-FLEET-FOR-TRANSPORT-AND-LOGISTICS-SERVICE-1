@@ -59,14 +59,14 @@ const getReadOnlyScreenIds = (role: UserRole): string[] => {
 };
 
 const getRoleDefaultPermissions = (role: UserRole): UserPermissions => ({
-  isReadOnly: false,
-  canCreate: role === UserRole.ADMIN || role === UserRole.GATE_OPERATOR || role === UserRole.CUSTOMER,
-  canEdit: role === UserRole.ADMIN || role === UserRole.GATE_OPERATOR,
+  isReadOnly: role === UserRole.VIEWER,
+  canCreate: role === UserRole.ADMIN || role === UserRole.MANAGER || role === UserRole.GATE_OPERATOR || role === UserRole.CUSTOMER,
+  canEdit: role === UserRole.ADMIN || role === UserRole.MANAGER || role === UserRole.GATE_OPERATOR,
   canDelete: role === UserRole.ADMIN,
-  canExport: true,
-  canViewFinancials: role === UserRole.ADMIN || role === UserRole.CUSTOMER,
-  canManagePrices: role === UserRole.ADMIN,
-  canApproveBookings: role === UserRole.ADMIN,
+  canExport: role !== UserRole.VIEWER,
+  canViewFinancials: role === UserRole.ADMIN || role === UserRole.MANAGER || role === UserRole.CUSTOMER,
+  canManagePrices: role === UserRole.ADMIN || role === UserRole.MANAGER,
+  canApproveBookings: role === UserRole.ADMIN || role === UserRole.MANAGER,
   canManageUsers: role === UserRole.ADMIN,
   canKillAccess: role === UserRole.ADMIN,
   canBypassGeofence: role === UserRole.ADMIN,
@@ -142,7 +142,6 @@ const UserMgmt: React.FC = () => {
       email: '',
       role: UserRole.MANAGER,
       password: Math.random().toString(36).slice(-8) + 'A1!',
-      wipePassword: 'wipe' + Math.floor(1000 + Math.random() * 9000),
       assignedPorts: [Location.ALEX, Location.DAM],
       allowedScreens: ['dashboard', 'master-view', 'operations', 'stock', 'reservations', 'customers', 'customer-prices', 'booking-invoices', 'financials',  'intelligence', 'reports', 'notifications', 'system-log', 'support', 'user-settings'],
       permissions: {
