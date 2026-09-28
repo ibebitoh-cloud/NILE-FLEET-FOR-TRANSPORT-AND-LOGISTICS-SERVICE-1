@@ -125,6 +125,23 @@ export async function activateAllCustomerUsers(): Promise<{ users?: Array<{ emai
   }
 }
 
+export async function resetCustomerPassword(userId: string): Promise<{ password?: string; error?: string }> {
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) return { error: 'No active administrator session' };
+    const { data, error } = await supabase.functions.invoke('activate-customer-users', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: { userId },
+    });
+    if (error) return { error: error.message || 'Password reset service failed' };
+    if (!data?.ok || !data?.password) return { error: data?.error || 'Password reset service failed' };
+    return { password: data.password };
+  } catch (e: any) {
+    return { error: e?.message || 'Network error resetting password' };
+  }
+}
+
 export async function createRealAccount(email: string, password: string, profile: Partial<User>): Promise<{ userId?: string; error?: string }> {
   try {
     const { data: sessionData } = await supabase.auth.getSession();
