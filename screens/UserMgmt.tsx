@@ -962,10 +962,6 @@ const UserMgmt: React.FC = () => {
                             </p>
                           )}
                         </div>
-                        <div>
-                          <label className={labelClass}>{lang === 'ar' ? 'رمز التصفير الطارئ' : 'Emergency Wipe Code / Purge Passcode'}</label>
-                          <input type="text" className={inputClass} value={editingUser.wipePassword || ''} onChange={e => setEditingUser({...editingUser, wipePassword: e.target.value})} placeholder="e.g. wipe999" />
-                        </div>
                       </div>
                     </div>
                   </div>
