@@ -275,9 +275,69 @@
             color: var(--text-primary) !important; 
         }
 
-        /* Border contrast fix */
+        /* Contrast-safe border and semantic color system */
         .border, .border-slate-100, .border-slate-200, .border-white\/5 { 
             border-color: var(--border-primary) !important; 
+        }
+        .border-2, .border-4 { border-color: var(--border-primary) !important; }
+
+        body[class*="theme-"] {
+            --surface-0: var(--bg-primary);
+            --surface-1: var(--card-bg);
+            --surface-2: var(--input-bg);
+            --surface-3: color-mix(in srgb, var(--card-bg) 82%, var(--bg-primary));
+            --surface-border-strong: color-mix(in srgb, var(--border-primary) 72%, var(--text-secondary));
+            --status-success-bg: #dcfce7; --status-success-fg: #166534;
+            --status-warning-bg: #fef3c7; --status-warning-fg: #92400e;
+            --status-danger-bg: #fee2e2; --status-danger-fg: #991b1b;
+            --status-info-bg: #dbeafe; --status-info-fg: #1e40af;
+            --status-neutral-bg: #e2e8f0; --status-neutral-fg: #334155;
+        }
+        body.theme-black, body.theme-navy, body.theme-forest, body.theme-sahara,
+        body.theme-cyber, body.theme-slate, body.theme-midnight, body.theme-toxic,
+        body.theme-lava, body.theme-phantom, body.theme-copper, body.theme-nile,
+        body.theme-carbon, body.theme-royal, body.theme-crimson {
+            --status-success-bg: #14532d; --status-success-fg: #bbf7d0;
+            --status-warning-bg: #78350f; --status-warning-fg: #fde68a;
+            --status-danger-bg: #7f1d1d; --status-danger-fg: #fecaca;
+            --status-info-bg: #1e3a8a; --status-info-fg: #bfdbfe;
+            --status-neutral-bg: #334155; --status-neutral-fg: #e2e8f0;
+        }
+
+        /* Semantic status surfaces: same meaning, distinct hues, theme-safe contrast. */
+        body[class*="theme-"] .bg-green-50, body[class*="theme-"] .bg-green-100,
+        body[class*="theme-"] .bg-emerald-50, body[class*="theme-"] .bg-emerald-100 {
+            background-color: var(--status-success-bg) !important; color: var(--status-success-fg) !important;
+        }
+        body[class*="theme-"] .bg-amber-50, body[class*="theme-"] .bg-amber-100,
+        body[class*="theme-"] .bg-yellow-50, body[class*="theme-"] .bg-yellow-100 {
+            background-color: var(--status-warning-bg) !important; color: var(--status-warning-fg) !important;
+        }
+        body[class*="theme-"] .bg-red-50, body[class*="theme-"] .bg-red-100,
+        body[class*="theme-"] .bg-rose-50, body[class*="theme-"] .bg-rose-100 {
+            background-color: var(--status-danger-bg) !important; color: var(--status-danger-fg) !important;
+        }
+        body[class*="theme-"] .bg-blue-50, body[class*="theme-"] .bg-blue-100,
+        body[class*="theme-"] .bg-sky-50, body[class*="theme-"] .bg-sky-100 {
+            background-color: var(--status-info-bg) !important; color: var(--status-info-fg) !important;
+        }
+
+        /* Table rows always alternate enough to remain visually separate. */
+        table tbody tr:nth-child(odd):not(.selected-row) td { background-color: var(--surface-1) !important; }
+        table tbody tr:nth-child(even):not(.selected-row) td { background-color: var(--surface-3) !important; }
+        table tbody tr:hover:not(.selected-row) td { background-color: var(--surface-2) !important; filter: none !important; }
+        table tbody td { border-bottom-color: var(--surface-border-strong) !important; }
+
+        /* Inputs always sit on a separate surface from their parent card. */
+        body[class*="theme-"] input, body[class*="theme-"] select, body[class*="theme-"] textarea {
+            background-color: var(--surface-2) !important;
+            color: var(--text-primary) !important;
+            border-color: var(--surface-border-strong) !important;
+        }
+        body[class*="theme-"] input:focus, body[class*="theme-"] select:focus, body[class*="theme-"] textarea:focus {
+            background-color: var(--surface-1) !important;
+            border-color: var(--accent) !important;
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent) !important;
         }
         
         /* Table Cell & Input Inversion */
