@@ -1096,11 +1096,23 @@ class SupabaseDB {
   }
 
   async clearAllNotifications(): Promise<boolean> {
-    const { error } = await supabase.from('system_notifications').update({ active: false }).eq('active', true);
+    const { data, error } = await supabase
+      .from('system_notifications')
+      .update({ active: false })
+      .eq('active', true)
+      .select('id');
+
     if (error) {
       _lastDbError = `system_notifications: ${error.message}`;
       return false;
     }
+
+    // A zero-row update can mean RLS denied the operation.
+    if (!data || data.length === 0) {
+      _lastDbError = 'system_notifications: no active notifications were updated (record missing or access denied)';
+      return false;
+    }
+
     _notifications = _notifications.map(n => ({ ...n, active: false }));
     dispatchChange();
     return true;
@@ -1338,12 +1350,23 @@ class SupabaseDB {
   }
 
   async restartHistory(): Promise<boolean> {
-    const { error } = await supabase.from('audit_log').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    const { data, error } = await supabase
+      .from('audit_log')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+      .select('id');
+
     if (error) {
       _lastDbError = `audit_log: ${error.message}`;
       console.error('[supabaseDb] clear audit history:', error.message);
       return false;
     }
+
+    if (!data || data.length === 0) {
+      _lastDbError = 'audit_log: no audit records were deleted (record missing or access denied)';
+      return false;
+    }
+
     _auditLogs = [];
     dispatchChange();
     return true;
