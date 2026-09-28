@@ -1319,12 +1319,14 @@ class SupabaseDB {
   // ─── audit / history ───────────────────────────────────────────────────────
 
   async totalSystemWipe(): Promise<void> {
-    const tables = ['operations', 'invoices', 'payments', 'procurement', 'gas_transactions',
-      'payroll_transactions', 'food_expenses', 'transport_expenses', 'port_rents',
-      'reservations', 'customer_prices', 'system_notifications'];
-    await Promise.all(tables.map(t => supabase.from(t).delete().neq('id', '00000000-0000-0000-0000-000000000000')));
-    await supabase.from('gensets').update({ status: GensetStatus.IN_STOCK }).neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('profiles').delete().eq('role', UserRole.CUSTOMER);
+    // Destructive wipe is enforced by a SECURITY DEFINER database function.
+    // Never trust the browser's cached role for this operation.
+    const { data, error } = await supabase.rpc('admin_total_system_wipe');
+    if (error || !data?.ok) {
+      _lastDbError = error?.message || 'Administrator access required for total system wipe.';
+      throw new Error(_lastDbError);
+    }
+
     _operations = []; _invoices = []; _payments = []; _procurements = [];
     _gasTransactions = []; _payrollTransactions = []; _foodExpenses = [];
     _transportExpenses = []; _portRents = []; _reservations = [];
