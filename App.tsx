@@ -306,8 +306,13 @@ const App: React.FC = () => {
               --row-bg: ${customRowBg};
               --rail-bg: ${customRailBg};
           }
-          body.theme-custom .bg-white, body.theme-custom .bg-slate-50, body.theme-custom .bg-slate-100 { 
+          body.theme-custom .bg-white,
+          body.theme-custom .bg-slate-50 { 
               background-color: var(--card-bg) !important; 
+              color: var(--text-primary) !important; 
+          }
+          body.theme-custom .bg-slate-100 { 
+              background-color: var(--input-bg) !important; 
               color: var(--text-primary) !important; 
           }
           body.theme-custom input, body.theme-custom select, body.theme-custom textarea {
