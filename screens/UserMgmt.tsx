@@ -4,7 +4,7 @@ import { User, UserRole, Location, UserPermissions, hasReadOnlyAccess } from '..
 import { LanguageContext, ThemeContext } from '../App';
 import { translateEntity } from '../translations';
 import { runThinkingAudit } from '../services/aiService';
-import { createRealAccount } from '../services/authService';
+import { createRealAccount, activateAllCustomerUsers } from '../services/authService';
 import { AVATARS } from '../constants';
 
 const ALL_SYSTEM_SCREENS = [
@@ -106,6 +106,7 @@ const UserMgmt: React.FC = () => {
   const [isThinking, setIsThinking] = useState(false);
   const [authAdvice, setAuthAdvice] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isActivatingCustomers, setIsActivatingCustomers] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'HYGIENE' | 'ISOLATION' | 'ROTATION' | 'GEOFENCE'>('HYGIENE');
 
@@ -370,6 +371,39 @@ const UserMgmt: React.FC = () => {
     e.target.value = '';
   };
 
+  const handleActivateAllCustomers = async () => {
+    if (isReadOnly || !isAdmin || isActivatingCustomers) return;
+    const customerCount = users.filter(u => u.role === UserRole.CUSTOMER && !u.revoked).length;
+    if (!customerCount) {
+      alert(lang === 'ar' ? 'لا توجد حسابات عملاء نشطة للتفعيل.' : 'No active customer accounts found.');
+      return;
+    }
+    const confirmed = window.confirm(
+      lang === 'ar'
+        ? `سيتم إنشاء كلمة مرور عشوائية جديدة لكل حساب من حسابات العملاء النشطة (${customerCount}) وتأكيد البريد الإلكتروني وتفعيل الحساب. هل تريد المتابعة؟`
+        : `This will generate a new random password for all ${customerCount} active customer accounts, confirm their email, and activate them. Continue?`
+    );
+    if (!confirmed) return;
+
+    setIsActivatingCustomers(true);
+    try {
+      const result = await activateAllCustomerUsers();
+      if (result.error) {
+        alert((lang === 'ar' ? 'فشل تفعيل حسابات العملاء: ' : 'Customer activation failed: ') + result.error);
+        return;
+      }
+      await db.reloadUsers();
+      refreshData();
+      const credentials = (result.users || []).map(u => `${u.email}\t${u.password}`).join('\n');
+      const summary = lang === 'ar'
+        ? `تم تفعيل ${result.count || 0} حساب عميل. فشل: ${result.failed || 0}.\n\nسيتم عرض بيانات الدخول مرة واحدة فقط. احفظها بأمان.`
+        : `Activated ${result.count || 0} customer accounts. Failed: ${result.failed || 0}.\n\nCredentials are shown only once. Save them securely.`;
+      alert(summary + (credentials ? `\n\nEMAIL\tPASSWORD\n${credentials}` : ''));
+    } finally {
+      setIsActivatingCustomers(false);
+    }
+  };
+
   const runAuthAudit = async () => {
     setIsThinking(true);
     setAuthAdvice('');
@@ -411,6 +445,17 @@ const UserMgmt: React.FC = () => {
           >
             <span>📊</span> System Access Matrix
           </button>
+          {!isReadOnly && isAdmin && (
+            <button
+              type="button"
+              onClick={handleActivateAllCustomers}
+              disabled={isActivatingCustomers}
+              className="bg-emerald-600 text-white border border-emerald-400 px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-emerald-700 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-wait"
+              title="Generate new passwords, confirm emails, and activate all active customer accounts"
+            >
+              {isActivatingCustomers ? '⏳ Activating Customers...' : '🔐 Activate All Customers'}
+            </button>
+          )}
           {!isReadOnly && (
             <button 
               type="button"
