@@ -856,6 +856,61 @@ const MasterView: React.FC = () => {
     }
   };
 
+  const handleCloneSelectedOperations = async () => {
+    if (isReadOnly) return;
+    const ids = Array.from(selectedRowIds) as string[];
+    const sourceOps = ids.map(id => operations.find(o => o.id === id)).filter(Boolean) as Operation[];
+    if (!sourceOps.length) return;
+
+    const confirmed = confirm(
+      isAr
+        ? `هل تريد إضافة ${sourceOps.length} عملية جديدة مطابقة للسجلات المحددة؟ سيتم الاحتفاظ بالسجلات الأصلية كما هي.`
+        : `Add ${sourceOps.length} new operation(s) matching the selected entries? The original records will remain unchanged.`
+    );
+    if (!confirmed) return;
+
+    const now = Date.now();
+    const clones: Operation[] = sourceOps.map((op, index) => ({
+      ...op,
+      id: `op-clone-${now}-${index}-${Math.random().toString(36).slice(2)}`,
+      internalSerial: '',
+      gensetNumber: '',
+      status: 'UNDER OPERATE',
+      invoiced: false,
+      reviewedByManager: false
+    }));
+
+    const saved = await db.addOperationsBulk(clones);
+    if (!saved) {
+      alert(
+        isAr
+          ? `❌ فشل إضافة العمليات المنسوخة.\\n${db.getLastDbError() || 'خطأ غير معروف'}`
+          : `❌ FAILED TO CLONE OPERATIONS.\\n${db.getLastDbError() || 'Unknown database error'}`
+      );
+      return;
+    }
+
+    const reloaded = await db.reloadOperations();
+    if (!reloaded) {
+      alert(
+        isAr
+          ? `⚠️ تم إنشاء العمليات لكن تعذر إعادة تحميلها.\\n${db.getLastDbError() || ''}`
+          : `⚠️ CLONED OPERATIONS WERE CREATED, BUT THE DATABASE RELOAD FAILED.\\n${db.getLastDbError() || ''}`
+      );
+      return;
+    }
+
+    setSelectedRowIds(new Set());
+    refresh();
+    alert(
+      isAr
+        ? `تمت إضافة ${clones.length} عملية جديدة بنجاح.`
+        : `Successfully added ${clones.length} cloned operation(s).`
+    );
+  };
+
+
+
   const fallbackParse = (buffer: string) => {
     const lines = buffer.split('\n').filter(l => l.trim().length > 0);
     const newStaged: StagingRow[] = lines.map(line => {
@@ -1650,6 +1705,15 @@ const MasterView: React.FC = () => {
                  </div>
               </div>
               <div className="h-10 w-px bg-white/10"></div>
+              {!isReadOnly && (
+                <button
+                  onClick={handleCloneSelectedOperations}
+                  className="bg-[#C2A378] text-[#001F3F] px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#d8bd91] transition-all shadow-lg"
+                  title={isAr ? 'إضافة نسخة جديدة من العمليات المحددة' : 'Add a new copy of the selected operations'}
+                >
+                  + {isAr ? 'نسخ السطر' : 'Clone Line'}
+                </button>
+              )}
               <div className="flex items-center gap-4">
                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-300">{isAr ? 'تغيير الحالة لـ:' : 'Target Status:'}</p>
                  <select className="bg-white/10 text-white border border-white/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase outline-none focus:border-[#C2A378] transition-all" onChange={(e) => handleBulkStatusChange(e.target.value as any)} defaultValue="">
