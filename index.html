@@ -322,6 +322,45 @@
             background-color: var(--status-info-bg) !important; color: var(--status-info-fg) !important;
         }
 
+        /* Foreground normalization: prevent low-contrast text on either surface. */
+        body[class*="theme-"] .text-slate-300 { color: var(--text-secondary) !important; }
+        body[class*="theme-"] .text-slate-400 { color: var(--text-secondary) !important; }
+        body[class*="theme-"] .text-slate-500 { color: var(--text-secondary) !important; }
+        body.theme-black .text-blue-500, body.theme-black .text-blue-600,
+        body.theme-navy .text-blue-500, body.theme-navy .text-blue-600,
+        body.theme-forest .text-blue-500, body.theme-forest .text-blue-600,
+        body.theme-sahara .text-blue-500, body.theme-sahara .text-blue-600,
+        body.theme-cyber .text-blue-500, body.theme-cyber .text-blue-600,
+        body.theme-slate .text-blue-500, body.theme-slate .text-blue-600,
+        body.theme-midnight .text-blue-500, body.theme-midnight .text-blue-600,
+        body.theme-toxic .text-blue-500, body.theme-toxic .text-blue-600,
+        body.theme-lava .text-blue-500, body.theme-lava .text-blue-600,
+        body.theme-phantom .text-blue-500, body.theme-phantom .text-blue-600,
+        body.theme-copper .text-blue-500, body.theme-copper .text-blue-600,
+        body.theme-nile .text-blue-500, body.theme-nile .text-blue-600,
+        body.theme-carbon .text-blue-500, body.theme-carbon .text-blue-600,
+        body.theme-royal .text-blue-500, body.theme-royal .text-blue-600,
+        body.theme-crimson .text-blue-500, body.theme-crimson .text-blue-600 {
+            color: #93c5fd !important;
+        }
+        body.theme-black .text-rose-500, body.theme-black .text-rose-600,
+        body.theme-navy .text-rose-500, body.theme-navy .text-rose-600,
+        body.theme-forest .text-rose-500, body.theme-forest .text-rose-600,
+        body.theme-sahara .text-rose-500, body.theme-sahara .text-rose-600,
+        body.theme-cyber .text-rose-500, body.theme-cyber .text-rose-600,
+        body.theme-slate .text-rose-500, body.theme-slate .text-rose-600,
+        body.theme-midnight .text-rose-500, body.theme-midnight .text-rose-600,
+        body.theme-toxic .text-rose-500, body.theme-toxic .text-rose-600,
+        body.theme-lava .text-rose-500, body.theme-lava .text-rose-600,
+        body.theme-phantom .text-rose-500, body.theme-phantom .text-rose-600,
+        body.theme-copper .text-rose-500, body.theme-copper .text-rose-600,
+        body.theme-nile .text-rose-500, body.theme-nile .text-rose-600,
+        body.theme-carbon .text-rose-500, body.theme-carbon .text-rose-600,
+        body.theme-royal .text-rose-500, body.theme-royal .text-rose-600,
+        body.theme-crimson .text-rose-500, body.theme-crimson .text-rose-600 {
+            color: #fda4af !important;
+        }
+
         /* Table rows always alternate enough to remain visually separate. */
         table tbody tr:nth-child(odd):not(.selected-row) td { background-color: var(--surface-1) !important; }
         table tbody tr:nth-child(even):not(.selected-row) td { background-color: var(--surface-3) !important; }
