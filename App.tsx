@@ -337,7 +337,7 @@ const App: React.FC = () => {
    * Automatically monitors the UI for untranslated text andConsults Gemini
    */
   useEffect(() => {
-    if (lang !== 'ar' || !getSafeApiKey()) return;
+    if (lang !== 'ar' || !getSafeApiKey() || user?.role === UserRole.CUSTOMER) return;
 
     let isProcessing = false;
     const observer = setInterval(async () => {
@@ -361,7 +361,7 @@ const App: React.FC = () => {
     }, 5000);
 
     return () => clearInterval(observer);
-  }, [lang]);
+  }, [lang, user?.role]);
 
   // GLOBAL UI TRANSLATION FALLBACK.
   // Keep hard-coded labels translated as lazy screens and dialogs are mounted.
@@ -585,6 +585,9 @@ const App: React.FC = () => {
 
   const canAccessScreen = (screen: string): boolean => {
     if (screen === 'no-access') return true;
+    // DALI/Fleet Intelligence is an internal staff capability and must never be available to customer accounts,
+    // even if an administrator accidentally leaves the screen in the customer's custom allowedScreens list.
+    if (user.role === UserRole.CUSTOMER && screen === 'intelligence') return false;
     if (Array.isArray(user.allowedScreens)) return user.allowedScreens.includes(screen);
     return getDefaultAllowedScreens(user.role).includes(screen);
   };
