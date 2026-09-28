@@ -22,15 +22,20 @@ const generateAvatars = () => {
 
 export const AVATARS = generateAvatars();
 
+/**
+ * Port palette: deliberately separated hues with white foregrounds.
+ * Do not reuse/soften these colors for adjacent port cells; the color itself
+ * is the visual identifier for the physical location.
+ */
 export const PORT_STYLING: Record<Location, { bg: string, text: string, border: string }> = {
-  [Location.DAM]: { bg: 'bg-[#98FFD9]', text: 'text-[#004D33]', border: 'border-[#66CCAA]' }, 
-  [Location.ALEX]: { bg: 'bg-[#FFEB3B]', text: 'text-[#5D4037]', border: 'border-[#FDD835]' }, 
-  [Location.GOUDA]: { bg: 'bg-[#2196F3]', text: 'text-white', border: 'border-[#1976D2]' },      
-  [Location.SOKHNA]: { bg: 'bg-[#FF9800]', text: 'text-white', border: 'border-[#F57C00]' },     
-  [Location.SCCT]: { bg: 'bg-[#87CEEB]', text: 'text-[#003366]', border: 'border-[#00BFFF]' },  
-  [Location.PSD]: { bg: 'bg-[#7E57C2]', text: 'text-white', border: 'border-[#5E35B1]' },      
-  [Location.MAL]: { bg: 'bg-[#4CAF50]', text: 'text-white', border: 'border-[#388E3C]' },      
-  [Location.WORKSHOP]: { bg: 'bg-[#90A4AE]', text: 'text-white', border: 'border-[#607D8B]' },
+  [Location.DAM]: { bg: 'bg-[#0F766E]', text: 'text-white', border: 'border-[#115E59]' },       // Teal
+  [Location.ALEX]: { bg: 'bg-[#B45309]', text: 'text-white', border: 'border-[#92400E]' },      // Amber
+  [Location.GOUDA]: { bg: 'bg-[#1D4ED8]', text: 'text-white', border: 'border-[#1E40AF]' },     // Blue
+  [Location.SOKHNA]: { bg: 'bg-[#C2410C]', text: 'text-white', border: 'border-[#9A3412]' },    // Orange
+  [Location.SCCT]: { bg: 'bg-[#0E7490]', text: 'text-white', border: 'border-[#155E75]' },      // Cyan
+  [Location.PSD]: { bg: 'bg-[#6D28D9]', text: 'text-white', border: 'border-[#5B21B6]' },        // Violet
+  [Location.MAL]: { bg: 'bg-[#15803D]', text: 'text-white', border: 'border-[#166534]' },       // Green
+  [Location.WORKSHOP]: { bg: 'bg-[#475569]', text: 'text-white', border: 'border-[#334155]' },  // Slate
 };
 
 const generateInitialStock = (): Genset[] => {
