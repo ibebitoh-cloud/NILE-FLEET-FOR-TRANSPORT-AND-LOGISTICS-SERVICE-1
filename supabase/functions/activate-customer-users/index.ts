@@ -4,6 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json",
 };
 
@@ -55,6 +56,40 @@ Deno.serve(async (req) => {
       !["ADMIN", "MANAGER"].includes(String(callerProfile.role).toUpperCase())
     ) {
       return new Response(JSON.stringify({ error: "Admin or manager access required" }), { status: 403, headers: corsHeaders });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const targetUserId = typeof body?.userId === "string" ? body.userId : null;
+
+    if (targetUserId) {
+      const { data: customer, error: customerError } = await adminClient
+        .from("profiles")
+        .select("id, email, name, company_name, role, revoked")
+        .eq("id", targetUserId)
+        .maybeSingle();
+
+      if (customerError) throw customerError;
+      if (!customer || String(customer.role).toUpperCase() !== "CUSTOMER" || customer.revoked || !customer.email) {
+        return new Response(JSON.stringify({ error: "Active customer account not found" }), { status: 404, headers: corsHeaders });
+      }
+
+      const password = randomPassword();
+      const { error: resetError } = await adminClient.auth.admin.updateUserById(customer.id, {
+        password,
+        email_confirm: true,
+        ban_duration: "none",
+      });
+
+      if (resetError) throw resetError;
+
+      return new Response(JSON.stringify({
+        ok: true,
+        email: customer.email,
+        name: customer.name || undefined,
+        companyName: customer.company_name || undefined,
+        password,
+        warning: "The new password is returned once and is not stored in public.profiles.",
+      }), { status: 200, headers: corsHeaders });
     }
 
     const { data: customers, error: customersError } = await adminClient
