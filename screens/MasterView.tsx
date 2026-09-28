@@ -558,11 +558,9 @@ const MasterView: React.FC = () => {
   }, []);
 
   // Invoice state handlers
-  const [editingOperation, setEditingOperation] = useState<Operation | null>(null);
   const [editingOperationDraft, setEditingOperationDraft] = useState<Operation | null>(null);
 
   const openOperationEditor = (op: Operation) => {
-    setEditingOperation(op);
     setEditingOperationDraft({ ...op });
   };
 
@@ -574,7 +572,6 @@ const MasterView: React.FC = () => {
       window.alert(isAr ? `❌ فشل الحفظ.\\n${db.getLastDbError() || 'خطأ غير معروف'}` : `❌ Save failed.\\n${db.getLastDbError() || 'Unknown database error'}`);
       return;
     }
-    setEditingOperation(null);
     setEditingOperationDraft(null);
     refresh();
   };
