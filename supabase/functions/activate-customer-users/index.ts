@@ -14,7 +14,7 @@ function randomPassword(length = 16) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
   try {
     const authorization = req.headers.get("Authorization");
