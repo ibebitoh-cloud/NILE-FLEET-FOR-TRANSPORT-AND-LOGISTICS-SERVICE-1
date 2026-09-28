@@ -621,7 +621,7 @@ const App: React.FC = () => {
         setUser(updated);
         localStorage.setItem('user', JSON.stringify(updated));
       }} />;
-      case 'cust-reservations': return <CustomerPortal user={user} type="reservations" />;
+      case 'cust-reservations': return user.role === UserRole.CUSTOMER ? <CustomerPortal user={user} type="reservations" /> : <Reservations />;
       case 'cust-invoices': return <CustomerPortal user={user} type="invoices" />;
       default: return <Dashboard onNavigate={navigateTo} />;
     }
