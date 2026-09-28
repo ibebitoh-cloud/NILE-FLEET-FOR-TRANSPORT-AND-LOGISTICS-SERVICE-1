@@ -144,11 +144,6 @@ const UserMgmt: React.FC = () => {
                             String(u.email || '').toLowerCase().includes(normalizedSearch) ||
                             String(u.companyName || '').toLowerCase().includes(normalizedSearch);
       
-      const matchesRole = roleFilter === 'ALL' || 
-                          (roleFilter === 'INTERNAL' && u.role !== UserRole.CUSTOMER && !u.isServiceAccount) ||
-                          (roleFilter === 'CUSTOMER' && u.role === UserRole.CUSTOMER) ||
-                          (roleFilter === 'SERVICE' && u.isServiceAccount === true);
-      
       const matchesRole = roleFilter === 'ALL' ||
                           (roleFilter === 'INTERNAL' && u.role !== UserRole.CUSTOMER && !u.isServiceAccount) ||
                           (roleFilter === 'CUSTOMER' && u.role === UserRole.CUSTOMER) ||
