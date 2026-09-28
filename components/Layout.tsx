@@ -1033,8 +1033,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, activeScreen, setActive
     : user.role === UserRole.VIEWER
       ? ['dashboard', 'master-view', 'reports', 'intelligence', 'notifications', 'support', 'system-log']
       : null;
-  const menu = Array.isArray(user.allowedScreens)
-    ? allPossibleMenuItems.filter(item => user.allowedScreens?.includes(item.id))
+  const menu = user.role === UserRole.CUSTOMER
+    ? allPossibleMenuItems.filter(item => ['cust-reservations', 'cust-invoices', 'notifications', 'support'].includes(item.id))
+    : Array.isArray(user.allowedScreens)
+      ? allPossibleMenuItems.filter(item => user.allowedScreens?.includes(item.id))
     : roleDefaultScreenIds
       ? allPossibleMenuItems.filter(item => roleDefaultScreenIds.includes(item.id))
       : defaultMenu;
