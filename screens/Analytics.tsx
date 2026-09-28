@@ -9,6 +9,8 @@ import { Location } from '../types';
 import { LanguageContext } from '../App';
 import { translations } from '../translations';
 
+const localDateISO = (date = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(date);
+
 const Analytics: React.FC = () => {
   const { lang } = useContext(LanguageContext);
   const t = translations[lang];
@@ -61,7 +63,7 @@ const Analytics: React.FC = () => {
       return d;
     });
     return days.map(d => {
-      const key = d.toISOString().slice(0, 10);
+      const key = localDateISO(d);
       const dayOps = operations.filter(o => o.operationDate === key);
       const revenue = dayOps.reduce((sum, o) => sum + (parseFloat(String(o.rate).replace(/,/g, '')) || 0) + (parseFloat(String(o.vat).replace(/,/g, '')) || 0), 0);
       return { day: d.toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { weekday: 'short' }), revenue, volume: dayOps.length };
@@ -193,7 +195,7 @@ const Analytics: React.FC = () => {
                        <p className="text-lg font-black">{topPerformer.trips}</p>
                     </div>
                     <div className="bg-blue-900/30 p-4 rounded-2xl border border-blue-800/50">
-                       <p className="text-[8px] font-black text-blue-300 uppercase mb-1">{lang === 'ar' ? 'وقود/رحلة' : 'Fuel / Trip'}</p>
+                       <p className="text-[8px] font-black text-blue-300 uppercase mb-1">{lang === 'ar' ? 'وقود/عملية مسجلة' : 'Fuel / Recorded Op.'}</p>
                        <p className="text-lg font-black">{topPerformer.fuel}L</p>
                     </div>
                   </div>
