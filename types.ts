@@ -153,7 +153,6 @@ export interface User {
   email: string;
   role: UserRole;
   password?: string;
-  wipePassword?: string;
   companyName?: string;
   companyNameAr?: string;
   avatarUrl?: string;
